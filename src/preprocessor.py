@@ -1,6 +1,10 @@
 
 import numpy as np
 from tqdm import tqdm 
+from scipy.signal import find_peaks
+from src.config import Config
+from src.spectrum_ext import SpectrumExt
+from src.preprocessing_utils import PreprocessingUtils
 class Preprocessor:
 
     def __init__(self, bin_width=1, min_mz=10, max_mz=1000):
@@ -12,34 +16,21 @@ class Preprocessor:
 
     
     def preprocess_all_spectrums(self, spectrums):
-        all_spectrums=[]
-        for i, spectrum in tqdm(enumerate(spectrums)):
-            try:
-                if self.is_valid_spectrum(spectrum):
-                    new_spectrum = self.preprocess_spectrum(spectrum)
-                    all_spectrums.append(new_spectrum) 
-            except:
-                print('Error preprocessing spectrum')
+        #all_spectrums=[]
+        #for i, spectrum in tqdm(enumerate(spectrums)):
+        #    try:
+        #        if self.is_valid_spectrum(spectrum):
+        #            new_spectrum = self.preprocess_spectrum(spectrum)
+        #            all_spectrums.append(new_spectrum) 
+        #    except:
+        #        print('Error preprocessing spectrum')
 
 
         # preprocess np vectors
-        all_spectrums= self.process_all_spectrum_vectors(all_spectrums)
+        all_spectrums= self.process_all_spectrum_vectors(spectrums)
         return all_spectrums
     
-    def is_valid_spectrum(self, spectrum, min_valid_peaks=5, adduct= '+H]+'):
-        '''
-        use only spectrum that is positive
-        '''
 
-        len_cond= (len(spectrum.intensity)>=min_valid_peaks) #higher than 5 peaks
-        ion_cond=(spectrum.params['ionmode']=='Positive')
-        mslevel_cond = (spectrum.params['mslevel']=='2')
-        adduct_cond = (adduct in spectrum.params['name'])
-        valid_condition = len_cond and ion_cond and  mslevel_cond and adduct_cond
-        if valid_condition:
-            return True
-        else:
-            return False
     def preprocess_spectrum(self, spectrum, 
                                 fragment_tol_mass=10, 
                                 fragment_tol_mode= "ppm", 

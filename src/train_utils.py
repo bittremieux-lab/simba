@@ -5,6 +5,9 @@ import numpy as np
 import random
 from src.molecule_pair import MoleculePair
 from  src.preprocessor import Preprocessor
+from src.preprocessing_utils import PreprocessingUtils
+from src.config import Config
+import random 
 
 class TrainUtils:
 
@@ -21,22 +24,52 @@ class TrainUtils:
             random_indices = random.sample(all_indices, 2)  # Generate random combination of 2 indices
             yield random_indices
 
+    @staticmethod
+    def get_indexes_based_on_mz(all_spectrums, randomize=True):
+        '''
+        return indexes based on restriction in mz difference
+        '''
+        #num_samples= len(all_spectrums)
         
+        #all_indices = list(range(num_samples))
+        #indexes = [random.sample(all_indices, 2) for _ in range(max_combinations)] #combinations
+
+        indexes=[]
+        print('Getting indexes ... ')
+        # Iterate through the list to form pairs
+        for i in tqdm(range(len(all_spectrums) - 1)):
+            for j in range(i + 1, len(all_spectrums)):
+                diff = abs(all_spectrums[i].precursor_mz - all_spectrums[j].precursor_mz )
+                if Config.MIN_MASS_DIFF <= diff <= Config.MAX_MASS_DIFF:
+                    indexes.append((i, j))
+
+        # randomize
+        if randomize:
+            random.shuffle(indexes)
+
+        return indexes
 
     @staticmethod
-    def compute_all_tanimoto_results(all_spectrums, max_combinations=1000000, limit_low_tanimoto=True):
-        num_samples= len(all_spectrums)
-        molecule_pairs=[]
-        all_indices = list(range(num_samples))
-        index_used = [random.sample(all_indices, 2) for _ in range(max_combinations)] #combinations
+    def compute_all_tanimoto_results(all_spectrums, max_combinations=1000000, limit_low_tanimoto=True, 
+                                     max_low_pairs=100000, #maximum number of elements in which we stop adding new items
+                                     ):
 
-        for i, j in tqdm(index_used):
+        # order the spectrums by mass
+        all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+        
+        # get pairs of valid indexes
+        index_used = TrainUtils.get_indexes_based_on_mz(all_spectrums)
+        
+        molecule_pairs=[]
+        print('Computing all the tanimoto results')
+        for i, j in tqdm(index_used[0:max_combinations]):
 
             tani = Tanimoto.compute_tanimoto(all_spectrums[i].params['smiles'],  all_spectrums[j].params['smiles'])
             if tani is not None:
                 # in the case we want to reduce the number of low tanimoto values, we can add only if the tanimoto value is high or the number of samples is small 
-                if not(limit_low_tanimoto) or (len(molecule_pairs)<100000) or (tani>0.3):  
-                    molecule_pair = MoleculePair( vector_0=None, 
+                if not(limit_low_tanimoto) or (len(molecule_pairs)<max_low_pairs) or (tani>0.3):  
+                    molecule_pair = MoleculePair( 
+                        vector_0=None, 
                         vector_1=None, 
                         smiles_0=all_spectrums[i].smiles, 
                         smiles_1=all_spectrums[j].smiles, 

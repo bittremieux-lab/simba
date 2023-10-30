@@ -30,9 +30,9 @@ class Tanimoto:
         
         if (mol_1 is not None) and (mol_2 is not None):
             # Generate Morgan fingerprints for the molecules
-            fp1 = AllChem.GetMorganFingerprintAsBitVect(mol_1, 2, nBits=nbits)
-            fp2 = AllChem.GetMorganFingerprintAsBitVect(mol_2, 2, nBits=nbits)
-
+            #fp1 = AllChem.GetMorganFingerprintAsBitVect(mol_1, 2, nBits=nbits)
+            #fp2 = AllChem.GetMorganFingerprintAsBitVect(mol_2, 2, nBits=nbits)
+            fp1, fp2 = Chem.RDKFingerprint(mol_1), Chem.RDKFingerprint(mol_2)
             # Calculate the Tanimoto similarity
             similarity = DataStructs.TanimotoSimilarity(fp1, fp2)
             
@@ -41,3 +41,4 @@ class Tanimoto:
         else:
             #print("Unable to generate molecular fingerprints from SMILES notations.")
             return None
+        

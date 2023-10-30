@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 import spectrum_utils.plot as sup
 import spectrum_utils as su
 import numpy as np
+from src.config import Config
+from src.preprocessing_utils import PreprocessingUtils
+
 from tqdm import tqdm 
 
 class LoadData:
@@ -48,12 +51,31 @@ class LoadData:
 
             for spectrum in spectrum_it():
                 try:
-                    yield LoadData._parse_spectrum(spectrum)
+                    
+                    if LoadData.is_valid_spectrum(spectrum):
+                        yield LoadData._parse_spectrum(spectrum)
+                
                 except ValueError as e:
                     pass
                     # logger.warning(f'Failed to read spectrum '
                     #                f'{spectrum["params"]["title"]}: %s', e)
 
+    def is_valid_spectrum(spectrum: SpectrumExt):
+
+        cond_library = int(spectrum['params']["libraryquality"]) <= 3
+        cond_charge=  int(spectrum['params']["charge"][0]) in Config.CHARGES
+        cond_pepmass = float(spectrum['params']["pepmass"][0]) > 0
+        cond_mz_array = len(spectrum['m/z array']) >= Config.MIN_N_PEAKS 
+        cond_ion_mode =spectrum['params']["ionmode"] == "Positive" 
+        cond_name = spectrum['params']["name"].rstrip().endswith(" M+H")
+        cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
+        cond_inchi_smiles= (
+                     #spectrum['params']["inchi"] != "N/A" or
+                     spectrum['params']["smiles"] != "N/A"
+                )
+
+        return  cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
+                
 
     def _parse_spectrum(spectrum_dict: Dict) -> SpectrumExt:
         """
@@ -71,31 +93,26 @@ class LoadData:
         """
         #identifier = spectrum_dict['params']['title']
 
+        spec = SpectrumExt(
+                    spectrum_dict["params"]["spectrumid"],
+                    float(spectrum_dict["params"]["pepmass"][0]),
+                    # Re-assign charge 0 to 1.
+                    max(int(spectrum_dict["params"]["charge"][0]), 1),
+                    spectrum_dict["m/z array"],
+                    spectrum_dict["intensity array"],
+                )
         
-        identifier = spectrum_dict['params']['name']
-        mz_array = spectrum_dict['m/z array']
-        intensity_array = spectrum_dict['intensity array']
-        #retention_time = float(spectrum_dict['params']['rtinseconds'])
-        retention_time = 0
-        precursor_mz = float(spectrum_dict['params']['pepmass'][0])
-        if 'charge' in spectrum_dict['params']:
-            precursor_charge = int(spectrum_dict['params']['charge'][0])
-        else:
-            raise ValueError('Unknown precursor charge')
+        spec.params = spectrum_dict["params"]
+        spec.library = spectrum_dict["params"]["organism"]
+        spec.inchi = spectrum_dict["params"]["inchi"]
+        spec.smiles = spectrum_dict["params"]["smiles"]
+        spec.remove_precursor_peak(0.1, "Da")
+        spec.filter_intensity(0.01)
+        spec.ionmode = spectrum_dict["params"]["ionmode"]
 
-        spectrum = SpectrumExt(str(identifier), precursor_mz, precursor_charge,
-                                mz_array, intensity_array, None)
-
-        # add metadata to spectrum object
-
-        spectrum.set_params(spectrum_dict['params'])
-
-        spectrum.set_smiles(spectrum_dict['params']['smiles'])
-
-        # add max intensity
-        spectrum.set_max_peak(np.max(spectrum_dict['intensity array']))
         
-        return spectrum
+        
+        return spec
 
     def get_all_spectrums(mgf_path, num_samples=10):
         spectrums=[] #to save all the spectrums

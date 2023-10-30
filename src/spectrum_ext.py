@@ -31,14 +31,22 @@ class SpectrumExt(MsmsSpectrum):
         intensity,
         retention_time) 
 
+        # extra variables
         self.params= None
+        self.intensity_array = None
+        self.mz_array = None
         self.spectrum_vector=None
         self.smiles =None
         self.max_peak=None
-
+        
     def set_params(self, params):
          self.params = params 
-         
+
+    def set_mz_array(self, mz_array):
+         self.mz_array=mz_array 
+
+    def set_intesity_array(self, intensity_array):
+         self.intensity_array= intensity_array
     def set_spectrum_vector(self, spectrum_vector):
           self.spectrum_vector =spectrum_vector
 

@@ -30,7 +30,7 @@ class MlModel:
         target_shape = (input_dim, 1)  # Define the target shape
 
 
-        x =  Dense(32, activation='relu') (x)
+        x =  Dense(32, activation='relu') (input_spectrogram)
         x = Dropout(0.5) (x)
         x = Dense (32, activation='relu') (x)
         x = Dropout(0.5) (x)
@@ -57,9 +57,9 @@ class MlModel:
         global_features= Dense(4, activation='relu')(global_features)
 
          #Concatenate the global variables with the base network output
-        concatenated = Concatenate()([x, global_features])
+        #concatenated = Concatenate()([x, global_features])
 
-        
+        concatenated= x
 
         # dense layer
         concatenated = Dense(32, activation='relu') (concatenated)
@@ -136,7 +136,7 @@ class MlModel:
         # Compile the model
         # Define a TensorBoard callback
         
-        #self.siamese_model.compile(optimizer='adam', loss=MlModel.contrastive_loss, metrics=['mae'])
+        #self.siamese_model.compile(optimizer='adam', loss=MlModel.contrastive_loss, metrics=['mse'])
         self.siamese_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mse'])
         self.siamese_model.summary()
 
