@@ -11,13 +11,14 @@ import spectrum_utils as su
 import numpy as np
 from src.config import Config
 from src.preprocessing_utils import PreprocessingUtils
+from src.murcko_scaffold import MurckoScaffold
 
 from tqdm import tqdm 
 
 class LoadData:
 
 
-    def get_spectra(source: Union[IO, str], scan_nrs: Sequence[int] = None)\
+    def get_spectra(source: Union[IO, str], scan_nrs: Sequence[int] = None, compute_classes=False)\
             -> Iterator[SpectrumExt]:
         """
         Get the MS/MS spectra from the given MGF file, optionally filtering by
@@ -53,7 +54,7 @@ class LoadData:
                 try:
                     
                     if LoadData.is_valid_spectrum(spectrum):
-                        yield LoadData._parse_spectrum(spectrum)
+                        yield LoadData._parse_spectrum(spectrum, compute_classes=compute_classes)
                 
                 except ValueError as e:
                     pass
@@ -70,14 +71,14 @@ class LoadData:
         cond_name = spectrum['params']["name"].rstrip().endswith(" M+H")
         cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
         cond_inchi_smiles= (
-                     #spectrum['params']["inchi"] != "N/A" or
+                     spectrum['params']["inchi"] != "N/A" or
                      spectrum['params']["smiles"] != "N/A"
                 )
 
         return  cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
                 
 
-    def _parse_spectrum(spectrum_dict: Dict) -> SpectrumExt:
+    def _parse_spectrum(spectrum_dict: Dict, compute_classes=False) -> SpectrumExt:
         """
         Parse the Pyteomics spectrum dict.
 
@@ -106,17 +107,31 @@ class LoadData:
         spec.library = spectrum_dict["params"]["organism"]
         spec.inchi = spectrum_dict["params"]["inchi"]
         spec.smiles = spectrum_dict["params"]["smiles"]
-        spec.remove_precursor_peak(0.1, "Da")
-        spec.filter_intensity(0.01)
         spec.ionmode = spectrum_dict["params"]["ionmode"]
 
         
+
+        # classes
+        if compute_classes:
+            clss = PreprocessingUtils.get_class(spec.inchi, spec.smiles)
+            spec.superclass= clss[0]
+            spec.classe = clss[1]
+            spec.subclass = clss[2]
+
+
+        spec=spec.remove_precursor_peak(0.1, "Da")
+        spec=spec.filter_intensity(0.01)
         
+
+        
+        # calculate Murcko-Scaffold class
+        bms=MurckoScaffold.get_bm_scaffold(spec.smiles)
+        spec.set_murcko_scaffold(bms)
         return spec
 
-    def get_all_spectrums(mgf_path, num_samples=10):
+    def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False):
         spectrums=[] #to save all the spectrums
-        spectra = LoadData.get_spectra(mgf_path)
+        spectra = LoadData.get_spectra(mgf_path, compute_classes=compute_classes)
 
         for i in tqdm(range(0, num_samples)):
             try:

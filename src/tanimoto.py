@@ -4,6 +4,7 @@ from rdkit.Chem import DataStructs
 import rdkit.rdBase as rkrb
 import rdkit.RDLogger as rkl
 from rdkit.Chem.inchi import MolFromInchi 
+import functools
 # disable logging info
 logger = rkl.logger()
 logger.setLevel(rkl.ERROR)
@@ -11,6 +12,7 @@ rkrb.DisableLog('rdApp.error')
 
 class Tanimoto:
 
+    @functools.lru_cache
     def compute_tanimoto(identifier_1, identifier_2, nbits=2048, use_inchi=False):
 
         if use_inchi: # which format to use

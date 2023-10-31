@@ -7,9 +7,44 @@ from src.molecule_pair import MoleculePair
 from  src.preprocessor import Preprocessor
 from src.preprocessing_utils import PreprocessingUtils
 from src.config import Config
+import functools
 import random 
 
 class TrainUtils:
+
+    @staticmethod
+    def train_val_test_split_bms(spectrums, val_split=0.2, test_split=0.2):
+
+        # get the percentage of training data
+        train_split= 1- val_split-test_split
+        # get the murcko scaffold
+        bms = [s.murcko_scaffold for s in spectrums]
+        
+        # count the unique elements
+        unique_values, counts = np.unique(bms, return_counts=True)
+        
+        # remove the appearence of not identified bms
+        unique_values = unique_values[unique_values != '']
+  
+
+        # randomize
+        random.shuffle(unique_values)
+        
+        # get indexes
+        train_index= int((train_split)*(len(unique_values)))
+        val_index= train_index + int(val_split*(len(unique_values)))
+        
+        # get elements
+        train_bms= unique_values[0:train_index]
+        val_bms = unique_values[train_index:val_index]
+        test_bms=unique_values[val_index:]
+        
+        # get data
+        spectrums_train = [s for s in spectrums if s.murcko_scaffold in train_bms]
+        spectrums_val = [s for s in spectrums if s.murcko_scaffold in val_bms]
+        spectrums_test = [s for s in spectrums if s.murcko_scaffold in test_bms]
+        return spectrums_train, spectrums_val, spectrums_test
+
 
     @staticmethod
     def  get_combination_indexes(num_samples, combination_length=2):
@@ -24,6 +59,7 @@ class TrainUtils:
             random_indices = random.sample(all_indices, 2)  # Generate random combination of 2 indices
             yield random_indices
 
+    
     @staticmethod
     def get_indexes_based_on_mz(all_spectrums, randomize=True):
         '''

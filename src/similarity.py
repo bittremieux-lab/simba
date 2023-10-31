@@ -6,7 +6,7 @@ import scipy.optimize
 import scipy.sparse
 import spectrum_utils.spectrum as sus
 
-import src.utils
+from src.utils import  spec_to_neutral_loss
 
 SpectrumTuple = collections.namedtuple(
     "SpectrumTuple", ["precursor_mz", "precursor_charge", "mz", "intensity"]
@@ -109,8 +109,8 @@ def neutral_loss(
         second spectrum.
     """
     # Convert peaks to neutral loss.
-    spectrum1 = utils.spec_to_neutral_loss(spectrum1)
-    spectrum2 = utils.spec_to_neutral_loss(spectrum2)
+    spectrum1 = spec_to_neutral_loss(spectrum1)
+    spectrum2 = spec_to_neutral_loss(spectrum2)
     return _cosine(spectrum1, spectrum2, fragment_mz_tolerance, False)
 
 

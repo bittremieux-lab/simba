@@ -38,6 +38,14 @@ class SpectrumExt(MsmsSpectrum):
         self.spectrum_vector=None
         self.smiles =None
         self.max_peak=None
+
+        # classes
+        self.superclass= None
+        self.classe = None
+        self.subclass = None
+
+        # preprocessed variables
+        self.murcko_scaffold = None
         
     def set_params(self, params):
          self.params = params 
@@ -49,6 +57,9 @@ class SpectrumExt(MsmsSpectrum):
          self.intensity_array= intensity_array
     def set_spectrum_vector(self, spectrum_vector):
           self.spectrum_vector =spectrum_vector
+
+    def set_murcko_scaffold(self, murcko_scaffold):
+         self.murcko_scaffold=murcko_scaffold
 
     def set_smiles(self, smiles):
           self.smiles = smiles

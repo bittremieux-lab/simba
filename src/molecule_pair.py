@@ -31,7 +31,8 @@ class MoleculePair:
         self.params_0 = params_0
         self.params_1= params_1
 
-        self.cosine_score={}
+        self.deterministic_similarity={}
 
     def set_det_similarity_score(self,score, similarity_score):
+
         self.deterministic_similarity[similarity_score]=score

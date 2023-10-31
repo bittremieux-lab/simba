@@ -5,14 +5,15 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Model
 import numpy as np
 from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.keras.layers import Input, Conv1D, MaxPooling1D, Flatten, Dense, Dropout, Concatenate, BatchNormalization
+from tensorflow.keras.layers import Input, Conv1D, Conv2D, MaxPooling1D, Flatten, Dense, Dropout, Concatenate, BatchNormalization
 from tensorflow.keras.layers import Reshape
 from keras.layers import GlobalMaxPooling1D
 import keras.backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.models import load_model
 from src.molecule_pair import MoleculePair
-
+from keras.optimizers import Adam
+from src.plot_losses import PlotLosses
 class MlModel:
 
     def __init__(self, input_dim=64):
@@ -30,18 +31,19 @@ class MlModel:
         target_shape = (input_dim, 1)  # Define the target shape
 
 
-        x =  Dense(32, activation='relu') (input_spectrogram)
+        x =  Dense(128, activation='relu') (input_spectrogram)
         x = Dropout(0.5) (x)
-        x = Dense (32, activation='relu') (x)
+        x = Dense (128, activation='relu') (x)
         x = Dropout(0.5) (x)
         #x  = Reshape(target_shape, input_shape=(input_dim,))(input_spectrogram)
-        #x = Conv1D(32, kernel_size=3, activation='relu', padding='same')(x)
+        #x = Conv1D(1, kernel_size=10, activation='relu', padding='same', dilation_rate=1)(x)
         #x = BatchNormalization() (x)
         #x = MaxPooling1D(pool_size=4)(x)
-        #x = Conv1D(32, kernel_size=3, activation='relu', padding='same')(x)
+        #x = Conv1D(32, kernel_size=10, activation='relu', padding='same', dilation_rate=3)(x)
         #x = BatchNormalization() (x)
         #x = MaxPooling1D(pool_size=4)(x)
-        #x = Conv1D(1, kernel_size=3, activation='relu', padding='same')(x)
+        #x = Conv1D(1, kernel_size=10, activation='relu', padding='same', dilation_rate=3)(x)
+        #x = BatchNormalization() (x)
         #x = Flatten() (x)
         #x = MaxPooling1D(pool_size=2)(x)
         #x= GlobalMaxPooling1D()(x)
@@ -49,17 +51,16 @@ class MlModel:
         #x = Dense(32, activation='relu') (x)
         #x = Dropout(0.5) (x)
         #x = Dense(32, activation='relu') (x)
-        
+        #x = Dropout(0.5) (x)
 
         # embedded the features
         global_features= Dense(4, activation='relu')(input_global_variables)
         global_features = Dropout(0.5) (global_features)
         global_features= Dense(4, activation='relu')(global_features)
+        global_features = Dropout(0.5) (global_features)
 
-         #Concatenate the global variables with the base network output
-        #concatenated = Concatenate()([x, global_features])
-
-        concatenated= x
+        #Concatenate the global variables with the base network output
+        concatenated = Concatenate()([x, global_features])
 
         # dense layer
         concatenated = Dense(32, activation='relu') (concatenated)
@@ -111,11 +112,28 @@ class MlModel:
         left_embedding = shared_network([left_input, left_global])
         right_embedding = shared_network([right_input, right_global])
         
+
+        # Stack the vectors along the channel dimension
+        concatenated = Concatenate(axis=-1)([left_embedding, right_embedding])
+
+        # You can now pass the concatenated tensor to a CNN layer
+        cnn  = Reshape((32,2), input_shape=(32,2))(concatenated)
+        cnn = Conv1D(16, kernel_size=10, activation='relu', padding='same')(cnn)
+        cnn = BatchNormalization()(cnn)
+        cnn = MaxPooling1D(4) (cnn)
+        cnn = Conv1D(16, kernel_size=10, activation='relu', padding='same')(cnn)
+        cnn = BatchNormalization()(cnn)
+        cnn = MaxPooling1D(4) (cnn)
+        cnn = Flatten()(cnn)
+
+        distance = Dense(32, activation='relu')(cnn)
+        distance =Dropout(0.5)(distance)
+        distance = Dense(1, activation='sigmoid') (distance)
         # Compute the L1 distance between the embeddings
         # distance layer based on cosine similairy
-        distance = keras.layers.Dot(axes=(1, 1),
-                                            normalize=True,
-                                           name="cosine_similarity")([left_embedding, right_embedding])
+        #distance = keras.layers.Dot(axes=(1, 1),
+        #                                    normalize=True,
+        #                                   name="cosine_similarity")([left_embedding, right_embedding])
         
         #l1_norm = lambda x: 1 - K.abs(x[0] - x[1])
         #merged = layers.Lambda(function=l1_norm, output_shape=lambda x: x[0], name='L1_distance')([left_embedding, right_embedding])
@@ -130,25 +148,30 @@ class MlModel:
         
         return model
 
-    def compile(self):
+    def compile(self, learning_rate=0.001):
         # Compile the model
         #self.siamese_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
         # Compile the model
         # Define a TensorBoard callback
         
         #self.siamese_model.compile(optimizer='adam', loss=MlModel.contrastive_loss, metrics=['mse'])
-        self.siamese_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mse'])
+        optimizer = Adam(learning_rate=learning_rate)
+        self.siamese_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mse'])
         self.siamese_model.summary()
 
 
-    def fit(self, molecule_pairs, epochs=10, batch_size=32, validation_split=0.2):
+    def fit(self, molecule_pairs_train,
+                    molecule_pairs_val, 
+                    epochs=10, 
+                    batch_size=32, 
+                    validation_split=0.2):
         #callback
-        tensorboard_callback = TensorBoard(
-                log_dir='./logs',  # Specify the directory for TensorBoard logs
-                histogram_freq=1,  # Log histogram data every epoch
-                write_graph=True,  # Write the model graph to TensorBoard+
-                write_images=True,  # Save image summaries of model architecture
-            )
+        #tensorboard_callback = TensorBoard(
+        #        log_dir='./logs',  # Specify the directory for TensorBoard logs
+        #        histogram_freq=1,  # Log histogram data every epoch
+        #        write_graph=True,  # Write the model graph to TensorBoard+
+        #        write_images=True,  # Save image summaries of model architecture
+        #    )
 
         # Define a checkpoint callback to save the best model based on validation accuracy
         save_checkpoint = ModelCheckpoint(
@@ -159,18 +182,24 @@ class MlModel:
             verbose=1                 # Verbosity level
         )
 
-        input_pairs_left, input_global_left, input_pairs_right, input_global_right, labels = self.get_x_y_from_molecule_pairs(molecule_pairs)
-     
+        plot_losses = PlotLosses()
+        input_pairs_left_tr, input_global_left_tr, input_pairs_right_tr, input_global_right_tr, labels_tr = self.get_x_y_from_molecule_pairs(molecule_pairs_train)
+        input_pairs_left_v, input_global_left_v, input_pairs_right_v, input_global_right_v, labels_v = self.get_x_y_from_molecule_pairs(molecule_pairs_val)
+
         # Train the model
-        self.siamese_model.fit(x=[input_pairs_left, 
-                                  input_global_left,
-                                  input_pairs_right,
-                                  input_global_right,
+        self.siamese_model.fit(x=[input_pairs_left_tr, 
+                                  input_global_left_tr,
+                                  input_pairs_right_tr,
+                                  input_global_right_tr,
                                   ], 
-                               y=labels, 
+                               y=labels_tr, 
                                epochs=epochs, batch_size=batch_size,
-                               validation_split=validation_split,
-                               callbacks = [tensorboard_callback, save_checkpoint])
+                               validation_data=([input_pairs_left_v, 
+                                  input_global_left_v,
+                                  input_pairs_right_v,
+                                  input_global_right_v,
+                                  ], labels_v),
+                               callbacks = [ save_checkpoint, plot_losses])
 
     def predict(self, molecule_pairs):
         input_pairs_left, input_global_left, input_pairs_right, input_global_right, labels = self.get_x_y_from_molecule_pairs(molecule_pairs)
