@@ -21,7 +21,16 @@ class SpectrumExt(MsmsSpectrum):
         precursor_charge: int,
         mz: Union[np.ndarray, Iterable],
         intensity: Union[np.ndarray, Iterable],
-        retention_time: float = np.nan,):
+        retention_time: float,
+        params,
+        library,
+        inchi,
+        smiles, 
+        ionmode,
+                    bms, 
+                    superclass,
+                    classe,
+                    subclass,):
 
         super().__init__(
         identifier,
@@ -32,26 +41,73 @@ class SpectrumExt(MsmsSpectrum):
         retention_time) 
 
         # extra variables
-        self.params= None
-        self.intensity_array = None
-        self.mz_array = None
-        self.spectrum_vector=None
-        self.smiles =None
-        self.max_peak=None
-
+        self.params= params
+        self.intensity_array = intensity
+        self.mz_array = ''
+        self.spectrum_vector=''
+        self.smiles =smiles
+        self.max_peak=''
+        self.library=library
+        self.inchi=inchi
+        self.ionmode= ionmode
+        self.retention_time=retention_time
         # classes
-        self.superclass= None
-        self.classe = None
-        self.subclass = None
+        self.superclass= superclass
+        self.classe = classe
+        self.subclass = subclass
 
         # preprocessed variables
-        self.murcko_scaffold = None
+        self.murcko_scaffold = bms
         
     def set_params(self, params):
          self.params = params 
 
     def set_mz_array(self, mz_array):
          self.mz_array=mz_array 
+
+
+    def __getstate__(self):
+     # Get the state of the base class
+     #state = super(SpectrumExt, self).__getstate__()
+     state = super(SpectrumExt, self).__getstate__()
+     # Add state for the derived class
+     state.update({
+          'params': self.params,
+          'intensity_array': self.intensity_array,
+          'mz_array': self.mz_array,
+          'spectrum_vector': self.spectrum_vector,
+          'smiles': self.smiles,
+          'max_peak': self.max_peak,
+          'library': self.library,
+          'inchi': self.inchi,
+          'ionmode': self.ionmode,
+          'retention_time': self.retention_time,
+          'superclass': self.superclass,
+          'classe': self.classe,
+          'subclass': self.subclass,
+          'murcko_scaffold': self.murcko_scaffold
+     })
+     return state
+
+    def __setstate__(self, state):
+        # Restore base class state
+        super().__setstate__(state)
+        
+        # Restore derived class state
+        self.params = state['params']
+        self.intensity_array = state['intensity_array']
+        self.mz_array = state['mz_array']
+        self.spectrum_vector = state['spectrum_vector']
+        self.smiles = state['smiles']
+        self.max_peak = state['max_peak']
+        self.library = state['library']
+        self.inchi = state['inchi']
+        self.ionmode = state['ionmode']
+        self.retention_time = state['retention_time']
+        self.superclass = state['superclass']
+        self.classe = state['classe']
+        self.subclass = state['subclass']
+        self.murcko_scaffold = state['murcko_scaffold']
 
     def set_intesity_array(self, intensity_array):
          self.intensity_array= intensity_array

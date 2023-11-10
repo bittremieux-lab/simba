@@ -71,7 +71,7 @@ class LoadData:
         cond_name = spectrum['params']["name"].rstrip().endswith(" M+H")
         cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
         cond_inchi_smiles= (
-                     spectrum['params']["inchi"] != "N/A" or
+                     #spectrum['params']["inchi"] != "N/A" or
                      spectrum['params']["smiles"] != "N/A"
                 )
 
@@ -94,39 +94,49 @@ class LoadData:
         """
         #identifier = spectrum_dict['params']['title']
 
-        spec = SpectrumExt(
-                    spectrum_dict["params"]["spectrumid"],
-                    float(spectrum_dict["params"]["pepmass"][0]),
-                    # Re-assign charge 0 to 1.
-                    max(int(spectrum_dict["params"]["charge"][0]), 1),
-                    spectrum_dict["m/z array"],
-                    spectrum_dict["intensity array"],
-                )
-        
-        spec.params = spectrum_dict["params"]
-        spec.library = spectrum_dict["params"]["organism"]
-        spec.inchi = spectrum_dict["params"]["inchi"]
-        spec.smiles = spectrum_dict["params"]["smiles"]
-        spec.ionmode = spectrum_dict["params"]["ionmode"]
-
-        
+        params = spectrum_dict["params"]
+        library = spectrum_dict["params"]["organism"]
+        inchi = spectrum_dict["params"]["inchi"]
+        smiles = spectrum_dict["params"]["smiles"]
+        ionmode = spectrum_dict["params"]["ionmode"]
+        # calculate Murcko-Scaffold class
+        bms=MurckoScaffold.get_bm_scaffold(smiles)
 
         # classes
         if compute_classes:
-            clss = PreprocessingUtils.get_class(spec.inchi, spec.smiles)
-            spec.superclass= clss[0]
-            spec.classe = clss[1]
-            spec.subclass = clss[2]
+            clss = PreprocessingUtils.get_class(inchi, smiles)
+            superclass= clss[0]
+            classe = clss[1]
+            subclass = clss[2]
+        else:
+            superclass=None
+            classe= None
+            subclass=None
 
-
+        spec = SpectrumExt(
+                    identifier=spectrum_dict["params"]["spectrumid"],
+                    precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
+                    # Re-assign charge 0 to 1.
+                    precursor_charge=max(int(spectrum_dict["params"]["charge"][0]), 1),
+                    mz=spectrum_dict["m/z array"],
+                    intensity=spectrum_dict["intensity array"],
+                    retention_time=np.nan,
+                    params=params,
+                    library=library,
+                    inchi=inchi,
+                    smiles=smiles, 
+                    ionmode=ionmode,
+                    bms=bms, 
+                    superclass=superclass,
+                    classe=classe,
+                    subclass=subclass,
+                )
+        
+        # postprocessing
         spec=spec.remove_precursor_peak(0.1, "Da")
         spec=spec.filter_intensity(0.01)
         
-
         
-        # calculate Murcko-Scaffold class
-        bms=MurckoScaffold.get_bm_scaffold(spec.smiles)
-        spec.set_murcko_scaffold(bms)
         return spec
 
     def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False):
