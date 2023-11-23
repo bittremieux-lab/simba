@@ -43,7 +43,7 @@ class SpectrumExt(MsmsSpectrum):
         # extra variables
         self.params= params
         self.intensity_array = intensity
-        self.mz_array = ''
+        self.mz_array = mz
         self.spectrum_vector=''
         self.smiles =smiles
         self.max_peak=''
