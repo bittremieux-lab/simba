@@ -29,14 +29,23 @@ class Embedder(pl.LightningModule):
     def __init__(self, d_model, n_layers):
         """Initialize the CCSPredictor"""
         super().__init__()
-    
+        self.d_model = d_model
+        self.n_layers=n_layers
+        # Add a linear layer for projection
+        self.linear_regression = nn.Linear(d_model * 2, 1)
+        
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
             n_layers=n_layers,
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
-
+        self.regression_loss = nn.MSELoss()
+        
+        # Lists to store training and validation loss
+        self.train_loss_list = []
+        self.val_loss_list = []
+        
     def forward(self, batch):
         """The inference pass"""
 
@@ -56,45 +65,68 @@ class Embedder(pl.LightningModule):
         # select the dimension where the data is embedded
         emb0 = emb0[:, 0, :]
         emb1 = emb1[:, 0, :]
+        
+        
         emb = torch.cat((emb0, emb1), dim=1)
+
+        ## for regression problem
+        emb= self.linear_regression(emb)
         
         return emb
     
-    def step(self, batch, batch_idx, threshold=0.6):
+    def step(self, batch, batch_idx, threshold=0.5):
         """A training/validation/inference step."""
         spec = self(batch)
 
         
         # Calculate the loss efficiently:
+        '''
         spec = spec.expand(spec.shape).reshape(-1, *spec.shape[1:])
         
+        #print(spec.shape)
         # obtain the embedding for the first molecule and the corresponding second molecule per pair
-        spec_0 = spec[0:int(spec.shape[0]/2)]
-        spec_1 = spec[int(spec.shape[0]/2):]
+        #print('spec shape')
+        #print(spec.shape)
+        spec_0 = spec[:, :int(spec.shape[1]/2)]
+        spec_1 = spec[:, int(spec.shape[1]/2):]
         
-        #target = torch.ones(spec.shape[0]).to(self.device)
-        #target = batch['similarity']
-        target = torch.tensor(batch['similarity']).to(self.device)
-        target = target.view(-1)
+       
         
         # thresholding
         target[target > threshold] = 1
         target[target <= threshold] = -1
-        #target[spec.shape[0]:] = -1
-        loss = self.cosine_loss(spec_0, spec_1, target)
-        return loss
+        
+        #print('spec0_size')
+        #print(spec_0.size())
+        #print('spec1_size')
+        #print(spec_1.size())
+        #print(target.size())
+        
+        loss_cos = self.cosine_loss(spec_0, spec_1, target)
+        '''
+        target = torch.tensor(batch['similarity']).to(self.device)
+        target = target.view(-1)
+        
+        #print('to compute loss')
+        loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        #print(loss)
+        return loss.float()
 
     def training_step(self, batch, batch_idx):
         """A training step"""
         loss = self.step(batch, batch_idx)
+        self.train_loss_list.append(loss.item())
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """A validation step"""
         loss = self.step(batch, batch_idx)
+        self.val_loss_list.append(loss.item())
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
+    
+    
 
     def predict_step(self, batch, batch_idx):
         """A predict step"""
@@ -105,3 +137,20 @@ class Embedder(pl.LightningModule):
         """Configure the optimizer for training."""
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
+    
+    def plot_loss(self):
+        # Reshape the array into a 2D array with 10 columns (adjust batch_per_epoch as needed)
+        reshaped_tr = np.array(self.train_loss_list).reshape(-1, 1)
+        reshaped_val = np.array(self.val_loss_list).reshape(-1, 1)
+
+        # Calculate the mean along axis 1 (across columns)
+        average_tr = np.mean(reshaped_tr, axis=1)
+        average_val = np.mean(reshaped_val, axis=1)
+
+        plt.plot(average_tr, label='train')
+        plt.plot(average_val, label='val')
+        plt.xlabel('epochs')
+        plt.ylabel('loss')
+        plt.legend()
+        plt.grid()
+        plt.show()
