@@ -1,0 +1,22 @@
+name: transformers
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+  - pytorch
+  - nvidia
+dependencies:
+  - dill
+  - pytorch
+  - pytorch-cuda
+  - cudatoolkit
+  - lightning
+  - pip
+  - pip:
+    - git+https://github.com/wfondrie/depthcharge
+conda_build:
+  root-dir: null
+  no-source: true
+  no-binstar-upload: true
+  variants: 
+    - no_cache_dir: true
