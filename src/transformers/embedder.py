@@ -3,9 +3,9 @@ import random
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import ppx
-import seaborn as sns
+#import pandas as pd
+#import ppx
+#import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +19,7 @@ from depthcharge.transformers import (
 import torch
 
 # Set our plotting theme:
-sns.set_style("ticks")
+#sns.set_style("ticks")
 
 # Set random seeds
 pl.seed_everything(42, workers=True)
