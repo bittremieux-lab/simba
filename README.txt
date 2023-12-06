@@ -1,3 +1,8 @@
+
+## Wetransfer
+
+wget --user-agent Mozilla/4.0 '[your big address here]' -O dest_file_name
+
 ## GLOBUS:
 
 Download the server, login and run it in the background

@@ -1,8 +1,8 @@
 import logging
 from typing import Dict, IO, Iterator, Sequence, Union
 
-#from pyteomics import mgf
-#import pyteomics
+from pyteomics import mgf
+import pyteomics
 from spectrum_utils.spectrum import MsmsSpectrum
 from src.spectrum_ext import SpectrumExt
 import matplotlib.pyplot as plt

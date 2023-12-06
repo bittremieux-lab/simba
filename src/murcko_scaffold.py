@@ -10,6 +10,6 @@ class MurckoScaffold:
         try:
             scaffold = Chem.MolToSmiles(MurckoScaffold.MakeScaffoldGeneric(mol=Chem.MolFromSmiles(smiles)))
         except Exception:
-            print("Raise AtomValenceException, return basic Murcko Scaffold")
+            #print("Raise AtomValenceException, return basic Murcko Scaffold")
             scaffold = smiles
         return scaffold

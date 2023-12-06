@@ -1,0 +1,16 @@
+name: molecular_pairs
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+  - pytorch
+  - nvidia
+dependencies:
+  - scikit-learn
+  - dill
+  - tqdm
+  - pyteomics
+  - requests
+  - spectrum_utils
+  - rdkit
+
