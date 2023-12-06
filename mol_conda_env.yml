@@ -7,10 +7,13 @@ channels:
   - nvidia
 dependencies:
   - scikit-learn
-  - dill
+  - dill==0.3.6
   - tqdm
-  - pyteomics
+  - pyteomics==4.6.2
   - requests
-  - spectrum_utils
-  - rdkit
+  - rdkit==2023.03.3
+  - pip
+  - pip:
+          - spectrum_utils
+
 

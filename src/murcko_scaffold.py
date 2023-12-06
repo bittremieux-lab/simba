@@ -1,5 +1,5 @@
 from rdkit import Chem
-
+from rdkit.Chem.Scaffolds.MurckoScaffold import MakeScaffoldGeneric
 class MurckoScaffold:
 
     '''

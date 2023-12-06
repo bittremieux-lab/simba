@@ -73,7 +73,9 @@ class LoadData:
         cond_inchi_smiles= (
                      #spectrum['params']["inchi"] != "N/A" or
                      spectrum['params']["smiles"] != "N/A"
-                ) 
+                )
+       
+
         return  cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
                 
 
@@ -112,6 +114,7 @@ class LoadData:
             classe= None
             subclass=None
 
+        
         spec = SpectrumExt(
                     identifier=spectrum_dict["params"]["spectrumid"],
                     precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
@@ -135,7 +138,7 @@ class LoadData:
         spec=spec.remove_precursor_peak(0.1, "Da")
         spec=spec.filter_intensity(0.01)
         
-        
+         
         return spec
 
     def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False):

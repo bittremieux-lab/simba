@@ -3,14 +3,24 @@ from src.load_data import LoadData
 from sklearn.model_selection import train_test_split
 from src.train_utils import TrainUtils
 from src.preprocessor import Preprocessor
+import pickle
 
 ## PARAMETERS
 mgf_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf"
+all_spectrums_path = "/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231124.pkl"
+dataset_path = "/scratch/antwerpen/209/vsc20939/data/dataset.pkl"
 train_molecules=10**3
 val_molecules=10**3
 test_molecules=10**3
 
 all_spectrums_original = LoadData.get_all_spectrums(mgf_path,70000)
+
+# Dump the dictionary to a file using pickle
+#with open(all_spectrums_path, 'rb') as file:
+#    all_spectrums_dict = dill.load(file)
+#with open(dataset_path, 'rb') as file:
+#    dataset = dill.load(file)
+#all_spectrums_train= all_spectrums_dict['all_spectrums_train']
 
 
 #preprocessor
