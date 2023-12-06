@@ -7,7 +7,8 @@ from src.transformers.embedder import Embedder
 from pytorch_lightning.callbacks import ProgressBar
 # parameters
 dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231124.pkl'
-epochs= 1
+epochs= 10
+enable_progress_bar=False
 
 # Check if CUDA (GPU support) is available
 if torch.cuda.is_available():
@@ -50,7 +51,7 @@ dataset_test = LoadData.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_
 dataset_val = LoadData.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_val)
 
 print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
+dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True, num_workers=15)
 dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
 dataloader_val = DataLoader(dataset_val, batch_size=1, shuffle=False)
 
@@ -67,9 +68,9 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 progress_bar_callback = ProgressBar()
 print('define model')
 # Create a model:
-model = Embedder( d_model=64, n_layers=1)
+model = Embedder( d_model=64, n_layers=2)
 
 print('train model')
 #loss_plot_callback = LossPlotCallback(batch_per_epoch_tr=1, batch_per_epoch_val=2)
-trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback, progress_bar_callback],progress_bar_refresh_rate=0)
-#trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
+trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback], enable_progress_bar=enable_progress_bar)
+trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
