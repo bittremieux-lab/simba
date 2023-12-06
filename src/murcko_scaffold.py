@@ -1,5 +1,5 @@
 from rdkit import Chem
-
+from rdkit.Chem.Scaffolds.MurckoScaffold import MakeScaffoldGeneric
 class MurckoScaffold:
 
     '''
@@ -8,7 +8,7 @@ class MurckoScaffold:
     
     def get_bm_scaffold(smiles):
         try:
-            scaffold = Chem.MolToSmiles(MurckoScaffold.MakeScaffoldGeneric(mol=Chem.MolFromSmiles(smiles)))
+            scaffold = Chem.MolToSmiles(MakeScaffoldGeneric(mol=Chem.MolFromSmiles(smiles)))
         except Exception:
             #print("Raise AtomValenceException, return basic Murcko Scaffold")
             scaffold = smiles
