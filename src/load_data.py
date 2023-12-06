@@ -73,8 +73,7 @@ class LoadData:
         cond_inchi_smiles= (
                      #spectrum['params']["inchi"] != "N/A" or
                      spectrum['params']["smiles"] != "N/A"
-                )
-
+                ) 
         return  cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
                 
 
