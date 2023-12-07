@@ -72,7 +72,6 @@ class Embedder(pl.LightningModule):
         ## for regression problem
         emb= self.linear_regression(emb)
         
-        emb = F.sigmoid(emb)
         
         return emb
     
