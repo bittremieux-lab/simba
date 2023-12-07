@@ -17,11 +17,16 @@ class LoadData:
         list_intensity_1 = [m.spectrum_object_1.intensity_array for m in molecule_pairs] 
         list_similarity = [m.similarity for m in molecule_pairs]
         
+        
         mz_0 =np.zeros((len(molecule_pairs),500))
         intensity_0 = np.zeros((len(molecule_pairs),500))
         mz_1=np.zeros((len(molecule_pairs),500))
         intensity_1 = np.zeros((len(molecule_pairs),500))
         similarity= np.zeros((len(molecule_pairs),1))
+        precursor_mass_0 = np.zeros((len(molecule_pairs),1))
+        precursor_charge_0 = np.zeros((len(molecule_pairs),1))
+        precursor_mass_1 = np.zeros((len(molecule_pairs),1))
+        precursor_charge_1 = np.zeros((len(molecule_pairs),1))
         
         # fill arrays
         for i,l in enumerate(molecule_pairs):
@@ -34,13 +39,24 @@ class LoadData:
             intensity_0[i, 0:length_0] = np.array(list_intensity_0[i][0:length_0])
             mz_1[i, 0:length_1] = np.array(list_mz_1[i][0:length_1])
             intensity_1[i, 0:length_1] = np.array(list_intensity_1[i][0:length_1])
+            
+            precursor_mass_0[i] = l.global_feats_0[0]
+            precursor_charge_0[i] = l.global_feats_0[1]
+            precursor_mass_1[i] = l.global_feats_1[0]
+            precursor_charge_1[i] = l.global_feats_1[1]
             similarity[i] = list_similarity[i]
+            
             
         dictionary_data = {"mz_0": mz_0,
                    "intensity_0":intensity_0,
                   "mz_1": mz_1,
                    "intensity_1": intensity_1,
                    "similarity":similarity,
+                           "precursor_mass_0": precursor_mass_0,
+                           "precursor_mass_1":precursor_mass_1,
+                           "precursor_charge_0": precursor_charge_0,
+                           "precursor_charge_0": precursor_charge_1,
+                        
                   }
         
         return CustomDataset(dictionary_data)
