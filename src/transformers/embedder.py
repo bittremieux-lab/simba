@@ -24,6 +24,7 @@ import torch
 # Set random seeds
 pl.seed_everything(42, workers=True)
 
+
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
     def __init__(self, d_model, n_layers):
@@ -32,7 +33,9 @@ class Embedder(pl.LightningModule):
         self.d_model = d_model
         self.n_layers=n_layers
         # Add a linear layer for projection
-        self.linear_regression = nn.Linear(d_model * 2, 1)
+        self.linear = nn.Linear(d_model*2, 32)
+        self.relu= nn.ReLU()
+        self.linear_regression = nn.Linear(32, 1)
         
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
@@ -40,8 +43,9 @@ class Embedder(pl.LightningModule):
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
-        self.regression_loss = nn.MSELoss()
-        
+        self.regression_loss = nn.MSELoss(reduction='none')
+        #self.regression_loss = weighted_MSELoss()
+
         # Lists to store training and validation loss
         self.train_loss_list = []
         self.val_loss_list = []
@@ -70,8 +74,12 @@ class Embedder(pl.LightningModule):
         emb = torch.cat((emb0, emb1), dim=1)
 
         ## for regression problem
-        emb= self.linear_regression(emb)
-        
+        #emb =  nn.Linear(self.d_model*2, self.d_model)(emb)
+        #emb= nn.ReLu()(emb)
+
+        emb = self.linear(emb)
+        emb = self.relu(emb)
+        emb=  self.linear_regression(emb) 
         
         return emb
     
@@ -108,13 +116,15 @@ class Embedder(pl.LightningModule):
         target = torch.tensor(batch['similarity']).to(self.device)
         target = target.view(-1)
         
+        # apply weight loss
+        weight = torch.abs(target.view(-1, 1)-0.5)
+
+
         #print('to compute loss')
+        #loss = self.regression_loss(spec.float(), target.view(-1, 1).float(), weight).float()
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        loss = torch.mean(torch.mul(loss, weight))
         
-        # apply weight loss 
-        weight = torch.abs(target-0.5)
-        
-        loss = torch.mul(loss, weight)
         #print(loss)
         return loss.float()
 
