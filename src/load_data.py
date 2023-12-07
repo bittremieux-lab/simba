@@ -141,11 +141,16 @@ class LoadData:
          
         return spec
 
-    def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False):
+    def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False, use_tqdm=True):
         spectrums=[] #to save all the spectrums
         spectra = LoadData.get_spectra(mgf_path, compute_classes=compute_classes)
 
-        for i in tqdm(range(0, num_samples)):
+        if use_tqdm:
+            iterator = tqdm(range(0, num_samples))
+        else:
+            iterator = range(0, num_samples)
+        
+        for i in iterator:
             try:
                 spectrum = next(spectra)
                 spectrums.append(spectrum)

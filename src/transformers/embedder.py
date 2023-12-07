@@ -27,19 +27,20 @@ pl.seed_everything(42, workers=True)
 
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
-    def __init__(self, d_model, n_layers):
+    def __init__(self, d_model, n_layers, dropout=0.3):
         """Initialize the CCSPredictor"""
         super().__init__()
         self.d_model = d_model
         self.n_layers=n_layers
         # Add a linear layer for projection
-        self.linear = nn.Linear(d_model*2, 32)
+        self.linear = nn.Linear(d_model*2+4, 32)
         self.relu= nn.ReLU()
         self.linear_regression = nn.Linear(32, 1)
         
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
             n_layers=n_layers,
+            dropout=dropout,
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
@@ -59,6 +60,8 @@ class Embedder(pl.LightningModule):
         #print('inputs')
         #print(batch['intensity_0'].size())
         #print(batch['intensity_1'].size())
+        
+        
         emb0,  _ =self.spectrum_encoder(mz_array=batch['mz_0'].float(), intensity_array=batch['intensity_0'].float())
         emb1,  _ =self.spectrum_encoder(mz_array=batch['mz_1'].float(), intensity_array=batch['intensity_1'].float())
         
@@ -76,7 +79,20 @@ class Embedder(pl.LightningModule):
         ## for regression problem
         #emb =  nn.Linear(self.d_model*2, self.d_model)(emb)
         #emb= nn.ReLu()(emb)
+        
+        # stack global features
+        mass_0 = batch['precursor_mass_0'].float()
+        charge_0 = batch['precursor_charge_0'].float()
+        mass_1 = batch['precursor_mass_1'].float()
+        charge_1 = batch['precursor_charge_1'].float()
 
+
+        #emb = torch.cat((emb, mass_0), dim=1)
+        #emb = torch.cat((emb, charge_0), dim=1)
+        #emb = torch.cat((emb, mass_1), dim=1)
+        #emb = torch.cat((emb, charge_1), dim=1)
+
+        emb = torch.cat((emb, mass_0, charge_0, mass_1, charge_1), dim=1)
         emb = self.linear(emb)
         emb = self.relu(emb)
         emb=  self.linear_regression(emb) 
@@ -118,7 +134,7 @@ class Embedder(pl.LightningModule):
         
         # apply weight loss
         weight = torch.abs(target.view(-1, 1)-0.5)
-
+        weight = weight/ torch.max(weight)    
 
         #print('to compute loss')
         #loss = self.regression_loss(spec.float(), target.view(-1, 1).float(), weight).float()
