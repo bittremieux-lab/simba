@@ -110,6 +110,11 @@ class Embedder(pl.LightningModule):
         
         #print('to compute loss')
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        
+        # apply weight loss 
+        weight = torch.abs(target-0.5)
+        
+        loss = torch.mul(loss, weight)
         #print(loss)
         return loss.float()
 
