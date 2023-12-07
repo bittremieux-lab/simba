@@ -72,6 +72,8 @@ class Embedder(pl.LightningModule):
         ## for regression problem
         emb= self.linear_regression(emb)
         
+        emb = F.sigmoid(emb)
+        
         return emb
     
     def step(self, batch, batch_idx, threshold=0.5):
@@ -135,7 +137,7 @@ class Embedder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure the optimizer for training."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
     
     def plot_loss(self):
