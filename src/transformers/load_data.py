@@ -55,7 +55,7 @@ class LoadData:
                            "precursor_mass_0": precursor_mass_0,
                            "precursor_mass_1":precursor_mass_1,
                            "precursor_charge_0": precursor_charge_0,
-                           "precursor_charge_0": precursor_charge_1,
+                           "precursor_charge_1": precursor_charge_1,
                         
                   }
         
