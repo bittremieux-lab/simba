@@ -73,7 +73,7 @@ class TrainUtils:
         indexes=[]
         print('Getting indexes ... ')
         # Iterate through the list to form pairs
-        for i in tqdm(range(len(all_spectrums) - 1)):
+        for i in (range(len(all_spectrums) - 1)):
             for j in range(i + 1, len(all_spectrums)):
                 diff = abs(all_spectrums[i].precursor_mz - all_spectrums[j].precursor_mz )
                 if Config.MIN_MASS_DIFF <= diff <= Config.MAX_MASS_DIFF:
@@ -87,7 +87,7 @@ class TrainUtils:
 
     @staticmethod
     def compute_all_tanimoto_results(all_spectrums, max_combinations=1000000, limit_low_tanimoto=True, 
-                                     max_low_pairs=100000, #maximum number of elements in which we stop adding new items
+                                     max_low_pairs=100000, use_tqdm=True, #maximum number of elements in which we stop adding new items
                                      ):
 
         # order the spectrums by mass
@@ -98,7 +98,13 @@ class TrainUtils:
         
         molecule_pairs=[]
         print('Computing all the tanimoto results')
-        for i, j in tqdm(index_used[0:max_combinations]):
+        
+        if use_tqdm:
+            iterator= tqdm(index_used[0:max_combinations])
+        else:
+            iterator = (index_used[0:max_combinations])
+
+        for i, j in iterator:
 
             tani = Tanimoto.compute_tanimoto(all_spectrums[i].params['smiles'],  all_spectrums[j].params['smiles'])
             if tani is not None:

@@ -7,8 +7,8 @@ channels:
   - nvidia
 dependencies:
   - dill
-  - pytorch 
-  - cudatoolkit=11.1
+    #- pytorch 
+    #- cudatoolkit=11.1
   - lightning
   - pip
   - pip:
