@@ -9,12 +9,20 @@ import pickle
 mgf_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf"
 all_spectrums_path = "/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231124.pkl"
 dataset_path = "/scratch/antwerpen/209/vsc20939/data/dataset.pkl"
-train_molecules=10**7
-val_molecules=10**5
-test_molecules=10**5
+output_file= './dataset_processed_augmented_20231210_bigone.pkl'
+#max_number_spectra=70000
+#train_molecules=10**7
+#val_molecules=10**5
+#test_molecules=10**5
+#use_tqdm=False
+
+max_number_spectra=70000
+train_molecules=3*10**7
+val_molecules=10**6
+test_molecules=10**6
 use_tqdm=False
 
-all_spectrums_original = LoadData.get_all_spectrums(mgf_path,70000, use_tqdm=use_tqdm)
+all_spectrums_original = LoadData.get_all_spectrums(mgf_path,max_number_spectra, use_tqdm=use_tqdm)
 
 # Dump the dictionary to a file using pickle
 #with open(all_spectrums_path, 'rb') as file:
@@ -51,5 +59,5 @@ dataset_augmented ={'molecule_spairs_train':molecule_pairs_train,
           'uniformed_molecule_pairs_val':uniformed_molecule_pairs_val,
           'uniformed_molecule_pairs_test': uniformed_molecule_pairs_test,
          }
-with open('./dataset_processed_augmented_20231207.pkl', 'wb') as file:
+with open(output_file, 'wb') as file:
     dill.dump(dataset_augmented, file)

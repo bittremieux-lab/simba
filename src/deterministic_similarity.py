@@ -5,7 +5,13 @@ from src.config import Config
 from tqdm import tqdm 
 import pandas as pd
 from src.tanimoto import Tanimoto
-from src.ml_model import MlModel
+from src.transformers.load_data import LoadData
+from torch.utils.data import DataLoader
+from src.transformers.embedder import Embedder
+import lightning.pytorch as pl
+import numpy as np
+from src.config import Config
+#from src.ml_model import MlModel
 
 class DetSimilarity:
     '''
@@ -38,17 +44,32 @@ class DetSimilarity:
         
     @staticmethod
     def call_saved_model(molecule_pairs, model_file):
-        # model
+        # siamese
         model =  MlModel(input_dim=molecule_pairs[0].vector_0.shape[0])
         model.load_best_model(model_file) 
         return model.predict(molecule_pairs)
 
     @staticmethod
+    def call_saved_transformer_model(molecule_pairs, model_file, d_model=64, n_layers=2):
+        # transformer
+        dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
+        dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
+        best_model = Embedder.load_from_checkpoint(model_file, d_model=d_model, n_layers=n_layers)
+        trainer = pl.Trainer(max_epochs=1,)
+        pred_test = trainer.predict(best_model, dataloader_test)
+        pred_test = np.array([float(p[0]) for p in pred_test])
+
+        # clip to 0 and 1
+        pred_test = np.clip(pred_test, 0, 1)
+        return pred_test
+
+    @staticmethod
     def compute_all_scores(molecule_pairs, write=False, write_file= '"./gnps_libraries.parquet"',
                             model_file='./best_model.h5'):
         scores = []
-        model_scores = DetSimilarity.call_saved_model(molecule_pairs, model_file)
-      
+        #model_scores = DetSimilarity.call_saved_model(molecule_pairs, model_file)
+        model_scores = DetSimilarity.call_saved_transformer_model(molecule_pairs, model_file, d_model=Config.d_model, n_layers=Config.n_layers)
+
         for i,m in tqdm(enumerate(molecule_pairs)):
             spectra_0 = m.spectrum_object_0
             spectra_1 = m.spectrum_object_1
@@ -61,10 +82,12 @@ class DetSimilarity:
                 spectra_0, spectra_1, Config.FRAGMENT_MZ_TOLERANCE
             )
 
-            
+            #model_score= model_scores[i,0]   #for sieamese network 
+            model_score = model_scores[i]
+
             tan = Tanimoto.compute_tanimoto(m.params_0["smiles"], m.params_1["smiles"])
             scores.append(
-                (cos[0], cos[1], mod_cos[0], mod_cos[1], nl[0], nl[1], model_scores[i,0], 0, tan)
+                (cos[0], cos[1], mod_cos[0], mod_cos[1], nl[0], nl[1], model_score, 0, tan)
             )
 
 

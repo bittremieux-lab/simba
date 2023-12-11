@@ -159,7 +159,7 @@ class TrainUtils:
         return binned_molecule_pairs, min_bin
 
     @staticmethod
-    def uniformise(molecule_pairs, number_bins=3):   
+    def uniformise(molecule_pairs, number_bins=3, return_binned_list=False):   
         '''
         get a uniform distribution of labels between 0 and 1
         ''' 
@@ -178,7 +178,10 @@ class TrainUtils:
 
         # insert spectrum vectors
         uniform_molecule_pairs = TrainUtils.insert_spectrum_vector_into_molecule_pairs(uniform_molecule_pairs)
-        return uniform_molecule_pairs
+        if return_binned_list:
+            return uniform_molecule_pairs, binned_molecule_pairs
+        else:
+            return uniform_molecule_pairs
     
     @staticmethod
     def insert_spectrum_vector_into_molecule_pairs(molecule_pairs):

@@ -273,7 +273,7 @@ class Plotting:
                 )
 
             # Save figure.
-            #plt.savefig("gnps_libraries.png", dpi=300, bbox_inches="tight")
+            plt.savefig("gnps_libraries.png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
 

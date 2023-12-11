@@ -1,5 +1,7 @@
 
 
+
+
 class Config:
     # Spectra and spectrum pairs to include with the following settings.
     CHARGES = 0, 1
@@ -7,3 +9,5 @@ class Config:
     FRAGMENT_MZ_TOLERANCE = 0.1
     MIN_MASS_DIFF = 1    # Da
     MAX_MASS_DIFF = 200    # Da
+    n_layers=1 #transformer parameters
+    d_model=16 #transformer parameters

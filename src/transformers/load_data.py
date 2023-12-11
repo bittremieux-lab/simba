@@ -4,6 +4,7 @@ import numpy as np
 
 class LoadData:
     
+        
     @staticmethod
     def from_molecule_pairs_to_dataset(molecule_pairs):
         '''
@@ -17,7 +18,11 @@ class LoadData:
         list_intensity_1 = [m.spectrum_object_1.intensity_array for m in molecule_pairs] 
         list_similarity = [m.similarity for m in molecule_pairs]
         
-        
+        if hasattr(molecule_pairs[0], 'fingerprint_0'):
+         list_fingerprints = [np.concatenate((m.fingerprint_0, m.fingerprint_1)) for m in molecule_pairs] 
+        else:
+         list_fingerprints = [0 for m in molecule_pairs]
+
         mz_0 =np.zeros((len(molecule_pairs),500))
         intensity_0 = np.zeros((len(molecule_pairs),500))
         mz_1=np.zeros((len(molecule_pairs),500))
@@ -27,7 +32,8 @@ class LoadData:
         precursor_charge_0 = np.zeros((len(molecule_pairs),1))
         precursor_mass_1 = np.zeros((len(molecule_pairs),1))
         precursor_charge_1 = np.zeros((len(molecule_pairs),1))
-        
+        fingerprints = np.zeros((len(molecule_pairs), 128))
+
         # fill arrays
         for i,l in enumerate(molecule_pairs):
             #check for maximum length
@@ -45,7 +51,7 @@ class LoadData:
             precursor_mass_1[i] = l.global_feats_1[0]
             precursor_charge_1[i] = l.global_feats_1[1]
             similarity[i] = list_similarity[i]
-            
+            fingerprints[i]=list_fingerprints[i]
             
         dictionary_data = {"mz_0": mz_0,
                    "intensity_0":intensity_0,
@@ -56,7 +62,7 @@ class LoadData:
                            "precursor_mass_1":precursor_mass_1,
                            "precursor_charge_0": precursor_charge_0,
                            "precursor_charge_1": precursor_charge_1,
-                        
+                           "fingerprint": fingerprints,
                   }
         
         return CustomDataset(dictionary_data)

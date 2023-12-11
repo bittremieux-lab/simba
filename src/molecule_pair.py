@@ -15,7 +15,9 @@ class MoleculePair:
                         spectrum_object_0=None,
                         spectrum_object_1=None,
                         params_0=None,
-                        params_1=None):
+                        params_1=None,
+                        fingerprint_0=None,
+                        fingerprint_1=None):
         
         self.spectrum_object_0=spectrum_object_0
         self.spectrum_object_1 = spectrum_object_1
@@ -30,7 +32,8 @@ class MoleculePair:
         self.index_in_spectrum_1 = index_in_spectrum_1
         self.params_0 = params_0
         self.params_1= params_1
-
+        self.fingerprint_0=fingerprint_0
+        self.fingerprint_1=fingerprint_1
         self.deterministic_similarity={}
 
     def set_det_similarity_score(self,score, similarity_score):
