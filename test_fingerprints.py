@@ -11,6 +11,7 @@ from src.train_utils import TrainUtils
 import matplotlib.pyplot as plt
 from src.deterministic_similarity import DetSimilarity
 from src.plotting import Plotting
+from src.config import Config
 
 # parameters
 dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207_fingerprints.pkl'
@@ -116,7 +117,7 @@ print('define checkpoint')
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
     dirpath='model_checkpoints',
     filename='best_model',
-    monitor='validation_loss',
+    monitor='validation_loss_epoch',
     mode='min',
     save_top_k=1,
 )
@@ -124,7 +125,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 progress_bar_callback = ProgressBar()
 print('define model')
 # Create a model:
-model = EmbedderFingerprint( d_model=64, n_layers=2, weights=None)
+model = EmbedderFingerprint( d_model=Config.d_model, n_layers=Config.n_layers, weights=None)
 
 print('train model')
 #loss_plot_callback = LossPlotCallback(batch_per_epoch_tr=1, batch_per_epoch_val=2)

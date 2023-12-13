@@ -11,6 +11,8 @@ from src.transformers.embedder import Embedder
 import lightning.pytorch as pl
 import numpy as np
 from src.config import Config
+from scipy.stats import spearmanr
+from src.plotting import Plotting
 #from src.ml_model import MlModel
 
 class DetSimilarity:
@@ -90,7 +92,31 @@ class DetSimilarity:
                 (cos[0], cos[1], mod_cos[0], mod_cos[1], nl[0], nl[1], model_score, 0, tan)
             )
 
+        # Compute the spearman correlation
+        # Calculate Spearman correlation
+        tanimoto_temp = np.array([s[8] for s in scores])
+        mod_cosine_temp= np.array([s[2] for s in scores])
+        model_temp = np.array([s[6] for s in scores])
 
+        corr_mod_cos, p_value_mod_cos = spearmanr(tanimoto_temp, mod_cosine_temp)
+        corr_model_temp, p_value_model_temp = spearmanr(tanimoto_temp, model_temp)
+
+        # Print the correlation coefficient and p-value
+        print("Spearman correlation coefficient for modified cosine:", corr_mod_cos)
+        print("P-value:", p_value_mod_cos)
+        print("Spearman correlation coefficient for model:", corr_model_temp)
+        print("P-value:", p_value_model_temp)
+
+        #roc curves
+        x_class = tanimoto_temp.copy()
+        x_class[tanimoto_temp<Config.threshold_class] = 0
+        x_class[tanimoto_temp>=Config.threshold_class]= 1
+
+        Plotting.plot_roc_curve_comparison(x_class, [model_temp, mod_cosine_temp], 
+                                            title='ROC Curve', roc_file_path=f'./roc_curve_comparison_{Config.MODEL_CODE}.png',
+                                            labels = ['model', 'mod_cosine'],
+                                            colors= ['r','b'])
+         
         similarities = pd.DataFrame(
             {
                 #"pair1": pairs[:, 0],

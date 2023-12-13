@@ -107,18 +107,17 @@ class Embedder(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """A training step"""
         loss = self.step(batch, batch_idx)
-        self.train_loss_list.append(loss.item())
+        #self.train_loss_list.append(loss.item())
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """A validation step"""
         loss = self.step(batch, batch_idx)
-        self.val_loss_list.append(loss.item())
+        #self.val_loss_list.append(loss.item())
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
-    
-    
+
 
     def predict_step(self, batch, batch_idx):
         """A predict step"""
@@ -127,7 +126,7 @@ class Embedder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure the optimizer for training."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
         return optimizer
     
     def plot_loss(self):
@@ -145,4 +144,4 @@ class Embedder(pl.LightningModule):
         plt.ylabel('loss')
         plt.legend()
         plt.grid()
-        plt.show()
+        plt.savefig('./loss.png')

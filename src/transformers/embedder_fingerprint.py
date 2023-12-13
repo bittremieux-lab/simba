@@ -19,10 +19,10 @@ from depthcharge.transformers import (
     PeptideTransformerEncoder,
 )
 import torch
-
+from src.config import Config
 
 class EmbedderFingerprint(Embedder):
-    def __init__(self, d_model, n_layers, dropout=0.3, weights=None, fingerprint_size=128):
+    def __init__(self, d_model, n_layers, dropout=0.3, weights=None):
         """Initialize the CCSPredictor"""
         super().__init__(d_model, n_layers, dropout, weights)
         self.weights=weights
@@ -31,7 +31,7 @@ class EmbedderFingerprint(Embedder):
         # Add a linear layer for projection
         self.linear = nn.Linear(d_model*2+4, 32)
         self.relu= nn.ReLU()
-        self.linear_regression = nn.Linear(32, fingerprint_size)
+        self.linear_regression = nn.Linear(32,Config.d_model)
 
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
@@ -40,7 +40,7 @@ class EmbedderFingerprint(Embedder):
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
-        self.regression_loss = nn.MSELoss(reduction='none')
+        self.regression_loss = nn.MSELoss()
         #self.regression_loss = weighted_MSELoss()
 
         # Lists to store training and validation loss
@@ -59,8 +59,9 @@ class EmbedderFingerprint(Embedder):
         emb1 = emb1[:, 0, :]
 
 
-        emb = torch.cat((emb0, emb1), dim=1)
+        #emb = torch.cat((emb0, emb1), dim=1)
 
+        emb = emb0 - emb1
 
         # stack global features
         #mass_0 = batch['precursor_mass_0'].float()
@@ -84,8 +85,10 @@ class EmbedderFingerprint(Embedder):
 
         # Calculate the loss efficiently:
         target = torch.tensor(batch['fingerprint']).to(self.device)
-        target = target.view(-1)
-
+        target = target.view(-1,128)
+        
+        # substraction of fingerprints
+        target = target[:,0:int(Config.d_model)] - target[:,Config.d_model:Config.d_model*2]
         # apply weight loss
 
 
@@ -93,8 +96,8 @@ class EmbedderFingerprint(Embedder):
         weight=1
 
         #print('to compute los
-        loss = F.cross_entropy(spec.float(), target.view(-1,128).float())
-        #loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        #loss = F.cross_entropy(spec.float(), target.view(-1,64).float())
+        loss = self.regression_loss(spec.float(), target.view(-1, Config.d_model).float()).float()
         #loss = torch.mean(torch.mul(loss, weight))
 
         #print(loss)

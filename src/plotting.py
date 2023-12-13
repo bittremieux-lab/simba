@@ -8,7 +8,10 @@ import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
 import textwrap
-
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
+from src.config import Config
 
 class Plotting:
 
@@ -34,7 +37,55 @@ class Plotting:
         if verbose:
             print(f'molecule_0: {molecule_pair.smiles_0}, molecule_1 = {molecule_pair.smiles_1}, similarity: {molecule_pair.similarity}')
 
+    @staticmethod
+    def plot_roc_curve(y_true, y_scores, title='ROC Curve', roc_file_path='./roc_curve.png'):
+        """
+        Compute and plot the Receiver Operating Characteristic (ROC) curve.
     
+        """
+        fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+        roc_auc = auc(fpr, tpr)
+
+        plt.figure(figsize=(8, 8))
+        plt.plot(fpr, tpr, color='r', lw=2, label=f'AUC = {roc_auc:.2f}')
+        #plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.0])
+        plt.xlabel('False Positive Rate (FPR)')
+        plt.ylabel('True Positive Rate (TPR)')
+        plt.grid()
+        plt.title(title)
+        plt.legend(loc='lower right')
+        plt.savefig(roc_file_path)
+
+
+    def plot_roc_curve_comparison(y_true, y_scores_list,
+                                  title='Comparison between Transformer and Modified Cosine (ROC curve)', roc_file_path='./roc_curve_comparison.png',
+                                  labels=['model', 'mod_cosine'],
+                                  colors=['r', 'b'],
+                                  fontsize=18):  # Add fontsize parameter
+
+        plt.figure(figsize=(10, 10))  # Increase the figure size
+
+        for y_scores, label, color in zip(y_scores_list, labels, colors):
+            fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+            roc_auc = auc(fpr, tpr)
+
+            plt.plot(fpr, tpr, color=color, lw=2, label=f'{label} - AUC = {roc_auc:.2f}')
+
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.0])
+        plt.xlabel('False Positive Rate (FPR)', fontsize=fontsize)  # Increase xlabel fontsize
+        plt.ylabel('True Positive Rate (TPR)', fontsize=fontsize)  # Increase ylabel fontsize
+        plt.grid()
+        plt.title(title, fontsize=fontsize + 2)  # Increase title fontsize
+        # diagonal line
+        plt.plot([0, 1], [0, 1], color='k', lw=2, linestyle='--')
+        plt.legend(loc='lower right', fontsize=fontsize)  # Increase legend fontsize
+        plt.xticks(fontsize=fontsize - 2)  # Increase x-axis tick fontsize
+        plt.yticks(fontsize=fontsize - 2)  # Increase y-axis tick fontsize
+        plt.savefig(roc_file_path)
+
     @staticmethod
     def plot_similarity_graphs(similarities, similarities_tanimoto):
         mosaic = """
@@ -273,7 +324,7 @@ class Plotting:
                 )
 
             # Save figure.
-            plt.savefig("gnps_libraries.png", dpi=300, bbox_inches="tight")
+            plt.savefig(f"gnps_libraries_{Config.MODEL_CODE}.png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
 
@@ -702,14 +753,3 @@ class Plotting:
             plt.show()
             plt.close()
 
-    @staticmethod
-    def plot_roc_curve(recall_scores, precision_scores):
-        # Plot the precision-recall curve
-        plt.plot(recall_scores, precision_scores, marker='.')
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.title('Precision-Recall Curve')
-        plt.grid()
-        plt.xlim([0,1])
-        plt.ylim([0,1])
-        plt.show()
