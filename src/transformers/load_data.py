@@ -19,7 +19,10 @@ class LoadData:
         list_similarity = [m.similarity for m in molecule_pairs]
         
         if hasattr(molecule_pairs[0], 'fingerprint_0'):
-         list_fingerprints = [np.concatenate((m.fingerprint_0, m.fingerprint_1)) for m in molecule_pairs] 
+          if molecule_pairs[0].fingerprint_0 is not None:
+            list_fingerprints = [np.concatenate((m.fingerprint_0, m.fingerprint_1)) for m in molecule_pairs]
+          else:
+              list_fingerprints = [0 for m in molecule_pairs]
         else:
          list_fingerprints = [0 for m in molecule_pairs]
 

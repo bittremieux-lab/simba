@@ -16,6 +16,7 @@ from depthcharge.transformers import (
     SpectrumTransformerEncoder, 
     PeptideTransformerEncoder,
 )
+from src.transformers.spectrum_transformer_encoder_custom import SpectrumTransformerEncoderCustom
 import torch
 
 # Set our plotting theme:
@@ -31,17 +32,16 @@ class Embedder(pl.LightningModule):
         """Initialize the CCSPredictor"""
         super().__init__()
         self.weights=weights
-        self.d_model = d_model
-        self.n_layers=n_layers
+
         # Add a linear layer for projection
         self.linear = nn.Linear(d_model*2+4, 32)
         self.relu= nn.ReLU()
         self.linear_regression = nn.Linear(32, 1)
         
-        self.spectrum_encoder = SpectrumTransformerEncoder(
+        self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
             n_layers=n_layers,
-            dropout=dropout,
+            #dropout=dropout,
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
@@ -56,9 +56,11 @@ class Embedder(pl.LightningModule):
         """The inference pass"""
 
         
-        
-        emb0,  _ =self.spectrum_encoder(mz_array=batch['mz_0'].float(), intensity_array=batch['intensity_0'].float())
-        emb1,  _ =self.spectrum_encoder(mz_array=batch['mz_1'].float(), intensity_array=batch['intensity_1'].float())
+        # extra data
+        kwargs_0 = {'precursor_mass':  batch['precursor_mass_0'].float(), 'precursor_charge': batch['precursor_charge_0'].float()}
+        kwargs_1 = {'precursor_mass':  batch['precursor_mass_1'].float(), 'precursor_charge': batch['precursor_charge_1'].float()} 
+        emb0,  _ =self.spectrum_encoder(mz_array=batch['mz_0'].float(), intensity_array=batch['intensity_0'].float(),**kwargs_0)
+        emb1,  _ =self.spectrum_encoder(mz_array=batch['mz_1'].float(), intensity_array=batch['intensity_1'].float(),**kwargs_1)
         
         emb0 = emb0[:, 0, :]
         emb1 = emb1[:, 0, :]
@@ -126,7 +128,8 @@ class Embedder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure the optimizer for training."""
-        optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        #optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
         return optimizer
     
     def plot_loss(self):

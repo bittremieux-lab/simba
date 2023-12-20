@@ -15,6 +15,22 @@ from src.plotting import Plotting
 from src.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
+import argparse
+import sys
+# parse arguments
+parser = argparse.ArgumentParser(description='Description of your script.')
+
+# Add arguments
+parser.add_argument('--d_model', type=int, help='Dimension')
+parser.add_argument('--n_layers', type=int, help = 'Number of layers')
+# Parse the command-line arguments
+args = parser.parse_args()
+d_model = args.d_model
+n_layers= args.n_layers
+print('Hyperparameters:')
+print(d_model)
+print(n_layers)
+sys.exit()
 
 # parameters
 dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207.pkl'
