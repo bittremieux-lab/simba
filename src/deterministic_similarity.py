@@ -20,7 +20,7 @@ class DetSimilarity:
     class for computing similarity for cosine distance
     '''
     @staticmethod
-    def compute_deterministic_similarity(molecule_pairs: List[MoleculePair], similarity_metric='cosine'):
+    def compute_deterministic_similarity(molecule_pairs: List[MoleculePair], similarity_metric='cosine', config=None):
         '''
         compute cosine ('cosine'), modified cosine ('modified_cosine') or neutral loss ('neutral_loss')
         '''
@@ -29,7 +29,7 @@ class DetSimilarity:
         for m in tqdm(molecule_pairs):
             spectra_0 = m.spectrum_object_0
             spectra_1 = m.spectrum_object_1
-            scores = computing_function(spectra_0, spectra_1, Config.FRAGMENT_MZ_TOLERANCE)
+            scores = computing_function(spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE)
             # set score
             m.set_det_similarity_score(scores, similarity_metric)
             total_scores.append(scores)
@@ -67,21 +67,21 @@ class DetSimilarity:
 
     @staticmethod
     def compute_all_scores(molecule_pairs, write=False, write_file= '"./gnps_libraries.parquet"',
-                            model_file='./best_model.h5'):
+                            model_file='./best_model.h5', config=None):
         scores = []
         #model_scores = DetSimilarity.call_saved_model(molecule_pairs, model_file)
-        model_scores = DetSimilarity.call_saved_transformer_model(molecule_pairs, model_file, d_model=Config.d_model, n_layers=Config.n_layers)
+        model_scores = DetSimilarity.call_saved_transformer_model(molecule_pairs, model_file, d_model=config.d_model, n_layers=config.N_LAYERS)
 
         for i,m in tqdm(enumerate(molecule_pairs)):
             spectra_0 = m.spectrum_object_0
             spectra_1 = m.spectrum_object_1
             
-            cos = cosine(spectra_0, spectra_1, Config.FRAGMENT_MZ_TOLERANCE)
+            cos = cosine(spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE)
             mod_cos = modified_cosine(
-                spectra_0, spectra_1, Config.FRAGMENT_MZ_TOLERANCE
+                spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
             )
             nl = neutral_loss(
-                spectra_0, spectra_1, Config.FRAGMENT_MZ_TOLERANCE
+                spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
             )
 
             #model_score= model_scores[i,0]   #for sieamese network 
@@ -109,11 +109,11 @@ class DetSimilarity:
 
         #roc curves
         x_class = tanimoto_temp.copy()
-        x_class[tanimoto_temp<Config.threshold_class] = 0
-        x_class[tanimoto_temp>=Config.threshold_class]= 1
+        x_class[tanimoto_temp<config.threshold_class] = 0
+        x_class[tanimoto_temp>=config.threshold_class]= 1
 
         Plotting.plot_roc_curve_comparison(x_class, [model_temp, mod_cosine_temp], 
-                                            title='ROC Curve', roc_file_path=f'./roc_curve_comparison_{Config.MODEL_CODE}.png',
+                                            title='ROC Curve', roc_file_path=config.CHECKPOINT_DIR + f'roc_curve_comparison_{config.MODEL_CODE}.png',
                                             labels = ['model', 'mod_cosine'],
                                             colors= ['r','b'])
          

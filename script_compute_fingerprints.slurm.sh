@@ -7,4 +7,4 @@ export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate molecular_pairs
 
 
-srun python compute_fingerprints.py
+srun python compute_fingerprints.py --enable_progress_bar=0 

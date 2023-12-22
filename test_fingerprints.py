@@ -108,9 +108,9 @@ dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_test)
 dataset_val = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_val)
 
 print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True, num_workers=15)
-dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=False)
-dataloader_val = DataLoader(dataset_val, batch_size=32, shuffle=False)
+dataloader_train = DataLoader(dataset_train, batch_size=Config.BATCH_SIZE, shuffle=True, num_workers=15)
+dataloader_test = DataLoader(dataset_test, batch_size=Config.BATCH_SIZE, shuffle=False)
+dataloader_val = DataLoader(dataset_val, batch_size=Config.BATCH_SIZE, shuffle=False)
 
 print('define checkpoint')
 # Define the ModelCheckpoint callback
@@ -125,7 +125,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 progress_bar_callback = ProgressBar()
 print('define model')
 # Create a model:
-model = EmbedderFingerprint( d_model=Config.d_model, n_layers=Config.n_layers, weights=None)
+model = EmbedderFingerprint( d_model=Config.d_model, n_layers=Config.N_LAYERS, weights=None)
 
 print('train model')
 #loss_plot_callback = LossPlotCallback(batch_per_epoch_tr=1, batch_per_epoch_val=2)

@@ -27,7 +27,7 @@ class EmbedderFingerprint(Embedder):
         super().__init__(d_model, n_layers, dropout, weights)
         self.weights=weights
         self.d_model = d_model
-        self.n_layers=n_layers
+        self.N_LAYERS=n_layers
         # Add a linear layer for projection
         self.linear = nn.Linear(d_model*2+4, 32)
         self.relu= nn.ReLU()

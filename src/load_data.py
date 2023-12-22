@@ -15,6 +15,8 @@ from src.murcko_scaffold import MurckoScaffold
 import operator
 from tqdm import tqdm 
 import re
+from src.nist_loader import NistLoader
+
 class LoadData:
     def _get_adduct_count(adduct: str):
         """
@@ -202,7 +204,9 @@ class LoadData:
      )
      return "".join(cleaned_adduct)
 
-    def get_spectra(source: Union[IO, str], scan_nrs: Sequence[int] = None, compute_classes=False)\
+    
+
+    def get_spectra(source: Union[IO, str], scan_nrs: Sequence[int] = None, compute_classes=False, config=None)\
             -> Iterator[SpectrumExt]:
         """
         Get the MS/MS spectra from the given MGF file, optionally filtering by
@@ -238,7 +242,7 @@ class LoadData:
             total_results=[]
             for spectrum in spectrum_it():
                 try:
-                    condition, res =LoadData.is_valid_spectrum(spectrum)
+                    condition, res =LoadData.is_valid_spectrum(spectrum, config)
                     total_results.append(res)
                     if condition:
                         #yield spectrum['params']['name']
@@ -251,12 +255,12 @@ class LoadData:
             for index  in range(0, len(res)):
                 total_positives = sum([r[index] for r in total_results])
                 #print(total_positives)
-    def is_valid_spectrum(spectrum: SpectrumExt):
+    def is_valid_spectrum(spectrum: SpectrumExt, config):
 
         cond_library = int(spectrum['params']["libraryquality"]) <= 3
-        cond_charge=  int(spectrum['params']["charge"][0]) in Config.CHARGES
+        cond_charge=  int(spectrum['params']["charge"][0]) in config.CHARGES
         cond_pepmass = float(spectrum['params']["pepmass"][0]) > 0
-        cond_mz_array = len(spectrum['m/z array']) >= Config.MIN_N_PEAKS 
+        cond_mz_array = len(spectrum['m/z array']) >= config.MIN_N_PEAKS 
         cond_ion_mode =spectrum['params']["ionmode"] == "Positive" 
         cond_name = spectrum['params']["name"].rstrip().endswith(" M+H")
         cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
@@ -268,6 +272,7 @@ class LoadData:
         ##cond_name=True
         dict_results= [cond_library, cond_charge, cond_pepmass, cond_mz_array, cond_ion_mode, cond_name, cond_centroid, cond_inchi_smiles]
         #return cond_ion_mode and cond_mz_array
+   
         total_condition = cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
         return  total_condition, dict_results
                 
@@ -334,9 +339,10 @@ class LoadData:
          
         return spec
 
-    def get_all_spectrums(mgf_path, num_samples=10, compute_classes=False, use_tqdm=True):
+
+    def get_all_spectrums_gnps(file, num_samples=10, compute_classes=False, use_tqdm=True, config=None):
         spectrums=[] #to save all the spectrums
-        spectra = LoadData.get_spectra(mgf_path, compute_classes=compute_classes)
+        spectra = LoadData.get_spectra(file, compute_classes=compute_classes, config=config)
 
         if use_tqdm:
             iterator = tqdm(range(0, num_samples))
@@ -355,3 +361,54 @@ class LoadData:
         return spectrums
     
 
+    
+    def get_all_spectrums_nist(file, num_samples=10, compute_classes=False, use_tqdm=True, config=None):
+        """
+        Get the MS/MS spectra from the given MGF file, optionally filtering by
+        scan number.
+
+        Parameters
+        ----------
+        source : Union[IO, str]
+            The MGF source (file name or open file object) from which the spectra
+            are read.
+        scan_nrs : Sequence[int]
+            Only read spectra with the given scan numbers. If `None`, no filtering
+            on scan number is performed.
+
+        Returns
+        -------
+        Iterator[SpectrumExt]
+            An iterator over the requested spectra in the given file.
+        """
+        nist_loader =NistLoader()
+        spectrums = nist_loader.parse_file(file,  num_samples=num_samples)
+        spectrums = nist_loader.compute_all_smiles(spectrums, use_tqdm=True)
+
+        # processing
+        all_spectrums=[]
+        for spectrum in spectrums:
+                condition, res =LoadData.is_valid_spectrum(spectrum, config=config)
+                if condition:
+                    #yield spectrum['params']['name']
+                    spec= LoadData._parse_spectrum(spectrum, compute_classes=compute_classes)
+                    all_spectrums.append(spec)
+        return all_spectrums
+
+    def get_all_spectrums(file, num_samples=10, compute_classes=False, use_tqdm=True, use_nist=False, config=None):
+     
+        if use_nist:
+            spectrums = LoadData.get_all_spectrums_nist(file=file, 
+                                                        num_samples=num_samples, 
+                                                        compute_classes=compute_classes, 
+                                                        use_tqdm=use_tqdm, 
+                                                        config=config)
+        else:
+            spectrums = LoadData.get_all_spectrums_gnps(file=file, 
+                                                        num_samples=num_samples, 
+                                                        compute_classes=compute_classes, 
+                                                        use_tqdm=use_tqdm,
+                                                        config=config)
+
+        return spectrums
+    

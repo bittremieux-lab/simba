@@ -5,3 +5,13 @@
 *.png
 
 *.pyc
+
+*.out
+
+logs/
+
+data_temp/
+
+lightning_logs/
+
+model_checkpoints*

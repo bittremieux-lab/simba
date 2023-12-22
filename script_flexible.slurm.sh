@@ -4,4 +4,4 @@
 #SBATCH --gpus=1
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
-python training.py --d_model $D_MODEL --n_layers $N_LAYERS
+python training.py --D_MODEL $D_MODEL --N_LAYERS $N_LAYERS

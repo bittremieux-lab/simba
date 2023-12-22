@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH -t 24:00:00
-#SBATCH -p ampere_gpu
+#SBATCH -p pascal_gpu
 #SBATCH --gpus=1
-#SBATCH -o stdout_transformers.file
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
 
 nvidia-smi 
 
-srun python test_main.py
+srun python training.py --enable_progress_bar=0  

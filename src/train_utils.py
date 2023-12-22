@@ -9,6 +9,7 @@ from src.preprocessing_utils import PreprocessingUtils
 from src.config import Config
 import functools
 import random 
+from src.molecular_pairs_set import MolecularPairsSet
 
 class TrainUtils:
 
@@ -60,50 +61,18 @@ class TrainUtils:
             yield random_indices
 
     
-    @staticmethod
-    def get_indexes_based_on_mz(all_spectrums, randomize=True, use_tqdm=True, max_combinations=100000000):
-        '''
-        return indexes based on restriction in mz difference
-        '''
-        #num_samples= len(all_spectrums)
-        
-        #all_indices = list(range(num_samples))
-        #indexes = [random.sample(all_indices, 2) for _ in range(max_combinations)] #combinations
 
-        indexes=[]
-        print('Getting indexes ... ')
-        # Iterate through the list to form pairsi
-
-        
-        if tqdm:
-            # Initialize tqdm with the total number of iterations
-            progress_bar = tqdm(total=max_combinations, desc="Processing")
-
-        # get max combinations of pairs
-        while (len(indexes)<max_combinations):
-          i = random.randint(0, len(all_spectrums)-1)
-          j = random.randint(0, len(all_spectrums)-1)
-
-          diff = abs(all_spectrums[i].precursor_mz - all_spectrums[j].precursor_mz )
-          if Config.MIN_MASS_DIFF <= diff <= Config.MAX_MASS_DIFF:
-                      indexes.append((i, j))
-                      if tqdm: 
-                        progress_bar.update(1)
-
-        # randomize
-        if randomize:
-            random.shuffle(indexes)
-
-        return indexes
 
     @staticmethod
     def compute_all_tanimoto_results(all_spectrums, max_combinations=1000000, limit_low_tanimoto=True, 
-                                     max_low_pairs=1000000, use_tqdm=True, #maximum number of elements in which we stop adding new items
+                                     max_low_pairs=0.3, use_tqdm=True, max_mass_diff=None, #maximum number of elements in which we stop adding new items
                                      ):
 
         # order the spectrums by mass
         all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
         
+        # get mz
+        total_mz = np.array([s.precursor_mz for s in all_spectrums])
 
         indexes=[]
         # Iterate through the list to form pairsi
@@ -115,23 +84,32 @@ class TrainUtils:
 
         # get max combinations of pairs
         while (len(indexes)<max_combinations):
+          # get one element from the array
           i = random.randint(0, len(all_spectrums)-2)
-          max_index = min(len(all_spectrums)-1, i + int(0.1*(len(all_spectrums))))
-          j = random.randint(i+1, max_index)
+          
+          # get the maximum possible value based on mz
 
-          diff = abs(all_spectrums[i].precursor_mz - all_spectrums[j].precursor_mz )
-          if Config.MIN_MASS_DIFF <= diff <= Config.MAX_MASS_DIFF:
-                tani = Tanimoto.compute_tanimoto(all_spectrums[i].params['smiles'],  all_spectrums[j].params['smiles'])
-                if tani is not None:
+          
+          diff_total = (total_mz - (all_spectrums[i].precursor_mz+ max_mass_diff))
+          max_mz_index = np.where(diff_total > 0)[0] # get list
+          max_mz_index = max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums)-1
+          
+          
+          
+          
+          j = random.randint(i+1, max_mz_index)
+
+          tani = Tanimoto.compute_tanimoto(all_spectrums[i].params['smiles'],  all_spectrums[j].params['smiles'])
+          if tani is not None:
                     # in the case we want to reduce the number of low tanimoto values, we can add only if the tanimoto value is high or the number of samples is small 
-                    if not(limit_low_tanimoto) or (len(indexes)<max_low_pairs) or (tani>0.3):
+                    if not(limit_low_tanimoto) or (len(indexes)<max_low_pairs*max_combinations) or (tani>0.3):
                         indexes.append((i,j, tani))
                         if tqdm:
                             progress_bar.update(1)
 
             
-
-
+        molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+        '''
         # create dataset
         print('Creating molecule pairs')
         molecule_pairs=[]
@@ -156,7 +134,8 @@ class TrainUtils:
                          params_0= all_spectrums[i].params,
                          params_1= all_spectrums[j].params,)
             molecule_pairs.append(molecule_pair)
-        return molecule_pairs
+        '''
+        return molecular_pair_set
     
 
     

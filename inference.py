@@ -16,16 +16,25 @@ from src.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from scipy.stats import spearmanr
+import argparse
+import sys
+import os
+from src.parser import Parser
 
-# parameters
+# parse arguments
+config=Config()
+parser =Parser()
+config = parser.update_config(config)
 dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207.pkl'
-best_model_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{Config.d_model}_{Config.n_layers}/best_model.ckpt'
+best_model_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{config.D_MODEL}_{config.N_LAYERS}/best_model.ckpt'
 epochs= 1
 use_uniform_data=True
 bins_uniformise=5
 enable_progress_bar=True
-fig_path = f'./scatter_plot_{Config.MODEL_CODE}.png'
-roc_file_path = f'./roc_curve_{Config.MODEL_CODE}.png'
+fig_path =  config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
+roc_file_path = config.CHECKPOINT_DIR + f'roc_curve_{config.MODEL_CODE}.png'
+if not os.path.exists(config.CHECKPOINT_DIR):
+    os.makedirs(config.CHECKPOINT_DIR)
 
 # Check if CUDA (GPU support) is available
 if torch.cuda.is_available():
@@ -75,7 +84,7 @@ dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
 trainer = pl.Trainer(max_epochs=2,)
-best_model = Embedder.load_from_checkpoint(best_model_path, d_model=Config.d_model, n_layers=Config.n_layers)
+best_model = Embedder.load_from_checkpoint(best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS))
 
 #plot loss:
 #best_model.plot_loss()
@@ -116,9 +125,9 @@ sns.set_theme(style="ticks")
 plot = sns.jointplot(x=x, y=y, kind="hex", color="#4CB391", joint_kws = dict(alpha=1))
 # Set x and y labels
 plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
-plt.savefig(f'hexbin_plot_{Config.MODEL_CODE}.png')
+plt.savefig(config.CHECKPOINT_DIR + f'hexbin_plot_{config.MODEL_CODE}.png')
 
 
 # comparison with 
-similarities, similarities_tanimoto = DetSimilarity.compute_all_scores(m_test, model_file = best_model_path)
-Plotting.plot_similarity_graphs(similarities, similarities_tanimoto)
+similarities, similarities_tanimoto = DetSimilarity.compute_all_scores(m_test, model_file = best_model_path, config=config)
+Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)

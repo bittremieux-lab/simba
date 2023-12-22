@@ -30,7 +30,8 @@ class SpectrumExt(MsmsSpectrum):
                     bms, 
                     superclass,
                     classe,
-                    subclass,):
+                    subclass,
+                    inchi_key=None):
 
         super().__init__(
         identifier,
@@ -58,6 +59,7 @@ class SpectrumExt(MsmsSpectrum):
 
         # preprocessed variables
         self.murcko_scaffold = bms
+        self.inchi_key=inchi_key
         
     def set_params(self, params):
          self.params = params 
@@ -85,7 +87,8 @@ class SpectrumExt(MsmsSpectrum):
           'superclass': self.superclass,
           'classe': self.classe,
           'subclass': self.subclass,
-          'murcko_scaffold': self.murcko_scaffold
+          'murcko_scaffold': self.murcko_scaffold,
+          'inchi_key':self.inchi_key,
      })
      return state
 
@@ -108,6 +111,10 @@ class SpectrumExt(MsmsSpectrum):
         self.classe = state['classe']
         self.subclass = state['subclass']
         self.murcko_scaffold = state['murcko_scaffold']
+        try: #in other versions, the inchi key is not present
+          self.inchi_key = state['inchi_key']
+        except:
+          self.inchi_key= ''
 
     def set_intesity_array(self, intensity_array):
          self.intensity_array= intensity_array

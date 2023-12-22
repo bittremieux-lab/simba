@@ -1,10 +1,9 @@
 #!/bin/bash
 #SBATCH -t 48:00:00
 #SBATCH -p zen2
-#SBATCH -o stdout_transformers_preprocessing.file
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate molecular_pairs
 
 
-srun python mol_test.py
+srun python compute_molecular_pairs.py --enable_progress_bar=0.0

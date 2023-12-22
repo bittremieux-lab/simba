@@ -87,7 +87,7 @@ class Plotting:
         plt.savefig(roc_file_path)
 
     @staticmethod
-    def plot_similarity_graphs(similarities, similarities_tanimoto):
+    def plot_similarity_graphs(similarities, similarities_tanimoto, config):
         mosaic = """
         11111.
         222223
@@ -324,7 +324,7 @@ class Plotting:
                 )
 
             # Save figure.
-            plt.savefig(f"gnps_libraries_{Config.MODEL_CODE}.png", dpi=300, bbox_inches="tight")
+            plt.savefig(config.CHECKPOINT_DIR + f"gnps_libraries_{config.MODEL_CODE}.png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
 
@@ -562,8 +562,6 @@ class Plotting:
                     -0.05, y, label, fontdict=dict(fontsize="xx-large", weight="bold")
                 )
 
-            # Save figure.
-            #plt.savefig("gnps_libraries.png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
 

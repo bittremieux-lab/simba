@@ -18,6 +18,7 @@ from depthcharge.transformers import (
 )
 from src.transformers.spectrum_transformer_encoder_custom import SpectrumTransformerEncoderCustom
 import torch
+from src.config import Config 
 
 # Set our plotting theme:
 #sns.set_style("ticks")
@@ -28,7 +29,7 @@ pl.seed_everything(42, workers=True)
 
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
-    def __init__(self, d_model, n_layers, dropout=0.3, weights=None):
+    def __init__(self, d_model, n_layers, dropout=0.3, weights=None, lr=None):
         """Initialize the CCSPredictor"""
         super().__init__()
         self.weights=weights
@@ -51,6 +52,7 @@ class Embedder(pl.LightningModule):
         # Lists to store training and validation loss
         self.train_loss_list = []
         self.val_loss_list = []
+        self.lr = lr
         
     def forward(self, batch):
         """The inference pass"""
@@ -128,23 +130,8 @@ class Embedder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure the optimizer for training."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         #optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
         return optimizer
     
-    def plot_loss(self):
-        # Reshape the array into a 2D array with 10 columns (adjust batch_per_epoch as needed)
-        reshaped_tr = np.array(self.train_loss_list).reshape(-1, 1)
-        reshaped_val = np.array(self.val_loss_list).reshape(-1, 1)
 
-        # Calculate the mean along axis 1 (across columns)
-        average_tr = np.mean(reshaped_tr, axis=1)
-        average_val = np.mean(reshaped_val, axis=1)
-
-        plt.plot(average_tr, label='train')
-        plt.plot(average_val, label='val')
-        plt.xlabel('epochs')
-        plt.ylabel('loss')
-        plt.legend()
-        plt.grid()
-        plt.savefig('./loss.png')

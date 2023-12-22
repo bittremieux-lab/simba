@@ -17,29 +17,26 @@ import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import argparse
 import sys
-# parse arguments
-parser = argparse.ArgumentParser(description='Description of your script.')
+import os
+from src.parser import Parser
 
-# Add arguments
-parser.add_argument('--d_model', type=int, help='Dimension')
-parser.add_argument('--n_layers', type=int, help = 'Number of layers')
-# Parse the command-line arguments
-args = parser.parse_args()
-d_model = args.d_model
-n_layers= args.n_layers
-print('Hyperparameters:')
-print(d_model)
-print(n_layers)
-sys.exit()
+config=Config()
+parser =Parser()
+config = parser.update_config(config)
 
 # parameters
 dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207.pkl'
-epochs= Config.epochs
+#dataset_path= '/scratch/antwerpen/209/vsc20939/data/molecular_pairs_nist.pkl'
+epochs= config.epochs
 use_uniform_data=False
 bins_uniformise=5
-enable_progress_bar=Config.enable_progress_bar
-fig_path = './scatter_plot.png'
-model_code = Config.MODEL_CODE
+enable_progress_bar=config.enable_progress_bar
+fig_path = config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
+model_code = config.MODEL_CODE
+
+
+if not os.path.exists(config.CHECKPOINT_DIR):
+    os.makedirs(config.CHECKPOINT_DIR)
 
 #fingerprint_model_path = '/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints/model_fingerprints.ckpt'
 # Check if CUDA (GPU support) is available
@@ -72,14 +69,10 @@ print('loading file')
 with open(dataset_path, 'rb') as file:
     dataset = dill.load(file)
 
-molecule_pairs_train = dataset['molecule_spairs_train']
+molecule_pairs_train = dataset['molecule_pairs_train']
 molecule_pairs_val = dataset['molecule_pairs_val']
 molecule_pairs_test= dataset['molecule_pairs_test']
 
-print('Uniformize the data')
-uniformed_molecule_pairs_train,train_binned_list =TrainUtils.uniformise(molecule_pairs_train, number_bins=bins_uniformise, return_binned_list=True)
-uniformed_molecule_pairs_val,_ =TrainUtils.uniformise(molecule_pairs_val, number_bins=bins_uniformise, return_binned_list=True)
-uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
 
 #train_sample_weights = [0.8, 0.2, 0.5, ...]  # Placeholder values, replace with your own
 def compute_weights(binned_list):
@@ -89,6 +82,7 @@ def compute_weights(binned_list):
     range_weights = np.arange(0,len(binned_list))/len(binned_list)
     return weights, range_weights
 
+train_binned_list, _ = TrainUtils.divide_data_into_bins(molecule_pairs_train, bins_uniformise)
 weights, range_weights= compute_weights(train_binned_list)
 
 print('weights per range')
@@ -115,6 +109,10 @@ weights_val= compute_sample_weights(molecule_pairs_val, weights, range_weights)
 
 print('loading datasets')
 if use_uniform_data:
+    print('Uniformize the data')
+    uniformed_molecule_pairs_train,train_binned_list =TrainUtils.uniformise(molecule_pairs_train, number_bins=bins_uniformise, return_binned_list=True)
+    uniformed_molecule_pairs_val,_ =TrainUtils.uniformise(molecule_pairs_val, number_bins=bins_uniformise, return_binned_list=True)
+    uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
     m_train = uniformed_molecule_pairs_train
     m_test= uniformed_molecule_pairs_test
     m_val = uniformed_molecule_pairs_val
@@ -136,13 +134,13 @@ print([m.similarity for m in molecule_pairs_train][0:20])
 train_sampler = WeightedRandomSampler(weights=weights_tr, num_samples=len(dataset_train), replacement=True)
 val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset_val), replacement=True)
 print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=32, sampler=train_sampler,  num_workers=15)
-dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=False)
-dataloader_val = DataLoader(dataset_val, batch_size=32, sampler = val_sampler)
+dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=15)
+dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
+dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    dirpath='model_checkpoints_'+f'{str(Config.d_model)}_'+ f'{str(Config.n_layers)}',
+    dirpath='model_checkpoints_'+f'{str(config.MODEL_CODE)}',
     filename='best_model',
     #monitor='validation_loss_epoch',
     monitor = 'validation_loss_epoch',
@@ -166,10 +164,16 @@ class LossCallback(Callback):
 
     def on_validation_epoch_end(self, trainer, pl_module):
         self.val_loss.append(float(trainer.callback_metrics["validation_loss_epoch"]))
-        self.plot_loss(file_path = f'./loss_{Config.MODEL_CODE}.png') 
+        self.plot_loss(file_path = f'./model_checkpoint_{config.MODEL_CODE}/loss_{config.MODEL_CODE}.png') 
         #self.val_outs  # <- access them here
 
     def plot_loss(self, file_path= './loss.png'):
+
+        print('Train loss:')
+        print(self.train_loss)
+        print('Validation loss')
+        print(self.val_loss)
+
         plt.figure()
         plt.plot(self.train_loss, label='train')
         plt.plot(self.val_loss[1:], label='val')
@@ -182,11 +186,11 @@ class LossCallback(Callback):
 losscallback= LossCallback()
 print('define model')
 # Create a model:
-if Config.load_pretrained:
-    model = Embedder.load_from_checkpoint(Config.pretrained_path,d_model=Config.d_model, n_layers=Config.n_layers, weights=None)
+if config.load_pretrained:
+    model = Embedder.load_from_checkpoint(config.pretrained_path,d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS), weights=None, lr= config.LR)
     print('Loaded pretrained model')
 else:
-    model = Embedder( d_model=Config.d_model, n_layers=Config.n_layers, weights=None)
+    model = Embedder( d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS), weights=None, lr=config.LR)
     print('Not loaded pretrained model')
 #model_fingerprints=  EmbedderFingerprint.load_from_checkpoint(fingerprint_model_path, d_model=64, n_layers=2)
 #for name_a, param_a in model.named_parameters():
@@ -204,7 +208,7 @@ trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback, losscal
 trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
 
 #print loss
-losscallback.plot_loss(file_path = f'./loss_{Config.MODEL_CODE}.png')
+losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
 print(losscallback.train_loss)
 print(losscallback.val_loss)
 

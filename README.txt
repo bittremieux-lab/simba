@@ -1,3 +1,16 @@
+
+
+## NIST data
+
+Donwload the installer for NIST
+Install it in windows
+Install LIB2NIST
+Export the library files to MSP
+Parse MSP file
+
+
+
+
 ## GPU problem solving
 
 Make sure that pytorch library is not cpu one
