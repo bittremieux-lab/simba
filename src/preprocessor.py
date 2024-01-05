@@ -16,18 +16,17 @@ class Preprocessor:
 
     
     def preprocess_all_spectrums(self, spectrums):
-        #all_spectrums=[]
-        #for i, spectrum in tqdm(enumerate(spectrums)):
-        #    try:
-        #        if self.is_valid_spectrum(spectrum):
-        #            new_spectrum = self.preprocess_spectrum(spectrum)
-        #            all_spectrums.append(new_spectrum) 
-        #    except:
-        #        print('Error preprocessing spectrum')
+        all_spectrums=[]
+        for i, spectrum in tqdm(enumerate(spectrums)):
+            try:
+                    new_spectrum = self.preprocess_spectrum(spectrum)
+                    all_spectrums.append(new_spectrum) 
+            except:
+                print('Error preprocessing spectrum')
 
 
         # preprocess np vectors
-        all_spectrums= self.process_all_spectrum_vectors(spectrums)
+        #all_spectrums= self.process_all_spectrum_vectors(spectrums)
         return all_spectrums
     
 
@@ -35,7 +34,7 @@ class Preprocessor:
                                 fragment_tol_mass=10, 
                                 fragment_tol_mode= "ppm", 
                                 min_intensity=0.01,
-                                max_num_peaks=1000,
+                                max_num_peaks=500,
                                 scale_intensity="root"):
         # Process the spectrum.
         return (

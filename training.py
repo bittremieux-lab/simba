@@ -19,6 +19,7 @@ import argparse
 import sys
 import os
 from src.parser import Parser
+import random 
 
 config=Config()
 parser =Parser()
@@ -136,7 +137,16 @@ val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset
 print('Convert data to a dictionary')
 dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=15)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
-dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler)
+
+
+def worker_init_fn(worker_id): #ensure the dataloader for validation is the same for every epoch
+    seed = 42
+    torch.manual_seed(seed)
+    # Set the same seed for reproducibility in NumPy and Python's random module
+    np.random.seed(seed)
+    random.seed(seed)
+
+dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(

@@ -26,12 +26,12 @@ class EmbedderFingerprint(Embedder):
         """Initialize the CCSPredictor"""
         super().__init__(d_model, n_layers, dropout, weights)
         self.weights=weights
-        self.d_model = d_model
+        self.D_MODEL = d_model
         self.N_LAYERS=n_layers
         # Add a linear layer for projection
         self.linear = nn.Linear(d_model*2+4, 32)
         self.relu= nn.ReLU()
-        self.linear_regression = nn.Linear(32,Config.d_model)
+        self.linear_regression = nn.Linear(32,Config.D_MODEL)
 
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
@@ -88,7 +88,7 @@ class EmbedderFingerprint(Embedder):
         target = target.view(-1,128)
         
         # substraction of fingerprints
-        target = target[:,0:int(Config.d_model)] - target[:,Config.d_model:Config.d_model*2]
+        target = target[:,0:int(Config.D_MODEL)] - target[:,Config.D_MODEL:Config.D_MODEL*2]
         # apply weight loss
 
 
@@ -97,7 +97,7 @@ class EmbedderFingerprint(Embedder):
 
         #print('to compute los
         #loss = F.cross_entropy(spec.float(), target.view(-1,64).float())
-        loss = self.regression_loss(spec.float(), target.view(-1, Config.d_model).float()).float()
+        loss = self.regression_loss(spec.float(), target.view(-1, Config.D_MODEL).float()).float()
         #loss = torch.mean(torch.mul(loss, weight))
 
         #print(loss)

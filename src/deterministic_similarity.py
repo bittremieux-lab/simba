@@ -70,7 +70,7 @@ class DetSimilarity:
                             model_file='./best_model.h5', config=None):
         scores = []
         #model_scores = DetSimilarity.call_saved_model(molecule_pairs, model_file)
-        model_scores = DetSimilarity.call_saved_transformer_model(molecule_pairs, model_file, d_model=config.d_model, n_layers=config.N_LAYERS)
+        model_scores = DetSimilarity.call_saved_transformer_model(molecule_pairs, model_file, d_model=config.D_MODEL, n_layers=config.N_LAYERS)
 
         for i,m in tqdm(enumerate(molecule_pairs)):
             spectra_0 = m.spectrum_object_0

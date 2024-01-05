@@ -8,4 +8,4 @@ source activate transformers
 
 nvidia-smi 
 
-srun python training.py --enable_progress_bar=0  
+srun python training.py --enable_progress_bar=0

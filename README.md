@@ -2,12 +2,12 @@
 
 ## NIST data
 
-Donwload the installer for NIST
-Install it in windows
-Install LIB2NIST
-Export the library files to MSP
-Parse MSP file
-
+* Donwload the installer for NIST
+* Install it in windows
+* Install LIB2NIST
+* Export the library files to MSP
+* Parse MSP file (nist_loader.py in this repository)
+ 
 
 
 

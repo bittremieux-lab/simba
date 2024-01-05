@@ -28,4 +28,4 @@ class Config:
     def derived_variables(self):
         self.MODEL_CODE= f'{self.D_MODEL}_units_{self.N_LAYERS}_layers_{self.epochs}_epochs_{self.LR}_lr_{self.BATCH_SIZE}_bs'
         self.pretrained_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{self.MODEL_CODE}/best_model_pretrained.ckpt'
-        self.CHECKPOINT_DIR=f'./model_checkpoint_{self.MODEL_CODE}/'
+        self.CHECKPOINT_DIR=f'./model_checkpoints_{self.MODEL_CODE}/'

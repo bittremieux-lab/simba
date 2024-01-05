@@ -383,7 +383,7 @@ class LoadData:
         """
         nist_loader =NistLoader()
         spectrums = nist_loader.parse_file(file,  num_samples=num_samples)
-        spectrums = nist_loader.compute_all_smiles(spectrums, use_tqdm=True)
+        spectrums = nist_loader.compute_all_smiles(spectrums, use_tqdm=use_tqdm)
 
         # processing
         all_spectrums=[]
