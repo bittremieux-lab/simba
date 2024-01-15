@@ -28,7 +28,11 @@ class MolecularPairsSet:
         return np.array(list_global_variables)
     
     def get_molecular_pair(self, index):
-        i,j,tani = self.indexes_tani[index]
+        #i,j,tani = self.indexes_tani[index]
+        i = int(self.indexes_tani[index, 0])
+        j = int(self.indexes_tani[index, 1])
+        tani = self.indexes_tani[index, 2]
+        
         molecule_pair = MoleculePair(
                         vector_0=None,
                         vector_1=None,

@@ -108,7 +108,7 @@ dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_test)
 dataset_val = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_val)
 
 print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=Config.BATCH_SIZE, shuffle=True, num_workers=15)
+dataloader_train = DataLoader(dataset_train, batch_size=Config.BATCH_SIZE, shuffle=True, num_workers=64)
 dataloader_test = DataLoader(dataset_test, batch_size=Config.BATCH_SIZE, shuffle=False)
 dataloader_val = DataLoader(dataset_val, batch_size=Config.BATCH_SIZE, shuffle=False)
 

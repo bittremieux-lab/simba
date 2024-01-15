@@ -80,14 +80,18 @@ class DetSimilarity:
             mod_cos = modified_cosine(
                 spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
             )
-            nl = neutral_loss(
-                spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
-            )
+            #nl = neutral_loss(
+            #    spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
+            #)
+            # TODO: There is a bug with neutral loss that makes it produce a division zero, possibly because of the computation
+            nl = cos
 
             #model_score= model_scores[i,0]   #for sieamese network 
             model_score = model_scores[i]
 
-            tan = Tanimoto.compute_tanimoto(m.params_0["smiles"], m.params_1["smiles"])
+            fp1= Tanimoto.compute_fingerprint(m.params_0["smiles"])
+            fp2= Tanimoto.compute_fingerprint(m.params_1["smiles"])
+            tan = Tanimoto.compute_tanimoto(fp1, fp2)
             scores.append(
                 (cos[0], cos[1], mod_cos[0], mod_cos[1], nl[0], nl[1], model_score, 0, tan)
             )

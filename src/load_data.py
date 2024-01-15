@@ -16,6 +16,7 @@ import operator
 from tqdm import tqdm 
 import re
 from src.nist_loader import NistLoader
+from src.preprocessor import Preprocessor
 
 class LoadData:
     def _get_adduct_count(adduct: str):
@@ -251,10 +252,10 @@ class LoadData:
                     pass
                     # logger.warning(f'Failed to read spectrum '
                     #                f'{spectrum["params"]["title"]}: %s', e)
-            print('summary')
-            for index  in range(0, len(res)):
-                total_positives = sum([r[index] for r in total_results])
-                #print(total_positives)
+            #print('summary')
+            #for index  in range(0, len(res)):
+            #    total_positives = sum([r[index] for r in total_results])
+            #    #print(total_positives)
     def is_valid_spectrum(spectrum: SpectrumExt, config):
 
         cond_library = int(spectrum['params']["libraryquality"]) <= 3
@@ -270,7 +271,14 @@ class LoadData:
                 )
         ##cond_name=True
         ##cond_name=True
-        dict_results= [cond_library, cond_charge, cond_pepmass, cond_mz_array, cond_ion_mode, cond_name, cond_centroid, cond_inchi_smiles]
+        dict_results= {'cond_library':cond_library, 
+                        'cond_charge':cond_charge, 
+                        'cond_pepmass':cond_pepmass, 
+                        'cond_mz_array':cond_mz_array, 
+                        'cond_ion_mode':cond_ion_mode, 
+                        'cond_name':cond_name, 
+                        'cond_centroid':cond_centroid, 
+                        'cond_inchi_smiles':cond_inchi_smiles}
         #return cond_ion_mode and cond_mz_array
    
         total_condition = cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
@@ -318,8 +326,8 @@ class LoadData:
                     precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
                     # Re-assign charge 0 to 1.
                     precursor_charge=max(int(spectrum_dict["params"]["charge"][0]), 1),
-                    mz=spectrum_dict["m/z array"],
-                    intensity=spectrum_dict["intensity array"],
+                    mz=np.array(spectrum_dict["m/z array"]),
+                    intensity=np.array(spectrum_dict["intensity array"]),
                     retention_time=np.nan,
                     params=params,
                     library=library,
@@ -349,9 +357,13 @@ class LoadData:
         else:
             iterator = range(0, num_samples)
         
+        #preprocessor 
+        pp = Preprocessor()
+
         for i in iterator:
             try:
                 spectrum = next(spectra)
+                spectrum = pp.preprocess_spectrum(spectrum)
                 spectrums.append(spectrum)
             except: #in case it is not possible to get more samples
                 print(f'We reached the end of the array at index {i}')
@@ -362,7 +374,7 @@ class LoadData:
     
 
     
-    def get_all_spectrums_nist(file, num_samples=10, compute_classes=False, use_tqdm=True, config=None):
+    def get_all_spectrums_nist(file, num_samples=10, compute_classes=False, use_tqdm=True, config=None, initial_line_number=0):
         """
         Get the MS/MS spectra from the given MGF file, optionally filtering by
         scan number.
@@ -382,18 +394,29 @@ class LoadData:
             An iterator over the requested spectra in the given file.
         """
         nist_loader =NistLoader()
-        spectrums = nist_loader.parse_file(file,  num_samples=num_samples)
+        spectrums, current_line_number = nist_loader.parse_file(file,  num_samples=num_samples, initial_line_number=initial_line_number)
+        
+
+        # check adducts
+        #print([s['identifier'] for s in spectrums])
+
         spectrums = nist_loader.compute_all_smiles(spectrums, use_tqdm=use_tqdm)
 
         # processing
         all_spectrums=[]
+        pp = Preprocessor()
+
         for spectrum in spectrums:
                 condition, res =LoadData.is_valid_spectrum(spectrum, config=config)
+                #print(res)
                 if condition:
                     #yield spectrum['params']['name']
                     spec= LoadData._parse_spectrum(spectrum, compute_classes=compute_classes)
+                    spec = pp.preprocess_spectrum(spec)
                     all_spectrums.append(spec)
-        return all_spectrums
+
+        return all_spectrums, current_line_number
+
 
     def get_all_spectrums(file, num_samples=10, compute_classes=False, use_tqdm=True, use_nist=False, config=None):
      

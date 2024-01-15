@@ -10,6 +10,9 @@ from src.config import Config
 import functools
 import random 
 from src.molecular_pairs_set import MolecularPairsSet
+import concurrent.futures
+from datetime import datetime
+from rdkit import Chem
 
 class TrainUtils:
 
@@ -61,54 +64,97 @@ class TrainUtils:
             yield random_indices
 
     
+    @staticmethod
+    def compute_all_fingerprints(all_spectrums):
+        fingerprints = []
 
+        #mols = [Chem.MolFromSmiles(s.params['smiles']) if (s.params['smiles'] != '' and s.params['smiles'] != 'N/A') else None
+        #        for s in all_spectrums ]
+        #fingerprints = [Chem.RDKFingerprint(m) if m is not None else None for m in mols ]
+
+        for i in (range(0, len(all_spectrums))):
+            fp = Tanimoto.compute_fingerprint(all_spectrums[i].params['smiles'])
+            fingerprints.append(fp)
+        return fingerprints
 
     @staticmethod
     def compute_all_tanimoto_results(all_spectrums, max_combinations=1000000, limit_low_tanimoto=True, 
                                      max_low_pairs=0.3, use_tqdm=True, max_mass_diff=None, #maximum number of elements in which we stop adding new items
-                                     ):
+                                     num_workers = 15):
 
+        print('Starting computation of molecule pairs')
+        print(datetime.now())
         # order the spectrums by mass
         all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
         
         # get mz
         total_mz = np.array([s.precursor_mz for s in all_spectrums])
 
-        indexes=[]
+        #indexes=[]
+        indexes_np = np.zeros((max_combinations, 3 ))
+        counter_indexes=0
         # Iterate through the list to form pairsi
 
         print('Computing all the tanimoto results')
-        if tqdm:
+        if use_tqdm:
             # Initialize tqdm with the total number of iterations
             progress_bar = tqdm(total=max_combinations, desc="Processing")
 
-        # get max combinations of pairs
-        while (len(indexes)<max_combinations):
-          # get one element from the array
-          i = random.randint(0, len(all_spectrums)-2)
-          
-          # get the maximum possible value based on mz
+        futures=[]
+        list_index_i = []
+        list_index_j = []
 
-          
-          diff_total = (total_mz - (all_spectrums[i].precursor_mz+ max_mass_diff))
-          max_mz_index = np.where(diff_total > 0)[0] # get list
-          max_mz_index = max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums)-1
-          
-          
-          
-          
-          j = random.randint(i+1, max_mz_index)
+        # Compute all the fingerprints:
+        print('Compute all the fingerprints')
+        fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
 
-          tani = Tanimoto.compute_tanimoto(all_spectrums[i].params['smiles'],  all_spectrums[j].params['smiles'])
-          if tani is not None:
-                    # in the case we want to reduce the number of low tanimoto values, we can add only if the tanimoto value is high or the number of samples is small 
-                    if not(limit_low_tanimoto) or (len(indexes)<max_low_pairs*max_combinations) or (tani>0.3):
-                        indexes.append((i,j, tani))
-                        if tqdm:
-                            progress_bar.update(1)
+        # get random indexes for the first part of the pair
+        random_i_np = np.random.randint(0, len(all_spectrums)-2, max_combinations)
 
+
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            num_workers = executor._max_workers  # Accessing the internal attribute
+            print(f"Number of workers: {num_workers}")
             
-        molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+            while (counter_indexes<max_combinations):
+
+                i = random_i_np[counter_indexes]       
+                diff_total = (total_mz - (all_spectrums[i].precursor_mz+ max_mass_diff))
+                max_mz_index = np.where(diff_total > 0)[0] # get list
+                max_mz_index = max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums)-1
+                
+                # get the other index
+                j = random.randint(i+1, max_mz_index)
+
+                # Submit the task to the executor
+                futures.append(executor.submit(Tanimoto.compute_tanimoto,
+                                               all_spectrums[i].params['smiles'],
+                                               all_spectrums[j].params['smiles'],
+                                               fingerprints[i],
+                                               fingerprints[j],))
+                list_index_i.append(i)
+                list_index_j.append(j)
+                counter_indexes=counter_indexes+1
+
+                if use_tqdm:
+                                    progress_bar.update(1)
+
+        
+        concurrent.futures.wait(futures)
+        # Retrieve the results from futures
+        counter_indexes=0
+        for future, i, j in zip(futures, list_index_i, list_index_j):
+                tani = future.result()
+                if tani is not None:
+                    indexes_np[counter_indexes, 0] = i
+                    indexes_np[counter_indexes, 1] = j
+                    indexes_np[counter_indexes, 2] = tani
+                    counter_indexes = counter_indexes +1
+
+        indexes_np = indexes_np[0:counter_indexes]
+        print(f'Number of effective pairs retrieved: {counter_indexes} ')
+        #molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+        molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes_np)
         '''
         # create dataset
         print('Creating molecule pairs')
@@ -135,6 +181,8 @@ class TrainUtils:
                          params_1= all_spectrums[j].params,)
             molecule_pairs.append(molecule_pair)
         '''
+        print('Ending computation of molecule pairs')
+        print(datetime.now())
         return molecular_pair_set
     
 

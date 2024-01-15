@@ -6,7 +6,7 @@ class LoadData:
     
         
     @staticmethod
-    def from_molecule_pairs_to_dataset(molecule_pairs):
+    def from_molecule_pairs_to_dataset(molecule_pairs, max_num_peaks=100):
         '''
         load molecule pairs data and convert it for being used in Pytorch 
         '''
@@ -26,10 +26,10 @@ class LoadData:
         else:
          list_fingerprints = [0 for m in molecule_pairs]
 
-        mz_0 =np.zeros((len(molecule_pairs),500))
-        intensity_0 = np.zeros((len(molecule_pairs),500))
-        mz_1=np.zeros((len(molecule_pairs),500))
-        intensity_1 = np.zeros((len(molecule_pairs),500))
+        mz_0 =np.zeros((len(molecule_pairs),max_num_peaks))
+        intensity_0 = np.zeros((len(molecule_pairs),max_num_peaks))
+        mz_1=np.zeros((len(molecule_pairs),max_num_peaks))
+        intensity_1 = np.zeros((len(molecule_pairs),max_num_peaks))
         similarity= np.zeros((len(molecule_pairs),1))
         precursor_mass_0 = np.zeros((len(molecule_pairs),1))
         precursor_charge_0 = np.zeros((len(molecule_pairs),1))
@@ -40,8 +40,8 @@ class LoadData:
         # fill arrays
         for i,l in enumerate(molecule_pairs):
             #check for maximum length
-            length_0 = len(list_mz_0[i]) if len(list_mz_0[i])<=500 else 500
-            length_1 = len(list_mz_1[i]) if len(list_mz_1[i])<=500 else 500
+            length_0 = len(list_mz_0[i]) if len(list_mz_0[i])<=max_num_peaks else max_num_peaks
+            length_1 = len(list_mz_1[i]) if len(list_mz_1[i])<=max_num_peaks else max_num_peaks
             
             # assign the values to the array
             mz_0[i, 0:length_0] = np.array(list_mz_0[i][0:length_0])

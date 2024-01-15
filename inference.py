@@ -25,14 +25,14 @@ from src.parser import Parser
 config=Config()
 parser =Parser()
 config = parser.update_config(config)
-dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207.pkl'
-best_model_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{config.D_MODEL}_{config.N_LAYERS}/best_model.ckpt'
-epochs= 1
+dataset_path= config.dataset_path
+best_model_path = config.best_model_path
 use_uniform_data=True
 bins_uniformise=5
 enable_progress_bar=True
 fig_path =  config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
 roc_file_path = config.CHECKPOINT_DIR + f'roc_curve_{config.MODEL_CODE}.png'
+
 if not os.path.exists(config.CHECKPOINT_DIR):
     os.makedirs(config.CHECKPOINT_DIR)
 

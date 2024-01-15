@@ -26,11 +26,10 @@ parser =Parser()
 config = parser.update_config(config)
 
 # parameters
-dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207.pkl'
-#dataset_path= '/scratch/antwerpen/209/vsc20939/data/molecular_pairs_nist.pkl'
+dataset_path= config.dataset_path
 epochs= config.epochs
 use_uniform_data=False
-bins_uniformise=5
+bins_uniformise=10
 enable_progress_bar=config.enable_progress_bar
 fig_path = config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
 model_code = config.MODEL_CODE
@@ -77,8 +76,10 @@ molecule_pairs_test= dataset['molecule_pairs_test']
 
 #train_sample_weights = [0.8, 0.2, 0.5, ...]  # Placeholder values, replace with your own
 def compute_weights(binned_list):
-    weights = np.array([len(r) for r in binned_list])
-    weights = 1/weights
+    freq = np.array([len(r) for r in binned_list])
+    weights = np.sum(freq)/freq
+    # compute logarithm
+    weights = np.log(weights)
     weights = weights/np.sum(weights)
     range_weights = np.arange(0,len(binned_list))/len(binned_list)
     return weights, range_weights
@@ -135,7 +136,7 @@ print([m.similarity for m in molecule_pairs_train][0:20])
 train_sampler = WeightedRandomSampler(weights=weights_tr, num_samples=len(dataset_train), replacement=True)
 val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset_val), replacement=True)
 print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=15)
+dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=14)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 

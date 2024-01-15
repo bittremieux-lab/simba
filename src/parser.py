@@ -1,4 +1,3 @@
-
 from src.config import Config
 import argparse
 import sys

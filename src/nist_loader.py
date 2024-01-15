@@ -7,6 +7,7 @@ import re
 from rdkit import Chem
 from rdkit.Chem import inchi
 import requests
+from itertools import islice
 
 class NistLoader:
     '''
@@ -18,7 +19,8 @@ class NistLoader:
     @staticmethod
     def init_spec_variables():
         spectrum_dict = {}
-        spectrum_dict['identifier']=''
+        spectrum_dict['identifier']='N/A'
+        spectrum_dict['adduct']='',
         spectrum_dict['precursor_mz']=0
         spectrum_dict['precursor_charge']=1
         spectrum_dict['mz']=[0,]
@@ -59,17 +61,29 @@ class NistLoader:
 
 
     @staticmethod
-    def parse_file(source: Union[IO, str], num_samples=None):
+    def parse_file(source: Union[IO, str], num_samples=None, initial_line_number=0):
         with open(source, 'r') as file:
             spectra = []
             iterator = iter(file)
-            for line in iterator:
+
+            # Move iterator to the specified line number
+            #for _ in range(0,initial_line_number):
+            #    next(iterator)
+            # Skip initial lines
+            iterator = islice(file, initial_line_number, None)
+
+            # set the pointer to initial_line_number
+            line_number = initial_line_number
+
+            #Process the file
+            for line in (iterator):
+                #set the line
                 if line.startswith('Name:'):
                     #initialize variables:
                     spectrum_dict = NistLoader.init_spec_variables()
                     spectrum_dict['identifier']= line.split('Name:')[-1]
-                if line.startswith('Synon: $:17'):
-                    spectrum_dict['identifier'] = spectrum_dict['identifier'] + line.split('Synon: $:17')[-1]
+                #if line.startswith('Synon: $:17'):
+                #    spectrum_dict['identifier'] = spectrum_dict['identifier'] + line.split('Synon: $:17')[-1]
                 
                 if line.startswith('Synon: $:03'): # put the adduct
                     spectrum_dict['adduct'] = line.split('Synon: $:03')[-1].split(']')[0].split('[')[-1] #e.g [M+H]+2
@@ -91,17 +105,24 @@ class NistLoader:
                     mz = np.zeros(number_peaks)
                     intensity = np.zeros(number_peaks)
                     for n_peak in range(0, number_peaks):
+                        # when getting the peaks we update the pointers
                         line = next(iterator)
+                        line_number= line_number + 1
                         list_mz_int = line.split(' ')
-            
-                        mz[n_peak] = float(list_mz_int[0])
-                        intensity[n_peak] = float(list_mz_int[1])
+
+                        try:
+                            mz[n_peak] = float(list_mz_int[0])
+                            intensity[n_peak] = float(list_mz_int[1])
+                        except:
+                            print('*** Error while trying to get n peaks from spectra ***')
+                            break
+
                     spectrum_dict['number_peaks'] = number_peaks
                     spectrum_dict['mz']=mz
                     spectrum_dict['intensity']=intensity
                 if line.strip() == '': #a blank line when there is a new item 
                     # recollect info for params attribute
-                    if spectrum_dict['identifier']!= '':
+                    if spectrum_dict['identifier']!= 'N/A':
                         spectrum_dict['m/z array'] = spectrum_dict['mz']
                         spectrum_dict['intensity array'] = spectrum_dict['intensity']
                         spectrum_dict['params']['libraryquality'] = spectrum_dict['library']
@@ -123,28 +144,37 @@ class NistLoader:
                         # break the loop if we attain the maximum number of samples
                         if num_samples is not None:
                             if len(spectra)>= num_samples:
+                                line_number= line_number + 1
                                 break
-        return spectra
+                
+                # update pointer
+                line_number= line_number + 1
+
+        # set the current line number to the next value
+        #current_line_number = current_line_number + 1
+        return spectra, line_number
     
 
 
     def compute_smiles(self, inchi_key):
-        base_url = f"https://cactus.nci.nih.gov/chemical/structure/{inchi_key}/smiles"
-        
+        #base_url = f"https://cactus.nci.nih.gov/chemical/structure/{inchi_key}/smiles"
+        base_url = f'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchi_key}/property/CanonicalSMILES/JSON'
         #print('smiles cache:')
         #print(self._smiles_cache)
         if inchi_key in self._smiles_cache:
             #print(f"Using cached result for {inchi_key}")
             return self._smiles_cache[inchi_key]
+        
         try:
             response = requests.get(base_url)
             response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
-            
-            smiles=response.text
+                
+            #smiles=response.text
+            smiles = response.json()["PropertyTable"]["Properties"][0]["CanonicalSMILES"]
             self._smiles_cache[inchi_key] = smiles
             # Print the content of the response
             #print(f"inchi_key: {inchi_key} SMILES: {smiles}")
-            return response.text
+            return smiles
         
         except requests.exceptions.RequestException as e:
             self._smiles_cache[inchi_key] = 'N/A'
@@ -153,10 +183,16 @@ class NistLoader:
 
     
 
-    def compute_all_smiles(self, all_spectrums_dict, use_tqdm):
+    def compute_all_smiles(self, all_spectrums_dict, use_tqdm, verbose=1):
         iterator = tqdm(all_spectrums_dict ) if use_tqdm else all_spectrums_dict
+
+        no_smiles_count=0
         for s in iterator:
             s['smiles'] = self.compute_smiles(s['inchi_key'])
             s['params']['smiles'] = s['smiles']
 
+            if s['smiles']=='N/A':
+                no_smiles_count= no_smiles_count+1
+        if verbose!=0:
+            print(f'Percentage of N/A smiles in current block: {100* no_smiles_count/len(all_spectrums_dict)}%')
         return all_spectrums_dict

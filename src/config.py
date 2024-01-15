@@ -15,7 +15,7 @@ class Config:
         # training
         self.N_LAYERS=5 #transformer parameters
         self.D_MODEL=32 #transformer parameters
-        self.LR=1e-6
+        self.LR=1e-3
         self.epochs=200
         self.BATCH_SIZE=128
         self.enable_progress_bar=True
@@ -23,9 +23,14 @@ class Config:
         
         self.load_pretrained=False
 
+        self.dataset_path= '/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240112.pkl'
+
         self.derived_variables()
         
     def derived_variables(self):
         self.MODEL_CODE= f'{self.D_MODEL}_units_{self.N_LAYERS}_layers_{self.epochs}_epochs_{self.LR}_lr_{self.BATCH_SIZE}_bs'
-        self.pretrained_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{self.MODEL_CODE}/best_model_pretrained.ckpt'
+        self.pretrained_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{self.MODEL_CODE}/best_model.ckpt'
         self.CHECKPOINT_DIR=f'./model_checkpoints_{self.MODEL_CODE}/'
+        self.best_model_path = f'/scratch/antwerpen/209/vsc20939/metabolomics/model_checkpoints_{self.MODEL_CODE}/best_model.ckpt'
+        
+
