@@ -20,30 +20,28 @@ parser = Parser()
 config = parser.update_config(config)
 gnps_path= r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf"
 nist_path = r'/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP'
+janssen_path = r'/scratch/antwerpen/209/vsc20939/data/drug_plus.mgf'
 
 #pickle files
-output_pairs_file= '../data/merged_gnps_nist_20240112.pkl'
+output_pairs_file= '../data/merged_gnps_nist_20240118_gnps_nist_janssen.pkl'
 output_nist_file= '../data/all_spectrums_nist.pkl'
 output_gnps_file= '../data/all_spectrums_gnps.pkl'
-output_spectrums_file = '../data/all_spectrums_gnps_nist_20240112.pkl'
+output_janssen_file= '../data/all_spectrums_janssen.pkl'
+output_spectrums_file = '../data/all_spectrums_gnps_nist_20240118_gnps_nist_janssen.pkl'
 
-# number of pairs
-#max_number_spectra_gnps=70000
-#max_number_spectra_nist=300000
-#train_molecules=2*10**6
-#val_molecules=10**5
-#test_molecules=10**5
-
-max_number_spectra_gnps=10000000
-max_number_spectra_nist=10000000
-train_molecules=10*10**6
+# params
+max_number_spectra_gnps=1000000000
+max_number_spectra_janssen= 1000000000
+max_number_spectra_nist=10000000000
+train_molecules=5*10**6
 val_molecules=10**6
 test_molecules=10**6
 
 block_size_nist=30000
 use_tqdm=config.enable_progress_bar
-load_nist_spectra = True
-load_gnps_spectra = True
+load_nist_spectra = False
+load_gnps_spectra = False
+load_janssen_spectra=False
 load_train_val_test_data=False # to load previously train, test, val with proper smiles 
 write_data_flag=True
 
@@ -80,10 +78,20 @@ else:
     loader_saver = LoaderSaver(block_size=block_size_nist, 
                                pickle_nist_path =output_nist_file,
                                pickle_gnps_path =output_gnps_file,
+                               pickle_janssen_path=output_janssen_file
                                )
 
     print(f'Current time: {datetime.now()}')
 
+    # load janssen_spectra
+    if load_janssen_spectra:
+        with open(output_janssen_file, 'rb') as file:
+            all_spectrums_janssen = dill.load(file)['spectrums']
+    else:
+        all_spectrums_janssen = loader_saver.get_all_spectrums(janssen_path,max_number_spectra_janssen, use_tqdm=use_tqdm, use_nist=False, config=config, use_janssen=True)
+    
+    print(f'Total of Janssen spectra: {len(all_spectrums_janssen)}')
+    # load gnps_spectra
     if load_gnps_spectra:
         with open(output_gnps_file, 'rb') as file:
             all_spectrums_gnps = dill.load(file)['spectrums']
@@ -108,8 +116,10 @@ else:
     print(f'Total of NIST spectra: {len(all_spectrums_nist)}')
     print(f'Current time: {datetime.now()}')
     # merge spectrums
-    all_spectrums = all_spectrums_gnps + all_spectrums_nist
-    
+    all_spectrums = all_spectrums_gnps + all_spectrums_nist + all_spectrums_janssen
+
+
+    print(f'Total of all spectra: {len(all_spectrums)}')
     # divide data
     print('Dividing between training, validation and test')
     all_spectrums_train, all_spectrums_val, all_spectrums_test = TrainUtils.train_val_test_split_bms(all_spectrums)
@@ -127,12 +137,15 @@ else:
 
 
 print(f'Current time: {datetime.now()}')
-molecule_pairs_train= TrainUtils.compute_all_tanimoto_results(all_spectrums_train, max_combinations=train_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF)
+molecule_pairs_train= TrainUtils.compute_all_tanimoto_results(all_spectrums_train, max_combinations=train_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF, min_mass_diff=config.MIN_MASS_DIFF)
 print(f'Current time: {datetime.now()}')
-molecule_pairs_val = TrainUtils.compute_all_tanimoto_results(all_spectrums_val, max_combinations=val_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF)
+molecule_pairs_val = TrainUtils.compute_all_tanimoto_results(all_spectrums_val, max_combinations=val_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF, min_mass_diff=config.MIN_MASS_DIFF )
 print(f'Current time: {datetime.now()}')
-molecule_pairs_test = TrainUtils.compute_all_tanimoto_results(all_spectrums_test, max_combinations=test_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF)
+molecule_pairs_test = TrainUtils.compute_all_tanimoto_results(all_spectrums_test, max_combinations=test_molecules, use_tqdm=use_tqdm, max_mass_diff=config.MAX_MASS_DIFF, min_mass_diff=config.MIN_MASS_DIFF)
 
+## add molecules with similarity=1
+molecule_pairs_train= TrainUtils.compute_unique_combinations(molecule_pairs_train)
+molecule_pairs_val= TrainUtils.compute_unique_combinations(molecule_pairs_val)
 
 # Dump the dictionary to a file using pickle
 

@@ -11,13 +11,7 @@ class LoadData:
         load molecule pairs data and convert it for being used in Pytorch 
         '''
         ## Convert data into a dataset
-        
-        list_mz_0 = [m.spectrum_object_0.mz_array for m in molecule_pairs]
-        list_intensity_0 = [m.spectrum_object_0.intensity_array for m in molecule_pairs]
-        list_mz_1 = [m.spectrum_object_1.mz_array for m in molecule_pairs]
-        list_intensity_1 = [m.spectrum_object_1.intensity_array for m in molecule_pairs] 
-        list_similarity = [m.similarity for m in molecule_pairs]
-        
+
         if hasattr(molecule_pairs[0], 'fingerprint_0'):
           if molecule_pairs[0].fingerprint_0 is not None:
             list_fingerprints = [np.concatenate((m.fingerprint_0, m.fingerprint_1)) for m in molecule_pairs]
@@ -40,22 +34,31 @@ class LoadData:
         # fill arrays
         for i,l in enumerate(molecule_pairs):
             #check for maximum length
-            length_0 = len(list_mz_0[i]) if len(list_mz_0[i])<=max_num_peaks else max_num_peaks
-            length_1 = len(list_mz_1[i]) if len(list_mz_1[i])<=max_num_peaks else max_num_peaks
+            length_0 = len(l.spectrum_object_0.mz_array) if len(l.spectrum_object_0.mz_array)<=max_num_peaks else max_num_peaks
+            length_1 = len(l.spectrum_object_1.mz_array) if len(l.spectrum_object_1.mz_array)<=max_num_peaks else max_num_peaks
             
             # assign the values to the array
-            mz_0[i, 0:length_0] = np.array(list_mz_0[i][0:length_0])
-            intensity_0[i, 0:length_0] = np.array(list_intensity_0[i][0:length_0])
-            mz_1[i, 0:length_1] = np.array(list_mz_1[i][0:length_1])
-            intensity_1[i, 0:length_1] = np.array(list_intensity_1[i][0:length_1])
+            mz_0[i, 0:length_0] = np.array(l.spectrum_object_0.mz_array[0:length_0])
+            intensity_0[i, 0:length_0] = np.array(l.spectrum_object_0.intensity_array[0:length_0])
+            mz_1[i, 0:length_1] = np.array(l.spectrum_object_1.mz_array[0:length_1])
+            intensity_1[i, 0:length_1] = np.array(l.spectrum_object_1.intensity_array[0:length_1])
             
             precursor_mass_0[i] = l.global_feats_0[0]
             precursor_charge_0[i] = l.global_feats_0[1]
             precursor_mass_1[i] = l.global_feats_1[0]
             precursor_charge_1[i] = l.global_feats_1[1]
-            similarity[i] = list_similarity[i]
+            similarity[i] = l.similarity
             fingerprints[i]=list_fingerprints[i]
             
+
+        # Calculate the root of the sum of squares of the components unit vectors
+        magnitude_0 = np.sqrt(np.sum(intensity_0**2, axis=1, keepdims=True))
+        magnitude_1 = np.sqrt(np.sum(intensity_1**2, axis=1, keepdims=True))
+
+        # Normalize the intensity array
+        intensity_0 = intensity_0 / magnitude_0
+        intensity_1 = intensity_1 / magnitude_1
+
         dictionary_data = {"mz_0": mz_0,
                    "intensity_0":intensity_0,
                   "mz_1": mz_1,

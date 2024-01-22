@@ -7,7 +7,7 @@ from src.spectrum_ext import SpectrumExt
 from src.preprocessing_utils import PreprocessingUtils
 class Preprocessor:
 
-    def __init__(self, bin_width=1, min_mz=10, max_mz=1000):
+    def __init__(self, bin_width=1, min_mz=10, max_mz=1400):
         # Define the parameters for binning
         self.bin_width = bin_width  # Adjust as needed to control the bin size
         self.min_mz = min_mz
@@ -31,7 +31,7 @@ class Preprocessor:
     def preprocess_spectrum(self, spectrum, 
                                 fragment_tol_mass=10, 
                                 fragment_tol_mode= "ppm", 
-                                min_intensity=0.01,
+                                min_intensity=0.001,
                                 max_num_peaks=100,
                                 scale_intensity="root"):
         # Process the spectrum.
@@ -39,7 +39,7 @@ class Preprocessor:
             spectrum
             #.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
             .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
-             .set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
+            #.set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
             .scale_intensity(scale_intensity)
         )
 

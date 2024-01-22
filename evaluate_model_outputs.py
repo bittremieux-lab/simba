@@ -21,19 +21,19 @@ import sys
 import os
 from src.parser import Parser
 
+
+# parameters:
+output_file_path= '../data/model_outputs_verification.pkl'
+
+
 # parse arguments
 config=Config()
 parser =Parser()
-config = parser.update_config(config)
+best_model_path =  config.best_model_path
 dataset_path= config.dataset_path
-best_model_path = config.best_model_path
 use_uniform_data=config.use_uniform_data_INFERENCE
 bins_uniformise=config.bins_uniformise_INFERENCE
-fig_path =  config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
-roc_file_path = config.CHECKPOINT_DIR + f'roc_curve_{config.MODEL_CODE}.png'
 
-if not os.path.exists(config.CHECKPOINT_DIR):
-    os.makedirs(config.CHECKPOINT_DIR)
 
 # Check if CUDA (GPU support) is available
 if torch.cuda.is_available():
@@ -65,12 +65,12 @@ print('loading file')
 with open(dataset_path, 'rb') as file:
     dataset = dill.load(file)
 
+
+
 molecule_pairs_test= dataset['molecule_pairs_test']
 print(f'Number of molecule pairs: {len(molecule_pairs_test)}')
 print('Uniformize the data')
-uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, 
-                                                       return_binned_list=True,
-                                                        bin_sim_1=False) # do not treat sim==1 as another bin
+uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
 
 
 
@@ -79,6 +79,25 @@ if use_uniform_data:
     m_test= uniformed_molecule_pairs_test
 else:
     m_test= molecule_pairs_test
+
+# get info from molecular pairs set
+    
+spectrum_object_0 = [m.spectrum_object_0 for m in m_test]
+precursor_mz_0 = [m.spectrum_object_0.precursor_mz for m in m_test]
+precursor_charge_0 = [m.spectrum_object_0.precursor_charge for m in m_test]
+intensity_0= [m.spectrum_object_0.intensity for m in m_test]
+mz_0= [m.spectrum_object_0.mz for m in m_test]
+smiles_0 = [m.smiles_0 for m in m_test]
+params_0 = [m.params_0 for m in m_test]
+
+spectrum_object_1 = [m.spectrum_object_1 for m in m_test]
+precursor_mz_1 = [m.spectrum_object_1.precursor_mz for m in m_test]
+precursor_charge_1 = [m.spectrum_object_1.precursor_charge for m in m_test]
+intensity_1= [m.spectrum_object_1.intensity for m in m_test]
+mz_1= [m.spectrum_object_1.mz for m in m_test]
+smiles_1 = [m.smiles_1 for m in m_test]
+params_1 = [m.params_1 for m in m_test]
+
 
 #dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
@@ -94,42 +113,31 @@ best_model = Embedder.load_from_checkpoint(best_model_path, d_model=int(config.D
 pred_test = trainer.predict(best_model, dataloader_test)
 similarities_test = Postprocessing.get_similarities(dataloader_test)
 combinations_test = [(s,float(p[0])) for s,p in zip(similarities_test, pred_test)]
-
-new_combinations_test=[]
-#bins=10
-#for i in range(0,bins):
-#    delta=1/bins
-#    temp_list = [c for c in combinations_test if ((c[0]>=i*delta)and (c[0]<=(i+1)*(delta)))]
-#    new_combinations_test = new_combinations_test + temp_list[0:-1]
-
 # clip the values
 x = np.array([c[0] for c in combinations_test])
 y = np.array([c[1] for c in combinations_test])
 y = np.clip(y, 0, 1)
 
 
+with open(output_file_path, 'wb') as file:
+        dataset= {
+                'spectrum_object_0': spectrum_object_0,
+                'spectrum_object_1': spectrum_object_1,
+                'ground_truth_similarity': x,
+                'prediction_similarity' : y,
+                'precursor_mz_0' : precursor_mz_0,
+                'precursor_charge_0' : precursor_charge_0,
+                'intensity_0':intensity_0,
+                'mz_0' : mz_0,
+                'smiles_0'  : smiles_0,
+                'params_0' : params_0,
 
+                'precursor_mz_1' : precursor_mz_1,
+                'precursor_charge_1' : precursor_charge_1,
+                'intensity_1' : intensity_1,
+                'mz_1': mz_1,
+                'smiles_1' :smiles_1,
+                'params_1' :params_1,
 
-# plot scatter 
-plt.xlabel('tanimoto similarity')
-plt.ylabel('prediction similarity')
-plt.scatter(x,y, label='test', alpha=0.5)
-#plt.scatter(similarities_test,cosine_similarity_test, label='test')
-plt.legend()
-plt.grid()
-plt.savefig(fig_path)
-
-# hexbin plot
-import numpy as np
-import seaborn as sns
-print(f'Number of test samples: {len(y)}')
-sns.set_theme(style="ticks")
-plot = sns.jointplot(x=x, y=y, kind="hex", color="#4CB391", joint_kws = dict(alpha=1))
-# Set x and y labels
-plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
-plt.savefig(config.CHECKPOINT_DIR + f'hexbin_plot_{config.MODEL_CODE}.png')
-
-
-# comparison with 
-similarities, similarities_tanimoto = DetSimilarity.compute_all_scores(m_test, model_file = best_model_path, config=config)
-Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)
+        }
+        dill.dump(dataset, file)

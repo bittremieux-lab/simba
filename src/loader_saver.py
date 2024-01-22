@@ -1,6 +1,7 @@
 from src.load_data import LoadData
 import dill
 
+import math
 
 class LoaderSaver:
     '''
@@ -9,22 +10,34 @@ class LoaderSaver:
 
     def __init__(self, nist_line_number=0, block_size=100, 
                  pickle_nist_path = '../data/all_spectrums_nist.pkl',
-                 pickle_gnps_path = '../data/all_spectrums_gnps.pkl'):
+                 pickle_gnps_path = '../data/all_spectrums_gnps.pkl',
+                 pickle_janssen_path = '../data/all_spectrums_janssen.pkl',
+                 ):
         self.pickle_nist_path= pickle_nist_path
         self.pickle_gnps_path= pickle_gnps_path
+        self.pickle_janssen_path=pickle_janssen_path
         self.nist_line_number = nist_line_number # the current line number of the msp file loaded
         self.block_size = block_size # number of spectra to be saved per block
     
-    def get_all_spectrums(self, file, num_samples=10, compute_classes=False, use_tqdm=True, use_nist=False, config=None):
-     
-        if use_nist:
+    def get_all_spectrums(self, file, num_samples=10, compute_classes=False, use_tqdm=True, use_nist=False, config=None, use_janssen=False):
+        
+        if use_janssen:
+            spectrums = LoadData.get_all_spectrums_mgf(file=file, 
+                                                        num_samples=num_samples, 
+                                                        compute_classes=compute_classes, 
+                                                        use_tqdm=use_tqdm,
+                                                        config=config,
+                                                        use_gnps_format=not(use_janssen)) #Janssen data does not use the GNPS format
+            self.save_pickle(self.pickle_janssen_path, spectrums)
+        elif  use_nist:
+            
             spectrums = self.load_and_save_nist(file=file, 
                                                         num_samples=num_samples, 
                                                         compute_classes=compute_classes, 
                                                         use_tqdm=use_tqdm, 
                                                         config=config)
         else:
-            spectrums = LoadData.get_all_spectrums_gnps(file=file, 
+            spectrums = LoadData.get_all_spectrums_mgf(file=file, 
                                                         num_samples=num_samples, 
                                                         compute_classes=compute_classes, 
                                                         use_tqdm=use_tqdm,
@@ -44,7 +57,7 @@ class LoaderSaver:
         
 
         # number of blocks
-        number_of_blocks= int(num_samples/self.block_size)
+        number_of_blocks= math.ceil(num_samples/self.block_size)
         current_line_number = self.nist_line_number
         all_spectrums=[]
 

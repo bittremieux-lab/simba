@@ -19,7 +19,7 @@ from depthcharge.transformers import (
 from src.transformers.spectrum_transformer_encoder_custom import SpectrumTransformerEncoderCustom
 import torch
 from src.config import Config 
-
+#from dadaptation import DAdaptAdam
 # Set our plotting theme:
 #sns.set_style("ticks")
 
@@ -29,7 +29,7 @@ pl.seed_everything(42, workers=True)
 
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
-    def __init__(self, d_model, n_layers, dropout=0.3, weights=None, lr=None):
+    def __init__(self, d_model, n_layers, dropout=0.1, weights=None, lr=None):
         """Initialize the CCSPredictor"""
         super().__init__()
         self.weights=weights
@@ -42,7 +42,7 @@ class Embedder(pl.LightningModule):
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
             n_layers=n_layers,
-            #dropout=dropout,
+            dropout=dropout,
         )
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
@@ -130,6 +130,7 @@ class Embedder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure the optimizer for training."""
+        #optimizer = DAdaptAdam(self.parameters(), lr=1)
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         #optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
         return optimizer

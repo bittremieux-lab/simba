@@ -1,10 +1,13 @@
 import torch
 from torch.utils.data import Dataset
-
+import random
+from src.transformers.augmentation import Augmentation
 class CustomDataset(Dataset):
-    def __init__(self, your_dict):
+    def __init__(self, your_dict, training=False, prob_aug=0.2):
         self.data = your_dict
         self.keys = list(your_dict.keys())
+        self.training= training
+        self.prob_aug = prob_aug 
 
     def __len__(self):
         return len(self.data[self.keys[0]])
@@ -18,4 +21,8 @@ class CustomDataset(Dataset):
         # Convert your sample to PyTorch tensors if needed
         # e.g., use torch.tensor(sample) if sample is a numpy array
         
+        if self.training:
+            if random.random() < self.prob_aug:
+                # augmentation
+                sample = Augmentation.augment(sample)
         return sample

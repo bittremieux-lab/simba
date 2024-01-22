@@ -14,8 +14,14 @@ class Parser:
         
         # Add arguments
         attributes_list = list(vars(config).keys())
+
+        
         for at in attributes_list:
-            self.parser.add_argument(f'--{at}', type=float, help=at,default=None )
+            is_integer_attribute = (at == 'BATCH_SIZE')or (at == 'N_LAYERS') or (at == 'D_MODEL') or (at == 'epochs')
+            if is_integer_attribute:
+                self.parser.add_argument(f'--{at}', type=int, help=at,default=None )
+            else:
+                self.parser.add_argument(f'--{at}', type=float, help=at,default=None )
 
         # Parse the command-line arguments
         args = self.parser.parse_args()
