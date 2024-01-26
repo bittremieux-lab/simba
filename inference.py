@@ -31,6 +31,7 @@ use_uniform_data=config.use_uniform_data_INFERENCE
 bins_uniformise=config.bins_uniformise_INFERENCE
 fig_path =  config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
 roc_file_path = config.CHECKPOINT_DIR + f'roc_curve_{config.MODEL_CODE}.png'
+enable_progress_bar=config.enable_progress_bar
 
 if not os.path.exists(config.CHECKPOINT_DIR):
     os.makedirs(config.CHECKPOINT_DIR)
@@ -82,18 +83,23 @@ else:
 
 #dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
+dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
-trainer = pl.Trainer(max_epochs=2,)
+trainer = pl.Trainer(max_epochs=2,enable_progress_bar=enable_progress_bar)
 best_model = Embedder.load_from_checkpoint(best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS))
 
 #plot loss:
 #best_model.plot_loss()
 
-pred_test = trainer.predict(best_model, dataloader_test)
+pred_test = trainer.predict(best_model, dataloader_test,  )
 similarities_test = Postprocessing.get_similarities(dataloader_test)
-combinations_test = [(s,float(p[0])) for s,p in zip(similarities_test, pred_test)]
+
+# flat the results
+flat_pred_test=[]
+for pred in pred_test:
+    flat_pred_test = flat_pred_test + [float(p) for p in pred]
+combinations_test = [(s,p) for s,p in zip(similarities_test, flat_pred_test)]
 
 new_combinations_test=[]
 #bins=10

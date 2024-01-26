@@ -9,4 +9,4 @@ source activate transformers
 nvidia-smi 
 
 srun python training.py --enable_progress_bar=0
-srun python inference.py 
+srun python inference.py --enable_progress_bar=0

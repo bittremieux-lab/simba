@@ -21,7 +21,10 @@ class Postprocessing:
     def get_similarities(dataloader):
         # calculate similarity
         similarities=[]
-        for b in dataloader:
-            similarities.append(float(b['similarity'][0]))
+        for batch in dataloader:
+            #similarities.append(float(b['similarity'][0]))
+            sim_temp= [float(b) for b in batch['similarity']]
+            #similarities = similarities  +  [b for b in batch]
+            similarities = similarities  + sim_temp
         return similarities
     

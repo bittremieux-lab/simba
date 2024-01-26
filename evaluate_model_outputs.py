@@ -22,10 +22,6 @@ import os
 from src.parser import Parser
 
 
-# parameters:
-output_file_path= '../data/model_outputs_verification.pkl'
-
-
 # parse arguments
 config=Config()
 parser =Parser()
@@ -33,7 +29,8 @@ best_model_path =  config.best_model_path
 dataset_path= config.dataset_path
 use_uniform_data=config.use_uniform_data_INFERENCE
 bins_uniformise=config.bins_uniformise_INFERENCE
-
+output_file_path = config.CHECKPOINT_DIR + 'model_outputs_verification.pkl'
+enable_progress_bar = config.enable_progress_bar
 
 # Check if CUDA (GPU support) is available
 if torch.cuda.is_available():
@@ -101,18 +98,24 @@ params_1 = [m.params_1 for m in m_test]
 
 #dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
+dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
-trainer = pl.Trainer(max_epochs=2,)
+trainer = pl.Trainer(max_epochs=2,enable_progress_bar=enable_progress_bar)
 best_model = Embedder.load_from_checkpoint(best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS))
 
 #plot loss:
 #best_model.plot_loss()
 
 pred_test = trainer.predict(best_model, dataloader_test)
+
+flat_pred_test=[]
+for pred in pred_test:
+    flat_pred_test = flat_pred_test + [float(p) for p in pred]
+
 similarities_test = Postprocessing.get_similarities(dataloader_test)
-combinations_test = [(s,float(p[0])) for s,p in zip(similarities_test, pred_test)]
+combinations_test = [(s,p) for s,p in zip(similarities_test, flat_pred_test)]
+
 # clip the values
 x = np.array([c[0] for c in combinations_test])
 y = np.array([c[1] for c in combinations_test])

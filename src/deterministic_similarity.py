@@ -52,19 +52,40 @@ class DetSimilarity:
         return model.predict(molecule_pairs)
 
     @staticmethod
-    def call_saved_transformer_model(molecule_pairs, model_file, d_model=64, n_layers=2):
+    def call_saved_transformer_model(molecule_pairs, model_file, d_model=64, n_layers=2, batch_size=128):
         # transformer
         dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
-        dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
         best_model = Embedder.load_from_checkpoint(model_file, d_model=d_model, n_layers=n_layers)
-        trainer = pl.Trainer(max_epochs=1,)
+        trainer = pl.Trainer(max_epochs=1, enable_progress_bar=False)
         pred_test = trainer.predict(best_model, dataloader_test)
-        pred_test = np.array([float(p[0]) for p in pred_test])
 
+        # flat the tensor
+        flat_pred_test=[]
+        for pred in pred_test:
+            flat_pred_test = flat_pred_test + [float(p) for p in pred]
+        
+        flat_pred_test= np.array(flat_pred_test)
+
+        #pred_test = np.array([float(p[0]) for p in pred_test])
+
+    
         # clip to 0 and 1
-        pred_test = np.clip(pred_test, 0, 1)
+        pred_test = np.clip(flat_pred_test, 0, 1)
         return pred_test
 
+    @staticmethod
+    def preprocessing_for_deterministic_metrics(spectrum, fragment_tol_mass=10, 
+                                fragment_tol_mode= "ppm", 
+                                min_intensity=0.01,
+                                max_num_peaks=100,
+                                scale_intensity="root"):
+        return (spectrum
+            .remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
+            .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
+            .set_mz_range(min_mz=10, max_mz=1400)
+            .scale_intensity(scale_intensity))
+        
     @staticmethod
     def compute_all_scores(molecule_pairs, write=False, write_file= '"./gnps_libraries.parquet"',
                             model_file='./best_model.h5', config=None):
@@ -76,6 +97,13 @@ class DetSimilarity:
             spectra_0 = m.spectrum_object_0
             spectra_1 = m.spectrum_object_1
             
+            #apply specific preprocessing for spectra going into the deterministic metrics
+            spectra_0 = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_0)
+            spectra_1 = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_1)
+
+    
+
+            # compute deterministic similarities
             cos = cosine(spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE)
             mod_cos = modified_cosine(
                 spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
@@ -120,14 +148,18 @@ class DetSimilarity:
                                             title='ROC Curve', roc_file_path=config.CHECKPOINT_DIR + f'roc_curve_comparison_{config.MODEL_CODE}.png',
                                             labels = ['model', 'mod_cosine'],
                                             colors= ['r','b'])
-         
+        
+
+        # check the name of the spectrum id
+        id_key_0 = 'spectrumid' if 'spectrumid' in molecule_pairs[0].spectrum_object_0.params.keys() else 'id'
+        id_key_1 = 'spectrumid' if 'spectrumid' in molecule_pairs[0].spectrum_object_1.params.keys() else 'id'
+
         similarities = pd.DataFrame(
             {
                 #"pair1": pairs[:, 0],
                 #"pair2": pairs[:, 1],
-                
-                "id1": [m.spectrum_object_0.params['spectrumid'] for m in molecule_pairs],
-                "id2": [m.spectrum_object_1.params['spectrumid'] for m in molecule_pairs],
+                "id1": [m.spectrum_object_0.params[id_key_0] for m in molecule_pairs],
+                "id2": [m.spectrum_object_1.params[id_key_1] for m in molecule_pairs],
                 "class1" : [m.spectrum_object_0.classe for m in molecule_pairs],
                 "class2" :[m.spectrum_object_1.classe for m in molecule_pairs],
                 "superclass1":[m.spectrum_object_0.superclass for m in molecule_pairs],
