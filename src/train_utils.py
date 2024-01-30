@@ -67,7 +67,7 @@ class TrainUtils:
         return new_molecule_pairs
     
     @staticmethod
-    def train_val_test_split_bms(spectrums, val_split=0.2, test_split=0.2):
+    def train_val_test_split_bms(spectrums, val_split=0.1, test_split=0.1):
 
         # get the percentage of training data
         train_split= 1- val_split-test_split

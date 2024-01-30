@@ -2,7 +2,6 @@ import numpy as np
 import spectrum_utils.spectrum as sus
 import hashlib
 
-
 def spectrum_hash(mz, intensities, hash_length: int = 20,
                   mz_precision: int = 5, intensity_precision: int = 2):
     """Compute hash from mz-intensity pairs of all peaks in spectrum.

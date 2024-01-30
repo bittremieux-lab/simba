@@ -23,11 +23,11 @@ nist_path = r'/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP'
 janssen_path = r'/scratch/antwerpen/209/vsc20939/data/drug_plus.mgf'
 
 #pickle files
-output_pairs_file= '../data/merged_gnps_nist_20240118_gnps_nist_janssen.pkl'
+output_pairs_file= '../data/merged_gnps_nist_20240130_gnps_nist_janssen.pkl'
 output_nist_file= '../data/all_spectrums_nist.pkl'
 output_gnps_file= '../data/all_spectrums_gnps.pkl'
 output_janssen_file= '../data/all_spectrums_janssen.pkl'
-output_spectrums_file = '../data/all_spectrums_gnps_nist_20240118_gnps_nist_janssen.pkl'
+output_spectrums_file = '../data/all_spectrums_gnps_nist_20240130_gnps_nist_janssen.pkl'
 
 # params
 max_number_spectra_gnps=1000000000
