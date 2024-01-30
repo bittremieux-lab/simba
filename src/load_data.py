@@ -172,8 +172,8 @@ class LoadData:
         smiles = spectrum_dict["params"]["smiles"]
         ionmode = spectrum_dict["params"]["ionmode"]
 
-        # compute hash value
-        spectrum_hash= spectrum_hash(spectrum_dict["m/z array"], spectrum_dict["intensity array"])
+        # compute hash id value
+        spectrum_hash_result= spectrum_hash(spectrum_dict["m/z array"], spectrum_dict["intensity array"])
 
         # calculate Murcko-Scaffold class
         bms=MurckoScaffold.get_bm_scaffold(smiles)
@@ -207,6 +207,7 @@ class LoadData:
                     superclass=superclass,
                     classe=classe,
                     subclass=subclass,
+                    spectrum_hash=spectrum_hash_result,
                 )
         
         # postprocessing

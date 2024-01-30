@@ -1,6 +1,6 @@
 import numpy as np
 import spectrum_utils.spectrum as sus
-
+import hashlib
 
 
 def spectrum_hash(mz, intensities, hash_length: int = 20,
@@ -18,7 +18,7 @@ def spectrum_hash(mz, intensities, hash_length: int = 20,
         return int(intensity * intensity_precision_factor)
 
     peak_list = [(format_mz(m), format_intensity(inten)) for m,inten in zip(mz, intensities)]
-    
+
     # Sort by increasing m/z and then by decreasing intensity
     peak_list.sort(key=lambda x: (x[0], - x[1]))
 
