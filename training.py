@@ -78,6 +78,17 @@ molecule_pairs_val = dataset['molecule_pairs_val']
 #)
 #print(f'Adjusted size of molecular pairs: {len(molecule_pairs_train)}')
 
+
+
+## TEST: INCREASE THE SIZE OF THE DATASET
+#molecule_pairs_train =  molecule_pairs_train + molecule_pairs_train + molecule_pairs_train
+
+
+
+
+
+
+
 train_binned_list, _ = TrainUtils.divide_data_into_bins(molecule_pairs_train, bins_uniformise)
 weights, range_weights= WeightSampling.compute_weights(train_binned_list)
 
@@ -167,6 +178,7 @@ else:
     print('Not loaded pretrained model')
 
 trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
+#trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
 trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
 
 #print loss

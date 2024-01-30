@@ -17,10 +17,10 @@ class Preprocessor:
     
     def preprocess_all_spectrums(self, spectrums):
         for i, spectrum in tqdm(enumerate(spectrums)):
-            try:
+            #try:
                     spectrum = self.preprocess_spectrum(spectrum)
-            except:
-                print('Error preprocessing spectrum')
+            #except:
+            #    print('Error preprocessing spectrum')
 
 
         # preprocess np vectors

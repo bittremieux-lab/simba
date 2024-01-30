@@ -20,6 +20,7 @@ class Tanimoto:
         else:
             return None
         
+    
     @staticmethod
     def compute_fingerprint(smiles):
         if (smiles != '' and smiles != 'N/A'):

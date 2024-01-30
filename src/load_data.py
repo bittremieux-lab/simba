@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from src.nist_loader import NistLoader
 from src.preprocessor import Preprocessor
-
+from src.utils import spectrum_hash
 class LoadData:
    
 
@@ -172,6 +172,9 @@ class LoadData:
         smiles = spectrum_dict["params"]["smiles"]
         ionmode = spectrum_dict["params"]["ionmode"]
 
+        # compute hash value
+        spectrum_hash= spectrum_hash(spectrum_dict["m/z array"], spectrum_dict["intensity array"])
+
         # calculate Murcko-Scaffold class
         bms=MurckoScaffold.get_bm_scaffold(smiles)
 
@@ -238,7 +241,7 @@ class LoadData:
         for i in iterator:
             try:
                 spectrum = next(spectra)
-                spectrum = pp.preprocess_spectrum(spectrum)
+                #spectrum = pp.preprocess_spectrum(spectrum)
                 spectrums.append(spectrum)
             except StopIteration: #in case it is not possible to get more samples
                 print(f'We reached the end of the array at index {i}')
@@ -288,7 +291,7 @@ class LoadData:
                 if condition:
                     #yield spectrum['params']['name']
                     spec= LoadData._parse_spectrum(spectrum, compute_classes=compute_classes)
-                    spec = pp.preprocess_spectrum(spec)
+                    #spec = pp.preprocess_spectrum(spec)
                     all_spectrums.append(spec)
 
         return all_spectrums, current_line_number

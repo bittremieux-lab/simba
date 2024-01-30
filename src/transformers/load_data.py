@@ -1,17 +1,23 @@
 
 from src.transformers.CustomDataset import CustomDataset
 import numpy as np
-
+from src.preprocessor import Preprocessor
 class LoadData:
     
         
     @staticmethod
     def from_molecule_pairs_to_dataset(molecule_pairs, max_num_peaks=100):
         '''
-        load molecule pairs data and convert it for being used in Pytorch 
+        preprocess the spectra and convert it for being used in Pytorch 
         '''
-        ## Convert data into a dataset
 
+        ## Preprocess the data
+        pp = Preprocessor()
+        print('Preprocessing all the data ...')
+        molecule_pairs.spectrums = pp.preprocess_all_spectrums(molecule_pairs.spectrums)
+        print('Finished preprocessing ')
+        
+        ## Convert data into a dataset
         if hasattr(molecule_pairs[0], 'fingerprint_0'):
           if molecule_pairs[0].fingerprint_0 is not None:
             list_fingerprints = [np.concatenate((m.fingerprint_0, m.fingerprint_1)) for m in molecule_pairs]
@@ -30,6 +36,8 @@ class LoadData:
         precursor_mass_1 = np.zeros((len(molecule_pairs),1))
         precursor_charge_1 = np.zeros((len(molecule_pairs),1))
         fingerprints = np.zeros((len(molecule_pairs), 128))
+
+
 
         # fill arrays
         for i,l in enumerate(molecule_pairs):
