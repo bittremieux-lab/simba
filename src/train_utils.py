@@ -398,10 +398,14 @@ class TrainUtils:
     @staticmethod
     def uniformise(molecule_pairs, number_bins=3, return_binned_list=False, 
                    bin_sim_1=True, #if you want to treat sim=1 as another bin
+                   seed=42,
                    ):   
         '''
         get a uniform distribution of labels between 0 and 1
         ''' 
+        #initialize random seed
+        random.seed(seed)
+
         #min_bin = TrainUtils.get_min_bin(molecule_pairs, number_bins)
         binned_molecule_pairs, min_bin = TrainUtils.divide_data_into_bins(molecule_pairs, number_bins, bin_sim_1=bin_sim_1)
         uniform_molecule_pairs= []

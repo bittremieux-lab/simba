@@ -32,6 +32,8 @@ bins_uniformise=config.bins_uniformise_INFERENCE
 fig_path =  config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
 roc_file_path = config.CHECKPOINT_DIR + f'roc_curve_{config.MODEL_CODE}.png'
 enable_progress_bar=config.enable_progress_bar
+write_uniform_test_data=True
+uniformed_molecule_pairs_test_path='/scratch/antwerpen/209/vsc20939/data/uniformed_molecule_pairs_test.pkl'
 
 if not os.path.exists(config.CHECKPOINT_DIR):
     os.makedirs(config.CHECKPOINT_DIR)
@@ -73,13 +75,20 @@ uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, numb
                                                        return_binned_list=True,
                                                         bin_sim_1=False) # do not treat sim==1 as another bin
 
-
+# write uniform data
+uniformed_molecule_pairs_test_dict ={
+           'uniformed_molecule_pairs_test':uniformed_molecule_pairs_test
+         }
+with open(uniformed_molecule_pairs_test_path, 'wb') as file:
+        dill.dump(uniformed_molecule_pairs_test_dict, file)
 
 print('loading datasets')
 if use_uniform_data:
     m_test= uniformed_molecule_pairs_test
 else:
     m_test= molecule_pairs_test
+
+
 
 #dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)

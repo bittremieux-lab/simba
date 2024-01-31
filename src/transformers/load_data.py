@@ -30,15 +30,19 @@ class LoadData:
         intensity_0 = np.zeros((len(molecule_pairs),max_num_peaks))
         mz_1=np.zeros((len(molecule_pairs),max_num_peaks))
         intensity_1 = np.zeros((len(molecule_pairs),max_num_peaks))
-        similarity= np.zeros((len(molecule_pairs),1))
-        precursor_mass_0 = np.zeros((len(molecule_pairs),1))
-        precursor_charge_0 = np.zeros((len(molecule_pairs),1))
-        precursor_mass_1 = np.zeros((len(molecule_pairs),1))
-        precursor_charge_1 = np.zeros((len(molecule_pairs),1))
-        fingerprints = np.zeros((len(molecule_pairs), 128))
+        #similarity= np.zeros((len(molecule_pairs),1))
+        #precursor_mass_0 = np.zeros((len(molecule_pairs),1))
+        #precursor_charge_0 = np.zeros((len(molecule_pairs),1))
+        #precursor_mass_1 = np.zeros((len(molecule_pairs),1))
+        #precursor_charge_1 = np.zeros((len(molecule_pairs),1))
+        #fingerprints = np.zeros((len(molecule_pairs), 128))
 
-
-
+        precursor_mass_0 = np.array([m.global_feats_0[0] for m in molecule_pairs])
+        precursor_charge_0 = np.array([m.global_feats_0[1] for m in molecule_pairs])
+        precursor_mass_1 = np.array([m.global_feats_1[0] for m in molecule_pairs])
+        precursor_charge_1 = np.array([m.global_feats_1[1]for m in molecule_pairs])
+        similarity = np.array([m.similarity for m in molecule_pairs])
+        fingerprints = np.array(list_fingerprints)
         # fill arrays
         for i,l in enumerate(molecule_pairs):
             #check for maximum length
@@ -50,15 +54,7 @@ class LoadData:
             intensity_0[i, 0:length_0] = np.array(l.spectrum_object_0.intensity_array[0:length_0])
             mz_1[i, 0:length_1] = np.array(l.spectrum_object_1.mz_array[0:length_1])
             intensity_1[i, 0:length_1] = np.array(l.spectrum_object_1.intensity_array[0:length_1])
-            
-            precursor_mass_0[i] = l.global_feats_0[0]
-            precursor_charge_0[i] = l.global_feats_0[1]
-            precursor_mass_1[i] = l.global_feats_1[0]
-            precursor_charge_1[i] = l.global_feats_1[1]
-            similarity[i] = l.similarity
-            fingerprints[i]=list_fingerprints[i]
-            
-
+          
         # Calculate the root of the sum of squares of the components unit vectors
         magnitude_0 = np.sqrt(np.sum(intensity_0**2, axis=1, keepdims=True))
         magnitude_1 = np.sqrt(np.sum(intensity_1**2, axis=1, keepdims=True))

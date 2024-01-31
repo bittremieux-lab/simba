@@ -51,7 +51,8 @@ def write_data(file_path,
                     all_spectrums_test=None, 
                     molecule_pairs_train=None, 
                     molecule_pairs_val=None, 
-                    molecule_pairs_test=None):
+                    molecule_pairs_test=None,
+                    uniformed_molecule_pairs_test=None):
     dataset ={
            'all_spectrums_train':all_spectrums_train,
            'all_spectrums_val':all_spectrums_val,
@@ -59,6 +60,7 @@ def write_data(file_path,
           'molecule_pairs_train':molecule_pairs_train,
           'molecule_pairs_val':molecule_pairs_val,
           'molecule_pairs_test': molecule_pairs_test,
+          'uniformed_molecule_pairs_test':uniformed_molecule_pairs_test,
          }
     with open(file_path, 'wb') as file:
         dill.dump(dataset, file)
@@ -152,8 +154,12 @@ molecule_pairs_val= TrainUtils.compute_unique_combinations(molecule_pairs_val)
 print(f'Total training data combinations: {len(molecule_pairs_train)}')
 print(f'Total val data combinations: {len(molecule_pairs_val)}')
 print(f'Total test data combinations: {len(molecule_pairs_test)}')
-
 print(f'Current time: {datetime.now()}')
+
+# create uniform test data
+uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=config.bins_uniformise_INFERENCE, 
+                                                       return_binned_list=True,
+                                                        bin_sim_1=False) # do not treat sim==1 as another bin
 if write_data_flag:
     write_data(output_pairs_file, 
                         all_spectrums_train=None, 
@@ -161,7 +167,8 @@ if write_data_flag:
                         all_spectrums_test=None, 
                         molecule_pairs_train=molecule_pairs_train, 
                         molecule_pairs_val=molecule_pairs_val, 
-                        molecule_pairs_test=molecule_pairs_test)
+                        molecule_pairs_test=molecule_pairs_test,
+                        uniformed_molecule_pairs_test=uniformed_molecule_pairs_test)
 
 print(f'Current time: {datetime.now()}')
 
