@@ -81,7 +81,7 @@ molecule_pairs_val = dataset['molecule_pairs_val']
 
 
 ## TEST: INCREASE THE SIZE OF THE DATASET
-#molecule_pairs_train =  molecule_pairs_train + molecule_pairs_train + molecule_pairs_train
+#molecule_pairs_train =  molecule_pairs_train + molecule_pairs_train
 
 
 
@@ -137,10 +137,13 @@ del(m_val)
 
 #del(molecule_pairs_test)
 
+print('Generating samplers')
 # data loaders
 train_sampler = WeightedRandomSampler(weights=weights_tr, num_samples=len(dataset_train), replacement=True)
 val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset_val), replacement=True)
-dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=14)
+
+print('Creating train data loader')
+dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=10)
 #dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
@@ -151,7 +154,9 @@ def worker_init_fn(worker_id): #ensure the dataloader for validation is the same
     np.random.seed(seed)
     random.seed(seed)
 
-dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn)
+
+print('Creating val data loader')
+dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=10)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(

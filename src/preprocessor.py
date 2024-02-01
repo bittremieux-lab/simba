@@ -31,7 +31,7 @@ class Preprocessor:
     def preprocess_spectrum(self, spectrum, 
                                 fragment_tol_mass=10, 
                                 fragment_tol_mode= "ppm", 
-                                min_intensity=0.001,
+                                min_intensity=0.00000000001,
                                 max_num_peaks=100,
                                 scale_intensity="root"):
         # Process the spectrum.

@@ -14,6 +14,7 @@ import concurrent.futures
 from datetime import datetime
 from rdkit import Chem
 from itertools import product
+from numba import njit
 
 class TrainUtils:
 
@@ -195,7 +196,7 @@ class TrainUtils:
         if use_tqdm:
             # Initialize tqdm with the total number of iterations
             progress_bar = tqdm(total=max_combinations, desc="Processing")
-
+            #progress_bar = tqdm(total=len(all_spectrums), desc="Processing")
         # Compute all the fingerprints:
         print('Compute all the fingerprints')
         fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
@@ -206,7 +207,6 @@ class TrainUtils:
         print(f"Number of workers: {num_workers}")
         counter_indexes = 0
         while ( counter_indexes <(max_combinations)):
-
             i = np.random.randint(0, len(all_spectrums)-2) 
             diff_total_max = (total_mz - (all_spectrums[i].precursor_mz+ max_mass_diff))
             diff_total_min = (total_mz - (all_spectrums[i].precursor_mz+ min_mass_diff))
@@ -223,7 +223,7 @@ class TrainUtils:
             tani = Tanimoto.compute_tanimoto(
                                             fingerprints[i],
                                             fingerprints[j],)
- 
+
             if tani is not None:
                 #if tani>MIN_SIM and tani<MAX_SIM:
                 if (counter_indexes < max_low_pairs*max_combinations) or (tani>0.5):   
@@ -235,10 +235,13 @@ class TrainUtils:
                     if use_tqdm:
                             progress_bar.update(1)
 
-        
-        print(f'Number of effective pairs retrieved: {counter_indexes} ')
+        # avoid duplicates:
+        indexes_np = np.unique(indexes_np, axis=0)
+
+        print(f'Number of effective pairs retrieved: {indexes_np.shape[0]} ')
         #molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
-        molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes_np)
+        molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,
+                                              indexes_tani= indexes_np)
     
         print(datetime.now())
         return molecular_pair_set

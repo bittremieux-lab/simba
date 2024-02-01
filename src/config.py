@@ -23,7 +23,7 @@ class Config:
         
         self.load_pretrained=False
 
-        self.dataset_path= '/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240118_gnps_nist_janssen.pkl'
+        self.dataset_path= '/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240130_gnps_nist_janssen.pkl'
 
         self.use_uniform_data_TRAINING=False
         self.bins_uniformise_TRAINING=10

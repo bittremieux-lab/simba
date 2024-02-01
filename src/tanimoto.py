@@ -9,6 +9,7 @@ import functools
 logger = rkl.logger()
 logger.setLevel(rkl.ERROR)
 rkrb.DisableLog('rdApp.error')
+from numba import njit
 
 class Tanimoto:
 
@@ -21,7 +22,7 @@ class Tanimoto:
             return None
         
     
-    @staticmethod
+    @functools.lru_cache
     def compute_fingerprint(smiles):
         if (smiles != '' and smiles != 'N/A'):
                 try:
