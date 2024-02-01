@@ -390,7 +390,7 @@ class TrainUtils:
             #temp_indexes_tani = np.array([ row for row in molecule_pairs.indexes_tani if ((row[2]>=low) and (row[2]<high)) ])
             temp_indexes_tani = molecule_pairs.indexes_tani[(molecule_pairs.indexes_tani[:,2]>=low) & (molecule_pairs.indexes_tani[:,2]<high)]
 
-            temp_molecule_pairs = MoleculePairSet(spectrums = molecule_pairs.spectrums,
+            temp_molecule_pairs = MolecularPairsSet(spectrums = molecule_pairs.spectrums,
                                                  indexes_tani = temp_indexes_tani)
             binned_molecule_pairs.append(temp_molecule_pairs)
         
@@ -427,7 +427,10 @@ class TrainUtils:
             #print(min_bin)
             #sampled_molecule_pairs = random.sample(target_molecule_pairs, min_bin)
 
-            sampled_indexes_tani = np.random.choice(target_molecule_pairs.indexes_tani, size=min_bin, replace=False)
+            sampled_rows = np.random.choice(target_molecule_pairs.indexes_tani.shape[0], size=min_bin, replace=False)
+            sampled_indexes_tani = target_molecule_pairs.indexes_tani[sampled_rows]
+            
+            
             sampled_molecule_pairs=  MolecularPairsSet(spectrums=target_molecule_pairs.spectrums,
                                                         indexes_tani = sampled_indexes_tani)
             # add to the final list
