@@ -17,7 +17,8 @@ class MolecularPairsSet:
         return len(self.indexes_tani)
     
     def __add__(self, other):
-        new_spectrums = self.spectrums +  other.spectrums 
+        # only to be used when the spectrums are the same
+        new_spectrums = self.spectrums 
         new_indexes_tani = np.concatenate((self.indexes_tani, other.indexes_tani), axis=0)
         return MolecularPairsSet(spectrums=new_spectrums,
                                  indexes_tani=new_indexes_tani

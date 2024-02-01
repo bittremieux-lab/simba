@@ -385,9 +385,13 @@ class TrainUtils:
                  else:
                       high =  (p+1)*(1/number_bins_effective)
             
-            temp_molecule_pairs = [m for m in molecule_pairs if ((m.similarity>=low) and (m.similarity<high))]
+            #temp_molecule_pairs = [m for m in molecule_pairs if ((m.similarity>=low) and (m.similarity<high))]
+            #check the similarity
+            #temp_indexes_tani = np.array([ row for row in molecule_pairs.indexes_tani if ((row[2]>=low) and (row[2]<high)) ])
+            temp_indexes_tani = molecule_pairs.indexes_tani[(molecule_pairs.indexes_tani[:,2]>=low) & (molecule_pairs.indexes_tani[:,2]<high)]
 
-
+            temp_molecule_pairs = MoleculePairSet(spectrums = molecule_pairs.spectrums,
+                                                 indexes_tani = temp_indexes_tani)
             binned_molecule_pairs.append(temp_molecule_pairs)
         
 
@@ -403,24 +407,39 @@ class TrainUtils:
         '''
         get a uniform distribution of labels between 0 and 1
         ''' 
+
+        # get spectrums and indexes
+        spectrums = molecule_pairs.spectrums
+        indexes_tani  = molecule_pairs.indexes_tani
+
         #initialize random seed
         random.seed(seed)
 
         #min_bin = TrainUtils.get_min_bin(molecule_pairs, number_bins)
         binned_molecule_pairs, min_bin = TrainUtils.divide_data_into_bins(molecule_pairs, number_bins, bin_sim_1=bin_sim_1)
-        uniform_molecule_pairs= []
+        
+        uniform_molecule_pairs= None
 
         for target_molecule_pairs in binned_molecule_pairs:
             # select some random samples
             #print('*')
             #print(len(target_molecule_pairs))
             #print(min_bin)
-            sampled_molecule_pairs = random.sample(target_molecule_pairs, min_bin)
+            #sampled_molecule_pairs = random.sample(target_molecule_pairs, min_bin)
+
+            sampled_indexes_tani = np.random.choice(target_molecule_pairs.indexes_tani, size=min_bin, replace=False)
+            sampled_molecule_pairs=  MolecularPairsSet(spectrums=target_molecule_pairs.spectrums,
+                                                        indexes_tani = sampled_indexes_tani)
             # add to the final list
-            uniform_molecule_pairs = uniform_molecule_pairs + sampled_molecule_pairs
+
+            if uniform_molecule_pairs is None:
+                uniform_molecule_pairs = sampled_molecule_pairs
+            else:
+                uniform_molecule_pairs = uniform_molecule_pairs + sampled_molecule_pairs
 
         # insert spectrum vectors
-        uniform_molecule_pairs = TrainUtils.insert_spectrum_vector_into_molecule_pairs(uniform_molecule_pairs)
+        #uniform_molecule_pairs = TrainUtils.insert_spectrum_vector_into_molecule_pairs(uniform_molecule_pairs)
+        
         if return_binned_list:
             return uniform_molecule_pairs, binned_molecule_pairs
         else:
