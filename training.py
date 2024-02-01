@@ -156,7 +156,7 @@ def worker_init_fn(worker_id): #ensure the dataloader for validation is the same
 
 
 print('Creating val data loader')
-dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=10)
+dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=1)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
