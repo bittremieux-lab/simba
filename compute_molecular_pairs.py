@@ -23,7 +23,7 @@ nist_path = r'/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP'
 janssen_path = r'/scratch/antwerpen/209/vsc20939/data/drug_plus.mgf'
 
 #pickle files
-output_pairs_file= '../data/merged_gnps_nist_20240201_gnps_nist_janssen.pkl'
+output_pairs_file= '../data/merged_gnps_nist_20240201_gnps_nist_janssen_parallel.pkl'
 output_nist_file= '../data/all_spectrums_nist.pkl'
 output_gnps_file= '../data/all_spectrums_gnps.pkl'
 output_janssen_file= '../data/all_spectrums_janssen.pkl'
@@ -33,9 +33,9 @@ output_spectrums_file = '../data/all_spectrums_gnps_nist_20240201_gnps_nist_jans
 max_number_spectra_gnps=1000000000
 max_number_spectra_janssen= 1000000000
 max_number_spectra_nist=10000000000
-train_molecules=10**7
-val_molecules=10**6
-test_molecules=10**6
+train_molecules=20*(10**5)
+val_molecules=10**5
+test_molecules=10**3
 
 block_size_nist=30000
 use_tqdm=config.enable_progress_bar
@@ -43,7 +43,7 @@ load_nist_spectra = True
 load_gnps_spectra = True
 load_janssen_spectra=True
 load_train_val_test_data=True # to load previously train, test, val with proper smiles 
-write_data_flag=True
+write_data_flag=False
 
 def write_data(file_path,
                     all_spectrums_train=None, 

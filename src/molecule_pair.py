@@ -39,3 +39,7 @@ class MoleculePair:
     def set_det_similarity_score(self,score, similarity_score):
 
         self.deterministic_similarity[similarity_score]=score
+
+
+    def __str__(self):
+        return f"Molecular pair with similarity: {self.info} for smiles_0: {self.smiles_0} and smiles_1: {self.smiles_1}"

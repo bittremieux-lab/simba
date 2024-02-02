@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH -t 72:00:00
 #SBATCH -p broadwell
-#SBATCH -o stdout_compute_molecular_pairs.out
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate molecular_pairs
