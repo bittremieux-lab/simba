@@ -42,4 +42,4 @@ class MoleculePair:
 
 
     def __str__(self):
-        return f"Molecular pair with similarity: {self.info} for smiles_0: {self.smiles_0} and smiles_1: {self.smiles_1}"
+        return f"Molecular pair with similarity: {self.similarity} for smiles_0: {self.smiles_0} and smiles_1: {self.smiles_1}"
