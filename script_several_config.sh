@@ -14,9 +14,9 @@
 
 for epochs in 4; do
 for BATCH_SIZE in 128; do
-      for LR in 0.00099 0.0001; do
-        for N_LAYERS in 5 10 20; do
-        for D_MODEL in  32 128 64; do
+      for LR in 0.0001; do
+        for N_LAYERS in 10; do
+        for D_MODEL in  128 64 32; do
         sbatch --export=D_MODEL=$D_MODEL,N_LAYERS=$N_LAYERS,BATCH_SIZE=$BATCH_SIZE,LR=$LR,epochs=$epochs script_flexible.slurm.sh
       done
     done

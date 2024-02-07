@@ -14,16 +14,16 @@ class Config:
         
         # training
         self.N_LAYERS=5 #transformer parameters
-        self.D_MODEL=128 #transformer parameters
+        self.D_MODEL=64 #transformer parameters
         self.LR=1e-4
-        self.epochs=4
+        self.epochs=1
         self.BATCH_SIZE=128
         self.enable_progress_bar=True
         self.threshold_class=0.7 #threshold classification binary
         
         self.load_pretrained=False
 
-        self.dataset_path= '/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240130_gnps_nist_janssen.pkl'
+        self.dataset_path= '/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240207_gnps_nist_janssen_15_millions.pkl'
 
         self.use_uniform_data_TRAINING=False
         self.bins_uniformise_TRAINING=10

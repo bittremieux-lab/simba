@@ -86,4 +86,6 @@ class MolecularPairsSet:
         
         return molecule_pairs 
     
-    
+    def remove_duplicates(self):
+        self.indexes_tani = np.unique(self.indexes_tani, axis=0)
+        return self

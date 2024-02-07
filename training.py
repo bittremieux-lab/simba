@@ -16,6 +16,7 @@ import random
 from src.weight_sampling import WeightSampling
 from src.losscallback import LossCallback
 from src.molecular_pairs_set import MolecularPairsSet
+from src.sanity_checks import SanityChecks
 
 config=Config()
 parser =Parser()
@@ -66,7 +67,8 @@ with open(dataset_path, 'rb') as file:
 
 molecule_pairs_train = dataset['molecule_pairs_train']
 molecule_pairs_val = dataset['molecule_pairs_val']
-#molecule_pairs_test= dataset['molecule_pairs_test']
+molecule_pairs_test= dataset['molecule_pairs_test']
+uniformed_molecule_pairs_test = dataset['uniformed_molecule_pairs_test']
 
 ##### ADHOC SOLUTION TO AVOID MEMORY OVERHEAD ###########################
 # only get 50% of the molecules below 0.5 similarity
@@ -85,14 +87,30 @@ molecule_pairs_val = dataset['molecule_pairs_val']
 
 
 
+print(f'Number of pairs for train: {len(molecule_pairs_train)}')
+print(f'Number of pairs for val: {len(molecule_pairs_val)}')
+print(f'Number of pairs for test: {len(molecule_pairs_test)}')
+print(f'Number of pairs for uniform test: {len(uniformed_molecule_pairs_test)}')
 
 
+sanity_check_ids= SanityChecks.sanity_checks_ids(molecule_pairs_train, molecule_pairs_val, molecule_pairs_test, uniformed_molecule_pairs_test)
+sanity_check_bms= SanityChecks.sanity_checks_bms(molecule_pairs_train, molecule_pairs_val, molecule_pairs_test, uniformed_molecule_pairs_test)
+
+# check distribution of similarities
+samples_per_range, bins = SanityChecks.check_distribution_similarities(molecule_pairs_train)
+print('SAMPLES PER RANGE:')
+for s, r in zip(samples_per_range, bins):
+    print(f'range: {r}, samples: {s}')
+    
+print(f'Sanity check ids. Passed? {sanity_check_ids}')
+print(f'Sanity check bms. Passed? {sanity_check_bms}')
 
 
+## CALCULATION OF WEIGHTS
 train_binned_list, _ = TrainUtils.divide_data_into_bins(molecule_pairs_train, bins_uniformise)
 weights, range_weights= WeightSampling.compute_weights(train_binned_list)
 
-print('weights per range')
+print('Weights per range:')
 print(weights)
 print(range_weights)
 
@@ -132,6 +150,8 @@ dataset_val = LoadData.from_molecule_pairs_to_dataset(m_val)
 del(dataset)
 del(molecule_pairs_train)
 del(molecule_pairs_val)
+del(molecule_pairs_test)
+del(uniformed_molecule_pairs_test)
 del(m_train)
 del(m_val)
 
@@ -156,7 +176,7 @@ def worker_init_fn(worker_id): #ensure the dataloader for validation is the same
 
 
 print('Creating val data loader')
-dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=1)
+dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=0)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -187,8 +207,8 @@ trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback, losscal
 trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
 
 #print loss
-losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
+#losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
 print(losscallback.train_loss)
 print(losscallback.val_loss)
 
-print('finished')
+print('finished successfuly.')

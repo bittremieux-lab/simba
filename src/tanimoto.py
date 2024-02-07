@@ -13,7 +13,8 @@ from numba import njit
 
 class Tanimoto:
 
-    @functools.lru_cache
+    #@functools.lru_cache
+    @staticmethod
     def compute_tanimoto(fp1, fp2, nbits=2048, use_inchi=False):
         if (fp1 is not None) and (fp2 is not None):
             similarity = DataStructs.TanimotoSimilarity(fp1, fp2)
