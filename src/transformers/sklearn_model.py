@@ -128,6 +128,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         # get example of one item
         dataset_test= LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
+        
         ##get item
         dataiter = iter(dataloader_test)
         item = next(dataiter)

@@ -13,10 +13,10 @@ class Config:
         self.MAX_MASS_DIFF = 200    # Da
         
         # training
-        self.N_LAYERS=5 #transformer parameters
+        self.N_LAYERS=10 #transformer parameters
         self.D_MODEL=128 #transformer parameters
         self.LR=1e-4
-        self.epochs=1
+        self.epochs=4
         self.BATCH_SIZE=128
         self.enable_progress_bar=True
         self.threshold_class=0.7 #threshold classification binary
