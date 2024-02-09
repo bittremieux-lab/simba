@@ -3,15 +3,19 @@ from src.transformers.CustomDataset import CustomDataset
 import numpy as np
 from src.preprocessor import Preprocessor
 from tqdm import tqdm
+from src.molecular_pairs_set import MolecularPairsSet
+import copy
 class LoadData:
     
         
     @staticmethod
-    def from_molecule_pairs_to_dataset(molecule_pairs, max_num_peaks=100):
+    def from_molecule_pairs_to_dataset(molecule_pairs_input, max_num_peaks=100):
         '''
         preprocess the spectra and convert it for being used in Pytorch 
         '''
-
+        # copy spectrums to avoid overwriting
+        molecule_pairs = MolecularPairsSet(spectrums=[copy.copy(s) for s in molecule_pairs_input.spectrums],
+                                            indexes_tani = molecule_pairs_input.indexes_tani.copy())
         ## Preprocess the data
         pp = Preprocessor()
         print('Preprocessing all the data ...')

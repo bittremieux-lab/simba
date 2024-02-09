@@ -66,10 +66,8 @@ with open(dataset_path, 'rb') as file:
 
 molecule_pairs_test= dataset['molecule_pairs_test']
 print(f'Number of molecule pairs: {len(molecule_pairs_test)}')
-print('Uniformize the data')
-uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
-
-
+uniformed_molecule_pairs_test = dataset['uniformed_molecule_pairs_test']
+print(f'Number of uniform molecule pairs: {len(molecule_pairs_test)}')
 
 print('loading datasets')
 if use_uniform_data:

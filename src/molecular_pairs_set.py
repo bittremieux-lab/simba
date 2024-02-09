@@ -127,3 +127,9 @@ class MolecularPairsSet:
         molecule_pairs= MolecularPairsSet(spectrums=self.spectrums,
                                           indexes_tani= np.array(indexes_tani))
         return molecule_pairs
+
+    def filter_by_similarity(self, min_sim, max_sim):
+        new_indexes_tani = self.indexes_tani[ (self.indexes_tani[:,2]>=min_sim) & (self.indexes_tani[:,2]<=max_sim)]
+        new_mols= MolecularPairsSet(spectrums=self.spectrums,
+                                    indexes_tani = new_indexes_tani)
+        return new_mols
