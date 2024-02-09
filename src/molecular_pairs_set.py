@@ -89,3 +89,41 @@ class MolecularPairsSet:
     def remove_duplicates(self):
         self.indexes_tani = np.unique(self.indexes_tani, axis=0)
         return self
+
+    def get_gnps_pairs(self):
+        '''
+        filter only pairs that have exclusively gnps data
+        ''' 
+        indexes_tani = []
+        for i,m in enumerate([mol for mol in self]):
+            if 'spectrumid' in m.params_0.keys() and 'spectrumid' in m.params_1.keys():
+                if m.params_0['spectrumid'].startswith('CCMSLIB') and m.params_1['spectrumid'].startswith('CCMSLIB'):
+                    #molecule_pairs.append(m)
+                    indexes_tani.append(self.indexes_tani[i])
+        
+        molecule_pairs= MolecularPairsSet(spectrums=self.spectrums,
+                                          indexes_tani= np.array(indexes_tani))
+        return molecule_pairs
+
+    def get_no_gnps_pairs(self):
+        '''
+        filter any of the gnps data out
+        ''' 
+        indexes_tani = []
+        for i,m in enumerate([mol for mol in self]):
+            if ('spectrumid' in m.params_0.keys()):
+                if m.params_0['spectrumid'].startswith('CCMSLIB'):
+                    pass 
+                else:
+                    indexes_tani.append(self.indexes_tani[i])
+            elif  ('spectrumid' in m.params_1.keys()):
+                if m.params_1['spectrumid'].startswith('CCMSLIB'):
+                    pass
+                else:
+                    indexes_tani.append(self.indexes_tani[i])
+            else:
+                indexes_tani.append(self.indexes_tani[i])
+        
+        molecule_pairs= MolecularPairsSet(spectrums=self.spectrums,
+                                          indexes_tani= np.array(indexes_tani))
+        return molecule_pairs

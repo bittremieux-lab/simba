@@ -46,7 +46,7 @@ class Plotting:
         fpr, tpr, thresholds = roc_curve(y_true, y_scores)
         roc_auc = auc(fpr, tpr)
 
-        plt.figure(figsize=(8, 8))
+        #plt.figure(figsize=(8, 8))
         plt.plot(fpr, tpr, color='r', lw=2, label=f'AUC = {roc_auc:.2f}')
         #plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])

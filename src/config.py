@@ -14,7 +14,7 @@ class Config:
         
         # training
         self.N_LAYERS=5 #transformer parameters
-        self.D_MODEL=64 #transformer parameters
+        self.D_MODEL=128 #transformer parameters
         self.LR=1e-4
         self.epochs=1
         self.BATCH_SIZE=128
