@@ -151,15 +151,14 @@ class DetSimilarity:
         
 
         # check the name of the spectrum id
-        id_key_0 = 'spectrumid' if 'spectrumid' in molecule_pairs[0].spectrum_object_0.params.keys() else 'id'
-        id_key_1 = 'spectrumid' if 'spectrumid' in molecule_pairs[0].spectrum_object_1.params.keys() else 'id'
-
+        id_keys_0 = ['spectrumid' if 'spectrumid' in m.spectrum_object_0.params.keys() else 'id' for m in molecule_pairs]
+        id_keys_1 = ['spectrumid' if 'spectrumid' in m.spectrum_object_1.params.keys() else 'id' for m in molecule_pairs]
         similarities = pd.DataFrame(
             {
                 #"pair1": pairs[:, 0],
                 #"pair2": pairs[:, 1],
-                "id1": [m.spectrum_object_0.params[id_key_0] for m in molecule_pairs],
-                "id2": [m.spectrum_object_1.params[id_key_1] for m in molecule_pairs],
+                "id1": [m.spectrum_object_0.params[id_key] for m,id_key in zip(molecule_pairs,id_keys_0)],
+                "id2": [m.spectrum_object_1.params[id_key] for m, id_key in zip(molecule_pairs,id_keys_1)],
                 "class1" : [m.spectrum_object_0.classe for m in molecule_pairs],
                 "class2" :[m.spectrum_object_1.classe for m in molecule_pairs],
                 "superclass1":[m.spectrum_object_0.superclass for m in molecule_pairs],
