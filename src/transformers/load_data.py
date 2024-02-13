@@ -9,13 +9,23 @@ class LoadData:
     
         
     @staticmethod
-    def from_molecule_pairs_to_dataset(molecule_pairs_input, max_num_peaks=100):
+    def from_molecule_pairs_to_dataset(molecule_pairs_input, 
+                                       max_num_peaks=100, 
+                                       shuffle_order_pairs=False, #shuffle the spectrum 0 and 1 for data augmentation
+                                       ):
         '''
         preprocess the spectra and convert it for being used in Pytorch 
         '''
         # copy spectrums to avoid overwriting
         molecule_pairs = MolecularPairsSet(spectrums=[copy.copy(s) for s in molecule_pairs_input.spectrums],
                                             indexes_tani = molecule_pairs_input.indexes_tani.copy())
+        
+        if shuffle_order_pairs:
+            #exchange the order of the spectrums 0 and 1 for a molecule pair
+            new_indexes_tani = np.array([[row[1], row[0], row[2]] for row in molecule_pairs.indexes_tani])
+            molecule_pairs = MolecularPairsSet(spectrums=molecule_pairs.spectrums,
+                                               indexes_tani= new_indexes_tani)
+       
         ## Preprocess the data
         pp = Preprocessor()
         print('Preprocessing all the data ...')

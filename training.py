@@ -141,7 +141,7 @@ print(f'number of train molecule pairs: {len(m_train)}')
 
 
 
-dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
+dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train, shuffle_order_pairs=True)
 #dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
 dataset_val = LoadData.from_molecule_pairs_to_dataset(m_val)
 
