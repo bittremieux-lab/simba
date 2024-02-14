@@ -16,8 +16,8 @@ class Config:
         self.N_LAYERS=10 #transformer parameters
         self.D_MODEL=128 #transformer parameters
         self.LR=1e-4
-        self.epochs=4
-        self.BATCH_SIZE=128
+        self.epochs=50
+        self.BATCH_SIZE=1024
         self.enable_progress_bar=True
         self.threshold_class=0.7 #threshold classification binary
         
@@ -30,7 +30,7 @@ class Config:
 
         self.use_uniform_data_INFERENCE=True
         self.bins_uniformise_INFERENCE=10
-
+        self.validate_after_ratio = 0.0010 # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
         self.derived_variables()
         
     def derived_variables(self):

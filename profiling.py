@@ -1,3 +1,4 @@
+from torch.profiler import profile, record_function, ProfilerActivity
 import dill
 import torch
 from torch.utils.data import DataLoader
@@ -17,6 +18,7 @@ from src.weight_sampling import WeightSampling
 from src.losscallback import LossCallback
 from src.molecular_pairs_set import MolecularPairsSet
 from src.sanity_checks import SanityChecks
+
 
 config=Config()
 parser =Parser()
@@ -164,6 +166,7 @@ val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset
 
 print('Creating train data loader')
 dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=10)
+
 #dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
@@ -202,17 +205,19 @@ else:
     model = Embedder( d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS), weights=None, lr=config.LR)
     print('Not loaded pretrained model')
 
-trainer = pl.Trainer(max_epochs=epochs,  
-                     callbacks=[checkpoint_callback, losscallback], 
-                     enable_progress_bar=enable_progress_bar,
-                     #val_check_interval= config.validate_after_ratio,
-                     )
-#trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
-trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
 
-#print loss
-#losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
-print(losscallback.train_loss)
-print(losscallback.val_loss)
+trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
 
-print('finished successfuly.')
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+    with record_function("model_training"):
+        trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
+
+        #print loss
+        #losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
+
+# print result of profiling
+print('Results ordered by CPU time')
+print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
+
+print('Results ordered by GPU time')
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=100))

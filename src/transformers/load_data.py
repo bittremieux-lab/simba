@@ -11,7 +11,7 @@ class LoadData:
     @staticmethod
     def from_molecule_pairs_to_dataset(molecule_pairs_input, 
                                        max_num_peaks=100, 
-                                       shuffle_order_pairs=False, #shuffle the spectrum 0 and 1 for data augmentation
+                                       training=False, #shuffle the spectrum 0 and 1 for data augmentation
                                        ):
         '''
         preprocess the spectra and convert it for being used in Pytorch 
@@ -20,9 +20,11 @@ class LoadData:
         molecule_pairs = MolecularPairsSet(spectrums=[copy.copy(s) for s in molecule_pairs_input.spectrums],
                                             indexes_tani = molecule_pairs_input.indexes_tani.copy())
         
-        if shuffle_order_pairs:
+        if training:
+            # create a random binary vector to flip or not a row
+            rand_vector = np.random.randint(0,2,molecule_pairs.indexes_tani.shape[0])
             #exchange the order of the spectrums 0 and 1 for a molecule pair
-            new_indexes_tani = np.array([[row[1], row[0], row[2]] for row in molecule_pairs.indexes_tani])
+            new_indexes_tani = np.array([[row[1], row[0], row[2]] if inversion else [row[0], row[1], row[2]]  for row, inversion in zip(molecule_pairs.indexes_tani, rand_vector)])
             molecule_pairs = MolecularPairsSet(spectrums=molecule_pairs.spectrums,
                                                indexes_tani= new_indexes_tani)
        
@@ -92,5 +94,5 @@ class LoadData:
                            #"fingerprint": fingerprints,
                   }
         
-        return CustomDataset(dictionary_data)
+        return CustomDataset(dictionary_data, training=training)
         

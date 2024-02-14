@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 import random
 from src.transformers.augmentation import Augmentation
 class CustomDataset(Dataset):
-    def __init__(self, your_dict, training=False, prob_aug=0.2):
+    def __init__(self, your_dict, training=False, prob_aug=0.5):
         self.data = your_dict
         self.keys = list(your_dict.keys())
         self.training= training
@@ -22,7 +22,7 @@ class CustomDataset(Dataset):
         # e.g., use torch.tensor(sample) if sample is a numpy array
         
         if self.training:
-            if random.random() < self.prob_aug:
+           if random.random() < self.prob_aug:
                 # augmentation
                 sample = Augmentation.augment(sample)
         return sample

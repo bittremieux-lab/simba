@@ -53,7 +53,7 @@ class Embedder(pl.LightningModule):
         self.train_loss_list = []
         self.val_loss_list = []
         self.lr = lr
-        
+
     def forward(self, batch):
         """The inference pass"""
 
@@ -121,8 +121,7 @@ class Embedder(pl.LightningModule):
         #self.val_loss_list.append(loss.item())
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
-
-
+    
     def predict_step(self, batch, batch_idx):
         """A predict step"""
         spec = self(batch)
