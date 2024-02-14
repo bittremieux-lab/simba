@@ -1,3 +1,7 @@
+## Project
+
+Development of a learned similarity model for MS/MS spectrums in order to predict structural similarity.
+
 
 
 ## NIST data
