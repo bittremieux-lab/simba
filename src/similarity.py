@@ -6,7 +6,7 @@ import scipy.optimize
 import scipy.sparse
 import spectrum_utils.spectrum as sus
 
-from src.utils import  spec_to_neutral_loss
+from src.utils import spec_to_neutral_loss
 
 SpectrumTuple = collections.namedtuple(
     "SpectrumTuple", ["precursor_mz", "precursor_charge", "mz", "intensity"]
@@ -154,9 +154,7 @@ def _cosine(
         spectrum2.mz,
         np.copy(spectrum2.intensity) / np.linalg.norm(spectrum2.intensity),
     )
-    return _cosine_fast(
-        spec_tup1, spec_tup2, fragment_mz_tolerance, allow_shift
-    )
+    return _cosine_fast(spec_tup1, spec_tup2, fragment_mz_tolerance, allow_shift)
 
 
 @nb.njit(fastmath=True, boundscheck=False)
@@ -225,9 +223,7 @@ def _cosine_fast(
             other_peak_i = other_peak_index[cpi] + index
             while (
                 other_peak_i < len(spec_other.mz)
-                and abs(
-                    peak_mz - (spec_other.mz[other_peak_i] + mass_diff[cpi])
-                )
+                and abs(peak_mz - (spec_other.mz[other_peak_i] + mass_diff[cpi]))
                 <= fragment_mz_tolerance
             ):
                 cost_matrix[peak_index, other_peak_i] = (
@@ -253,9 +249,7 @@ def _cosine_fast(
         pair_score = cost_matrix[row, col]
         if pair_score > 0.0:
             score += pair_score
-            matched_intensity += (
-                spec.intensity[row] + spec_other.intensity[col]
-            )
+            matched_intensity += spec.intensity[row] + spec_other.intensity[col]
             row_mask[i] = col_mask[j] = True
             n_greq_2p += pair_score >= 0.02
             max_contribution = max(max_contribution, pair_score)

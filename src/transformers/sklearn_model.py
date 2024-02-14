@@ -15,110 +15,115 @@ import numpy as np
 import pandas as pd
 from src.transformers.CustomDataset import CustomDataset
 
+
 class SklearnModel(BaseEstimator, ClassifierMixin):
-    '''
+    """
     wrapper for using shap values
-    '''
+    """
+
     def __init__(self, model_path, d_model, n_layers):
-        self.model_path=model_path
-        self.d_model =d_model
-        self.n_layers=n_layers
-        self.pytorch_object = Embedder.load_from_checkpoint(model_path, d_model=d_model, n_layers=n_layers)
-        self.model = pl.Trainer(max_epochs=0,enable_progress_bar=True)
-        self.size_per_key = {} #size of each key of the data loaded
-        self.dataset_test=None
-        self.dataloader_test=None
-        self.explainer=None
+        self.model_path = model_path
+        self.d_model = d_model
+        self.n_layers = n_layers
+        self.pytorch_object = Embedder.load_from_checkpoint(
+            model_path, d_model=d_model, n_layers=n_layers
+        )
+        self.model = pl.Trainer(max_epochs=0, enable_progress_bar=True)
+        self.size_per_key = {}  # size of each key of the data loaded
+        self.dataset_test = None
+        self.dataloader_test = None
+        self.explainer = None
+
     def fit(self, X, y):
         return self
-
 
     def predict(self, X):
         # Convert numpy array to PyTorch tensor
 
-        item = self.x_to_item(X.values, self.size_per_key )
-        dataset_test= CustomDataset(item)
-        dataloader_test= DataLoader(dataset_test, batch_size=64, shuffle=False)
+        item = self.x_to_item(X.values, self.size_per_key)
+        dataset_test = CustomDataset(item)
+        dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
-        print('Prediction has been called')
+        print("Prediction has been called")
 
-        pred_test = self.model.predict(self.pytorch_object, dataloader_test,  )
-        
-        #flat the results
-        flat_pred_test=[]
+        pred_test = self.model.predict(
+            self.pytorch_object,
+            dataloader_test,
+        )
+
+        # flat the results
+        flat_pred_test = []
         for pred in pred_test:
             flat_pred_test = flat_pred_test + [float(p) for p in pred]
 
         predictions = np.array([float(p) for p in flat_pred_test])
         return predictions
 
-    def load_size_per_key(self,item):
-        '''
+    def load_size_per_key(self, item):
+        """
         load the size of each key in the data loaded. for instance mz is normally 100 values
-        '''
+        """
         for k in item.keys():
             self.size_per_key[k] = item[k].shape[1]
         return self.size_per_key
 
-    
-
-    def get_columns(self,item):
-        cols= []
+    def get_columns(self, item):
+        cols = []
         for k in item.keys():
-            number_new_columns= item[k].shape[1]
-            cols =cols + [ (k+'_'+ str(i)) for i in range(0,number_new_columns)]
+            number_new_columns = item[k].shape[1]
+            cols = cols + [(k + "_" + str(i)) for i in range(0, number_new_columns)]
         return cols
 
-    def item_to_x(self,item):
-        '''
+    def item_to_x(self, item):
+        """
         from dict to X  shap format
-        '''
+        """
         # create np array
-        first_key= list(item.keys())[0]
+        first_key = list(item.keys())[0]
         number_samples = item[first_key].shape[0]
-        number_features=0
+        number_features = 0
 
         for k in item.keys():
-            number_features= number_features + item[k].shape[1]
-        X=np.zeros((number_samples,number_features),dtype=np.float32)
+            number_features = number_features + item[k].shape[1]
+        X = np.zeros((number_samples, number_features), dtype=np.float32)
 
-        
         for n in range(0, number_samples):
             # fill X
-            index_temp=0
+            index_temp = 0
             for k in item.keys():
-                last_index=index_temp +  item[k].shape[1]
-                X[n,index_temp: last_index] = np.array(item[k][n], dtype=np.float32)
-                #update index
+                last_index = index_temp + item[k].shape[1]
+                X[n, index_temp:last_index] = np.array(item[k][n], dtype=np.float32)
+                # update index
                 index_temp = last_index
 
         cols = self.get_columns(item)
 
-        X = pd.DataFrame(data= X.astype(np.float32), columns=cols)
+        X = pd.DataFrame(data=X.astype(np.float32), columns=cols)
         return X
 
-
-    def x_to_item(self,x, size_per_key):
-        '''
+    def x_to_item(self, x, size_per_key):
+        """
         from X  shap format to dict
-        '''
+        """
         index_temp = 0
         new_item = {}
-        
+
         for k in size_per_key:
             new_item[k] = np.zeros((x.shape[0], size_per_key[k]), dtype=np.float32)
-        
+
         for n in range(x.shape[0]):
-            index_temp=0
+            index_temp = 0
             for k in size_per_key.keys():
-                size= size_per_key[k]
-                new_item[k][n] = np.array([x[n,index_temp: index_temp + size]], dtype=np.float32)
+                size = size_per_key[k]
+                new_item[k][n] = np.array(
+                    [x[n, index_temp : index_temp + size]], dtype=np.float32
+                )
                 index_temp = index_temp + size
         return new_item
 
-    def get_X_from_all_molecule_pairs(self,all_molecule_pairs):
-        dataset_test= LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
-        dictionary= dataset_test.data
+    def get_X_from_all_molecule_pairs(self, all_molecule_pairs):
+        dataset_test = LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
+        dictionary = dataset_test.data
         return self.item_to_x(dictionary)
 
     def get_explainer(self, all_molecule_pairs):
@@ -126,9 +131,9 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         X_total = self.get_X_from_all_molecule_pairs(all_molecule_pairs)
 
         # get example of one item
-        dataset_test= LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
+        dataset_test = LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
-        
+
         ##get item
         dataiter = iter(dataloader_test)
         item = next(dataiter)
@@ -136,7 +141,10 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         # load size of each key:
         self.size_per_key = self.load_size_per_key(item)
 
-        explainer = shap.Explainer(self.predict, X_total,)
+        explainer = shap.Explainer(
+            self.predict,
+            X_total,
+        )
 
         return explainer
 

@@ -23,13 +23,13 @@ from src.parser import Parser
 
 
 # parse arguments
-config=Config()
-parser =Parser()
-best_model_path =  config.best_model_path
-dataset_path= config.dataset_path
-use_uniform_data=config.use_uniform_data_INFERENCE
-bins_uniformise=config.bins_uniformise_INFERENCE
-output_file_path = config.CHECKPOINT_DIR + 'model_outputs_verification.pkl'
+config = Config()
+parser = Parser()
+best_model_path = config.best_model_path
+dataset_path = config.dataset_path
+use_uniform_data = config.use_uniform_data_INFERENCE
+bins_uniformise = config.bins_uniformise_INFERENCE
+output_file_path = config.CHECKPOINT_DIR + "model_outputs_verification.pkl"
 enable_progress_bar = config.enable_progress_bar
 
 # Check if CUDA (GPU support) is available
@@ -56,63 +56,63 @@ else:
     print("CUDA (GPU support) is not available.")
 
 
-
-print('loading file')
+print("loading file")
 # Load the dataset from the pickle file
-with open(dataset_path, 'rb') as file:
+with open(dataset_path, "rb") as file:
     dataset = dill.load(file)
 
 
+molecule_pairs_test = dataset["molecule_pairs_test"]
+print(f"Number of molecule pairs: {len(molecule_pairs_test)}")
+uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
+print(f"Number of uniform molecule pairs: {len(molecule_pairs_test)}")
 
-molecule_pairs_test= dataset['molecule_pairs_test']
-print(f'Number of molecule pairs: {len(molecule_pairs_test)}')
-uniformed_molecule_pairs_test = dataset['uniformed_molecule_pairs_test']
-print(f'Number of uniform molecule pairs: {len(molecule_pairs_test)}')
-
-print('loading datasets')
+print("loading datasets")
 if use_uniform_data:
-    m_test= uniformed_molecule_pairs_test
+    m_test = uniformed_molecule_pairs_test
 else:
-    m_test= molecule_pairs_test
+    m_test = molecule_pairs_test
 
 # get info from molecular pairs set
-    
+
 spectrum_object_0 = [m.spectrum_object_0 for m in m_test]
 precursor_mz_0 = [m.spectrum_object_0.precursor_mz for m in m_test]
 precursor_charge_0 = [m.spectrum_object_0.precursor_charge for m in m_test]
-intensity_0= [m.spectrum_object_0.intensity for m in m_test]
-mz_0= [m.spectrum_object_0.mz for m in m_test]
+intensity_0 = [m.spectrum_object_0.intensity for m in m_test]
+mz_0 = [m.spectrum_object_0.mz for m in m_test]
 smiles_0 = [m.smiles_0 for m in m_test]
 params_0 = [m.params_0 for m in m_test]
 
 spectrum_object_1 = [m.spectrum_object_1 for m in m_test]
 precursor_mz_1 = [m.spectrum_object_1.precursor_mz for m in m_test]
 precursor_charge_1 = [m.spectrum_object_1.precursor_charge for m in m_test]
-intensity_1= [m.spectrum_object_1.intensity for m in m_test]
-mz_1= [m.spectrum_object_1.mz for m in m_test]
+intensity_1 = [m.spectrum_object_1.intensity for m in m_test]
+mz_1 = [m.spectrum_object_1.mz for m in m_test]
 smiles_1 = [m.smiles_1 for m in m_test]
 params_1 = [m.params_1 for m in m_test]
 
 
-#dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
+# dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
-trainer = pl.Trainer(max_epochs=2,enable_progress_bar=enable_progress_bar)
-best_model = Embedder.load_from_checkpoint(best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS))
+trainer = pl.Trainer(max_epochs=2, enable_progress_bar=enable_progress_bar)
+best_model = Embedder.load_from_checkpoint(
+    best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS)
+)
 
-#plot loss:
-#best_model.plot_loss()
+# plot loss:
+# best_model.plot_loss()
 
 pred_test = trainer.predict(best_model, dataloader_test)
 
-flat_pred_test=[]
+flat_pred_test = []
 for pred in pred_test:
     flat_pred_test = flat_pred_test + [float(p) for p in pred]
 
 similarities_test = Postprocessing.get_similarities(dataloader_test)
-combinations_test = [(s,p) for s,p in zip(similarities_test, flat_pred_test)]
+combinations_test = [(s, p) for s, p in zip(similarities_test, flat_pred_test)]
 
 # clip the values
 x = np.array([c[0] for c in combinations_test])
@@ -120,25 +120,23 @@ y = np.array([c[1] for c in combinations_test])
 y = np.clip(y, 0, 1)
 
 
-with open(output_file_path, 'wb') as file:
-        dataset= {
-                'spectrum_object_0': spectrum_object_0,
-                'spectrum_object_1': spectrum_object_1,
-                'ground_truth_similarity': x,
-                'prediction_similarity' : y,
-                'precursor_mz_0' : precursor_mz_0,
-                'precursor_charge_0' : precursor_charge_0,
-                'intensity_0':intensity_0,
-                'mz_0' : mz_0,
-                'smiles_0'  : smiles_0,
-                'params_0' : params_0,
-
-                'precursor_mz_1' : precursor_mz_1,
-                'precursor_charge_1' : precursor_charge_1,
-                'intensity_1' : intensity_1,
-                'mz_1': mz_1,
-                'smiles_1' :smiles_1,
-                'params_1' :params_1,
-
-        }
-        dill.dump(dataset, file)
+with open(output_file_path, "wb") as file:
+    dataset = {
+        "spectrum_object_0": spectrum_object_0,
+        "spectrum_object_1": spectrum_object_1,
+        "ground_truth_similarity": x,
+        "prediction_similarity": y,
+        "precursor_mz_0": precursor_mz_0,
+        "precursor_charge_0": precursor_charge_0,
+        "intensity_0": intensity_0,
+        "mz_0": mz_0,
+        "smiles_0": smiles_0,
+        "params_0": params_0,
+        "precursor_mz_1": precursor_mz_1,
+        "precursor_charge_1": precursor_charge_1,
+        "intensity_1": intensity_1,
+        "mz_1": mz_1,
+        "smiles_1": smiles_1,
+        "params_1": params_1,
+    }
+    dill.dump(dataset, file)

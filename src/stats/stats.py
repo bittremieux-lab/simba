@@ -1,14 +1,12 @@
-
 import numpy as np
 from sklearn.metrics import precision_recall_curve, auc
 import matplotlib.pyplot as plt
 
+
 class Stats:
 
     @staticmethod
-    def calculate_roc_curve(prediction, true, 
-                        min_bin=0.01,
-                        threshold_positive=0.6):
+    def calculate_roc_curve(prediction, true, min_bin=0.01, threshold_positive=0.6):
         # Assuming p and t are your predicted and true values, respectively
         # Create a binary ground truth vector
         y_true = (true > threshold_positive).astype(int)
@@ -27,7 +25,9 @@ class Stats:
             precision, recall, _ = precision_recall_curve(y_true, y_pred)
 
             # Append the precision and recall scores to the lists
-            precision_scores.append(precision[1])  # Precision when class 1 is the positive class
+            precision_scores.append(
+                precision[1]
+            )  # Precision when class 1 is the positive class
             recall_scores.append(recall[1])  # Recall when class 1 is the positive class
-        
+
         return precision_scores, recall_scores

@@ -14,11 +14,11 @@ from src.plotting import Plotting
 from src.config import Config
 
 # parameters
-dataset_path= '/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207_fingerprints.pkl'
-epochs= 30
-bins_uniformise=5
-enable_progress_bar=True
-fig_path = './scatter_plot.png'
+dataset_path = "/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207_fingerprints.pkl"
+epochs = 30
+bins_uniformise = 5
+enable_progress_bar = True
+fig_path = "./scatter_plot.png"
 
 # Check if CUDA (GPU support) is available
 if torch.cuda.is_available():
@@ -43,30 +43,29 @@ else:
     print("CUDA (GPU support) is not available.")
 
 
-
-print('loading file')
+print("loading file")
 # Load the dataset from the pickle file
-with open(dataset_path, 'rb') as file:
+with open(dataset_path, "rb") as file:
     dataset = dill.load(file)
 
 
 # create weights
-#weights= np.array([len(b) for b in train_binned_list])
-#weights = weights/np.sum(weights)
+# weights= np.array([len(b) for b in train_binned_list])
+# weights = weights/np.sum(weights)
 
 
 ## add fingerprints
-molecule_pairs_train =dataset['molecule_spairs_train']
-molecule_pairs_test = dataset['molecule_pairs_test']
-molecule_pairs_val = dataset['molecule_pairs_val']
+molecule_pairs_train = dataset["molecule_spairs_train"]
+molecule_pairs_test = dataset["molecule_pairs_test"]
+molecule_pairs_val = dataset["molecule_pairs_val"]
 
-print('computing fingerprints')
-#import numpy as np
-#for molecule_pairs in [molecule_pairs_train, molecule_pairs_test,molecule_pairs_val]:
+print("computing fingerprints")
+# import numpy as np
+# for molecule_pairs in [molecule_pairs_train, molecule_pairs_test,molecule_pairs_val]:
 # for m in molecule_pairs:
 #    m.fingerprint_0 = np.zeros(64)
 #    m.fingerprint_1 =np.zeros(64)
-'''
+"""
 import dill
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -97,37 +96,50 @@ molecule_pairs_train = gen_fing_for_molecule_pairs(molecule_pairs_train)
 print('finished training data')
 molecule_pairs_test = gen_fing_for_molecule_pairs(molecule_pairs_test)
 molecule_pairs_val = gen_fing_for_molecule_pairs(molecule_pairs_val)
-'''
+"""
 
-print('test of number of non zero fingerprint values')
+print("test of number of non zero fingerprint values")
 import numpy as np
+
 print(np.sum(molecule_pairs_train[0].fingerprint_0))
-print('loading datasets')
+print("loading datasets")
 dataset_train = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_train)
 dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_test)
 dataset_val = LoadData.from_molecule_pairs_to_dataset(molecule_pairs_val)
 
-print('Convert data to a dictionary')
-dataloader_train = DataLoader(dataset_train, batch_size=Config.BATCH_SIZE, shuffle=True, num_workers=64)
+print("Convert data to a dictionary")
+dataloader_train = DataLoader(
+    dataset_train, batch_size=Config.BATCH_SIZE, shuffle=True, num_workers=64
+)
 dataloader_test = DataLoader(dataset_test, batch_size=Config.BATCH_SIZE, shuffle=False)
 dataloader_val = DataLoader(dataset_val, batch_size=Config.BATCH_SIZE, shuffle=False)
 
-print('define checkpoint')
+print("define checkpoint")
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    dirpath='model_checkpoints',
-    filename='best_model',
-    monitor='validation_loss_epoch',
-    mode='min',
+    dirpath="model_checkpoints",
+    filename="best_model",
+    monitor="validation_loss_epoch",
+    mode="min",
     save_top_k=1,
 )
 
 progress_bar_callback = ProgressBar()
-print('define model')
+print("define model")
 # Create a model:
-model = EmbedderFingerprint( d_model=Config.D_MODEL, n_layers=Config.N_LAYERS, weights=None)
+model = EmbedderFingerprint(
+    d_model=Config.D_MODEL, n_layers=Config.N_LAYERS, weights=None
+)
 
-print('train model')
-#loss_plot_callback = LossPlotCallback(batch_per_epoch_tr=1, batch_per_epoch_val=2)
-trainer = pl.Trainer(max_epochs=epochs,  callbacks=[checkpoint_callback], enable_progress_bar=enable_progress_bar)
-trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
+print("train model")
+# loss_plot_callback = LossPlotCallback(batch_per_epoch_tr=1, batch_per_epoch_val=2)
+trainer = pl.Trainer(
+    max_epochs=epochs,
+    callbacks=[checkpoint_callback],
+    enable_progress_bar=enable_progress_bar,
+)
+trainer.fit(
+    model=model,
+    train_dataloaders=(dataloader_train),
+    val_dataloaders=dataloader_val,
+)

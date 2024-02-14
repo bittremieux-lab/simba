@@ -13,24 +13,24 @@ import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import os
 from src.parser import Parser
-import random 
+import random
 from src.weight_sampling import WeightSampling
 from src.losscallback import LossCallback
 from src.molecular_pairs_set import MolecularPairsSet
 from src.sanity_checks import SanityChecks
 
 
-config=Config()
-parser =Parser()
+config = Config()
+parser = Parser()
 config = parser.update_config(config)
 
 # parameters
-dataset_path= config.dataset_path
-epochs= config.epochs
-use_uniform_data=config.use_uniform_data_TRAINING
-bins_uniformise=config.bins_uniformise_TRAINING
-enable_progress_bar=config.enable_progress_bar
-fig_path = config.CHECKPOINT_DIR + f'scatter_plot_{config.MODEL_CODE}.png'
+dataset_path = config.dataset_path
+epochs = config.epochs
+use_uniform_data = config.use_uniform_data_TRAINING
+bins_uniformise = config.bins_uniformise_TRAINING
+enable_progress_bar = config.enable_progress_bar
+fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
 
 
@@ -61,116 +61,138 @@ else:
     print("CUDA (GPU support) is not available.")
 
 
-
-print('loading file')
+print("loading file")
 # Load the dataset from the pickle file
-with open(dataset_path, 'rb') as file:
+with open(dataset_path, "rb") as file:
     dataset = dill.load(file)
 
-molecule_pairs_train = dataset['molecule_pairs_train']
-molecule_pairs_val = dataset['molecule_pairs_val']
-molecule_pairs_test= dataset['molecule_pairs_test']
-uniformed_molecule_pairs_test = dataset['uniformed_molecule_pairs_test']
+molecule_pairs_train = dataset["molecule_pairs_train"]
+molecule_pairs_val = dataset["molecule_pairs_val"]
+molecule_pairs_test = dataset["molecule_pairs_test"]
+uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 ##### ADHOC SOLUTION TO AVOID MEMORY OVERHEAD ###########################
 # only get 50% of the molecules below 0.5 similarity
-#num_half = int(len(molecule_pairs_train)/2)
-#molecule_pairs_train = MolecularPairsSet(
+# num_half = int(len(molecule_pairs_train)/2)
+# molecule_pairs_train = MolecularPairsSet(
 #                spectrums= molecule_pairs_train.spectrums,
 #                indexes_tani= np.concatenate((molecule_pairs_train.indexes_tani[ molecule_pairs_train.indexes_tani[:,2] > 0.5    ],  \
 #                              molecule_pairs_train.indexes_tani[ molecule_pairs_train.indexes_tani[:,2] < 0.5    ][0:num_half]))
-#)
-#print(f'Adjusted size of molecular pairs: {len(molecule_pairs_train)}')
-
+# )
+# print(f'Adjusted size of molecular pairs: {len(molecule_pairs_train)}')
 
 
 ## TEST: INCREASE THE SIZE OF THE DATASET
-#molecule_pairs_train =  molecule_pairs_train + molecule_pairs_train
+# molecule_pairs_train =  molecule_pairs_train + molecule_pairs_train
 
 
+print(f"Number of pairs for train: {len(molecule_pairs_train)}")
+print(f"Number of pairs for val: {len(molecule_pairs_val)}")
+print(f"Number of pairs for test: {len(molecule_pairs_test)}")
+print(f"Number of pairs for uniform test: {len(uniformed_molecule_pairs_test)}")
 
-print(f'Number of pairs for train: {len(molecule_pairs_train)}')
-print(f'Number of pairs for val: {len(molecule_pairs_val)}')
-print(f'Number of pairs for test: {len(molecule_pairs_test)}')
-print(f'Number of pairs for uniform test: {len(uniformed_molecule_pairs_test)}')
 
-
-sanity_check_ids= SanityChecks.sanity_checks_ids(molecule_pairs_train, molecule_pairs_val, molecule_pairs_test, uniformed_molecule_pairs_test)
-sanity_check_bms= SanityChecks.sanity_checks_bms(molecule_pairs_train, molecule_pairs_val, molecule_pairs_test, uniformed_molecule_pairs_test)
+sanity_check_ids = SanityChecks.sanity_checks_ids(
+    molecule_pairs_train,
+    molecule_pairs_val,
+    molecule_pairs_test,
+    uniformed_molecule_pairs_test,
+)
+sanity_check_bms = SanityChecks.sanity_checks_bms(
+    molecule_pairs_train,
+    molecule_pairs_val,
+    molecule_pairs_test,
+    uniformed_molecule_pairs_test,
+)
 
 # check distribution of similarities
-samples_per_range, bins = SanityChecks.check_distribution_similarities(molecule_pairs_train)
-print('SAMPLES PER RANGE:')
+samples_per_range, bins = SanityChecks.check_distribution_similarities(
+    molecule_pairs_train
+)
+print("SAMPLES PER RANGE:")
 for s, r in zip(samples_per_range, bins):
-    print(f'range: {r}, samples: {s}')
-    
-print(f'Sanity check ids. Passed? {sanity_check_ids}')
-print(f'Sanity check bms. Passed? {sanity_check_bms}')
+    print(f"range: {r}, samples: {s}")
+
+print(f"Sanity check ids. Passed? {sanity_check_ids}")
+print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
 
 ## CALCULATION OF WEIGHTS
-train_binned_list, _ = TrainUtils.divide_data_into_bins(molecule_pairs_train, bins_uniformise)
-weights, range_weights= WeightSampling.compute_weights(train_binned_list)
+train_binned_list, _ = TrainUtils.divide_data_into_bins(
+    molecule_pairs_train, bins_uniformise
+)
+weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
-print('Weights per range:')
+print("Weights per range:")
 print(weights)
 print(range_weights)
 
 
-weights_tr= WeightSampling.compute_sample_weights(molecule_pairs_train, weights)
-weights_val= WeightSampling.compute_sample_weights(molecule_pairs_val, weights)
+weights_tr = WeightSampling.compute_sample_weights(molecule_pairs_train, weights)
+weights_val = WeightSampling.compute_sample_weights(molecule_pairs_val, weights)
 
-print('Similarity of the first 20 molecule pairs')
-print([molecule_pairs_train[i].similarity for i in range(0,20)])
-print('Sample weights of the first 20 molecule pairs')
+print("Similarity of the first 20 molecule pairs")
+print([molecule_pairs_train[i].similarity for i in range(0, 20)])
+print("Sample weights of the first 20 molecule pairs")
 print(weights_tr[0:20])
 
-print('loading datasets')
+print("loading datasets")
 if use_uniform_data:
-    print('Uniformize the data')
-    uniformed_molecule_pairs_train,train_binned_list =TrainUtils.uniformise(molecule_pairs_train, number_bins=bins_uniformise, return_binned_list=True)
-    uniformed_molecule_pairs_val,_ =TrainUtils.uniformise(molecule_pairs_val, number_bins=bins_uniformise, return_binned_list=True)
-    #uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
+    print("Uniformize the data")
+    uniformed_molecule_pairs_train, train_binned_list = TrainUtils.uniformise(
+        molecule_pairs_train, number_bins=bins_uniformise, return_binned_list=True
+    )
+    uniformed_molecule_pairs_val, _ = TrainUtils.uniformise(
+        molecule_pairs_val, number_bins=bins_uniformise, return_binned_list=True
+    )
+    # uniformed_molecule_pairs_test,_ =TrainUtils.uniformise(molecule_pairs_test, number_bins=bins_uniformise, return_binned_list=True)
     m_train = uniformed_molecule_pairs_train
-    #m_test= uniformed_molecule_pairs_test
+    # m_test= uniformed_molecule_pairs_test
     m_val = uniformed_molecule_pairs_val
 else:
     m_train = molecule_pairs_train
-    #m_test= molecule_pairs_test
+    # m_test= molecule_pairs_test
     m_val = molecule_pairs_val
 
-print(f'number of train molecule pairs: {len(m_train)}')
-
+print(f"number of train molecule pairs: {len(m_train)}")
 
 
 dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train, training=True)
-#dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
+# dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
 dataset_val = LoadData.from_molecule_pairs_to_dataset(m_val)
 
 
-#delete variables that are not useful for memory savings
-del(dataset)
-del(molecule_pairs_train)
-del(molecule_pairs_val)
-del(molecule_pairs_test)
-del(uniformed_molecule_pairs_test)
-del(m_train)
-del(m_val)
+# delete variables that are not useful for memory savings
+del dataset
+del molecule_pairs_train
+del molecule_pairs_val
+del molecule_pairs_test
+del uniformed_molecule_pairs_test
+del m_train
+del m_val
 
-#del(molecule_pairs_test)
+# del(molecule_pairs_test)
 
-print('Generating samplers')
+print("Generating samplers")
 # data loaders
-train_sampler = WeightedRandomSampler(weights=weights_tr, num_samples=len(dataset_train), replacement=True)
-val_sampler = WeightedRandomSampler(weights=weights_val, num_samples=len(dataset_val), replacement=True)
+train_sampler = WeightedRandomSampler(
+    weights=weights_tr, num_samples=len(dataset_train), replacement=True
+)
+val_sampler = WeightedRandomSampler(
+    weights=weights_val, num_samples=len(dataset_val), replacement=True
+)
 
-print('Creating train data loader')
-dataloader_train = DataLoader(dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler,  num_workers=10)
+print("Creating train data loader")
+dataloader_train = DataLoader(
+    dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler, num_workers=10
+)
 
-#dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
+# dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
-def worker_init_fn(worker_id): #ensure the dataloader for validation is the same for every epoch
+def worker_init_fn(
+    worker_id,
+):  # ensure the dataloader for validation is the same for every epoch
     seed = 42
     torch.manual_seed(seed)
     # Set the same seed for reproducibility in NumPy and Python's random module
@@ -178,46 +200,73 @@ def worker_init_fn(worker_id): #ensure the dataloader for validation is the same
     random.seed(seed)
 
 
-print('Creating val data loader')
-dataloader_val = DataLoader(dataset_val, batch_size=config.BATCH_SIZE, sampler = val_sampler, worker_init_fn=worker_init_fn,   num_workers=0)
+print("Creating val data loader")
+dataloader_val = DataLoader(
+    dataset_val,
+    batch_size=config.BATCH_SIZE,
+    sampler=val_sampler,
+    worker_init_fn=worker_init_fn,
+    num_workers=0,
+)
 
 # Define the ModelCheckpoint callback
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    dirpath=   config.CHECKPOINT_DIR,
-    filename='best_model',
-    monitor = 'validation_loss_epoch',
-    mode='min',
+    dirpath=config.CHECKPOINT_DIR,
+    filename="best_model",
+    monitor="validation_loss_epoch",
+    mode="min",
     save_top_k=1,
 )
 
-#checkpoint_callback = SaveBestModelCallback(file_path=config.best_model_path)
+# checkpoint_callback = SaveBestModelCallback(file_path=config.best_model_path)
 progress_bar_callback = ProgressBar()
 
 # loss callback
-losscallback= LossCallback(file_path=config.CHECKPOINT_DIR + f'loss.png')
+losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
 
-print('define model')
+print("define model")
 # Create a model:
 if config.load_pretrained:
-    model = Embedder.load_from_checkpoint(config.pretrained_path,d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS), weights=None, lr= config.LR)
-    print('Loaded pretrained model')
+    model = Embedder.load_from_checkpoint(
+        config.pretrained_path,
+        d_model=int(config.D_MODEL),
+        n_layers=int(config.N_LAYERS),
+        weights=None,
+        lr=config.LR,
+    )
+    print("Loaded pretrained model")
 else:
-    model = Embedder( d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS), weights=None, lr=config.LR)
-    print('Not loaded pretrained model')
+    model = Embedder(
+        d_model=int(config.D_MODEL),
+        n_layers=int(config.N_LAYERS),
+        weights=None,
+        lr=config.LR,
+    )
+    print("Not loaded pretrained model")
 
 
-trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
+trainer = pl.Trainer(
+    max_steps=100,
+    callbacks=[checkpoint_callback, losscallback],
+    enable_progress_bar=enable_progress_bar,
+)
 
-with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+with profile(
+    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True
+) as prof:
     with record_function("model_training"):
-        trainer.fit(model=model, train_dataloaders=(dataloader_train), val_dataloaders=dataloader_val,)
+        trainer.fit(
+            model=model,
+            train_dataloaders=(dataloader_train),
+            val_dataloaders=dataloader_val,
+        )
 
-        #print loss
-        #losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
+        # print loss
+        # losscallback.plot_loss(file_path = config.CHECKPOINT_DIR +  f'loss_{config.MODEL_CODE}.png')
 
 # print result of profiling
-print('Results ordered by CPU time')
+print("Results ordered by CPU time")
 print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=100))
 
-print('Results ordered by GPU time')
+print("Results ordered by GPU time")
 print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=100))

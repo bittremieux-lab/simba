@@ -13,18 +13,22 @@ from src.config import Config
 from src.preprocessing_utils import PreprocessingUtils
 from src.murcko_scaffold import MurckoScaffold
 
-from tqdm import tqdm 
+from tqdm import tqdm
 
 from src.nist_loader import NistLoader
 from src.preprocessor import Preprocessor
 from src.utils import spectrum_hash
-class LoadData:
-   
 
-    def get_spectra(source: Union[IO, str], scan_nrs: Sequence[int] = None, compute_classes=False, 
-                    config=None,
-                    use_gnps_format=True)\
-            -> Iterator[SpectrumExt]:
+
+class LoadData:
+
+    def get_spectra(
+        source: Union[IO, str],
+        scan_nrs: Sequence[int] = None,
+        compute_classes=False,
+        config=None,
+        use_gnps_format=True,
+    ) -> Iterator[SpectrumExt]:
         """
         Get the MS/MS spectra from the given MGF file, optionally filtering by
         scan number.
@@ -46,102 +50,133 @@ class LoadData:
         with mgf.MGF(source) as f_in:
             # Iterate over a subset of spectra filtered by scan number.
             if scan_nrs is not None:
+
                 def spectrum_it():
                     for scan_nr, spectrum_dict in enumerate(f_in):
                         if scan_nr in scan_nrs:
                             yield spectrum_dict
+
             # Or iterate over all MS/MS spectra.
             else:
+
                 def spectrum_it():
                     yield from f_in
-            
 
-            total_results=[]
+            total_results = []
             for spectrum in spectrum_it():
-                #try:
-                    if use_gnps_format:
-                        condition, res =LoadData.is_valid_spectrum_gnps(spectrum, config)
-                    else: #janssen format
-                        condition, res =LoadData.is_valid_spectrum_janssen(spectrum, config)
-                    total_results.append(res)
-                    if condition:
-                        #yield spectrum['params']['name']
-                        yield LoadData._parse_spectrum(spectrum, compute_classes=compute_classes,
-                                                       use_gnps_format=use_gnps_format)
-                #except ValueError as e:
-                #    pass
+                # try:
+                if use_gnps_format:
+                    condition, res = LoadData.is_valid_spectrum_gnps(spectrum, config)
+                else:  # janssen format
+                    condition, res = LoadData.is_valid_spectrum_janssen(
+                        spectrum, config
+                    )
+                total_results.append(res)
+                if condition:
+                    # yield spectrum['params']['name']
+                    yield LoadData._parse_spectrum(
+                        spectrum,
+                        compute_classes=compute_classes,
+                        use_gnps_format=use_gnps_format,
+                    )
+            # except ValueError as e:
+            #    pass
+
     @staticmethod
     def is_valid_spectrum_janssen(spectrum: SpectrumExt, config):
 
-        cond_library = True #all the library is good
-        cond_charge=  int(spectrum['params']["charge"][0]) in config.CHARGES
+        cond_library = True  # all the library is good
+        cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
         try:
-            cond_pepmass = float(spectrum['params']["pepmass"][0]) > 0
+            cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
         except:
-            cond_pepmass= 0.0
+            cond_pepmass = 0.0
 
-        cond_mz_array = len(spectrum['m/z array']) >= config.MIN_N_PEAKS 
-        cond_ion_mode =spectrum['params']["ionmode"] == "Positive" 
-        cond_name = spectrum['params']["adduct"]  in ['M+','[M+H]+','M+H'] #adduct
-        cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
-        cond_inchi_smiles= (
-                     #spectrum['params']["inchi"] != "N/A" or
-                     spectrum['params']["smiles"] != "N/A"
-                )
+        cond_mz_array = len(spectrum["m/z array"]) >= config.MIN_N_PEAKS
+        cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+        cond_name = spectrum["params"]["adduct"] in ["M+", "[M+H]+", "M+H"]  # adduct
+        cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
+        cond_inchi_smiles = (
+            # spectrum['params']["inchi"] != "N/A" or
+            spectrum["params"]["smiles"]
+            != "N/A"
+        )
         ##cond_name=True
         ##cond_name=True
-        dict_results= {'cond_library':cond_library, 
-                        'cond_charge':cond_charge, 
-                        'cond_pepmass':cond_pepmass, 
-                        'cond_mz_array':cond_mz_array, 
-                        'cond_ion_mode':cond_ion_mode, 
-                        'cond_name':cond_name, 
-                        'cond_centroid':cond_centroid, 
-                        'cond_inchi_smiles':cond_inchi_smiles}
-        #return cond_ion_mode and cond_mz_array
-   
-        total_condition = cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
+        dict_results = {
+            "cond_library": cond_library,
+            "cond_charge": cond_charge,
+            "cond_pepmass": cond_pepmass,
+            "cond_mz_array": cond_mz_array,
+            "cond_ion_mode": cond_ion_mode,
+            "cond_name": cond_name,
+            "cond_centroid": cond_centroid,
+            "cond_inchi_smiles": cond_inchi_smiles,
+        }
+        # return cond_ion_mode and cond_mz_array
 
-        return  total_condition, dict_results
-    
+        total_condition = (
+            cond_library
+            and cond_charge
+            and cond_pepmass
+            and cond_mz_array
+            and cond_ion_mode
+            and cond_name
+            and cond_centroid
+            and cond_inchi_smiles
+        )
+
+        return total_condition, dict_results
+
     @staticmethod
     def is_valid_spectrum_gnps(spectrum: SpectrumExt, config):
-        cond_library = int(spectrum['params']["libraryquality"]) <= 3
-        cond_charge=  int(spectrum['params']["charge"][0]) in config.CHARGES
+        cond_library = int(spectrum["params"]["libraryquality"]) <= 3
+        cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
 
         # try to convert to float the pep mass
         try:
-            cond_pepmass = float(spectrum['params']["pepmass"][0]) > 0
+            cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
         except:
-            cond_pepmass= 0.0
-        
-    
-        cond_mz_array = len(spectrum['m/z array']) >= config.MIN_N_PEAKS 
-        cond_ion_mode =spectrum['params']["ionmode"] == "Positive" 
-        cond_name = spectrum['params']["name"].rstrip().endswith(" M+H")
-        cond_centroid = PreprocessingUtils.is_centroid(spectrum['intensity array'])
-        cond_inchi_smiles= (
-                     #spectrum['params']["inchi"] != "N/A" or
-                     spectrum['params']["smiles"] != "N/A"
-                )
+            cond_pepmass = 0.0
+
+        cond_mz_array = len(spectrum["m/z array"]) >= config.MIN_N_PEAKS
+        cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+        cond_name = spectrum["params"]["name"].rstrip().endswith(" M+H")
+        cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
+        cond_inchi_smiles = (
+            # spectrum['params']["inchi"] != "N/A" or
+            spectrum["params"]["smiles"]
+            != "N/A"
+        )
         ##cond_name=True
         ##cond_name=True
-        dict_results= {'cond_library':cond_library, 
-                        'cond_charge':cond_charge, 
-                        'cond_pepmass':cond_pepmass, 
-                        'cond_mz_array':cond_mz_array, 
-                        'cond_ion_mode':cond_ion_mode, 
-                        'cond_name':cond_name, 
-                        'cond_centroid':cond_centroid, 
-                        'cond_inchi_smiles':cond_inchi_smiles}
-        #return cond_ion_mode and cond_mz_array
+        dict_results = {
+            "cond_library": cond_library,
+            "cond_charge": cond_charge,
+            "cond_pepmass": cond_pepmass,
+            "cond_mz_array": cond_mz_array,
+            "cond_ion_mode": cond_ion_mode,
+            "cond_name": cond_name,
+            "cond_centroid": cond_centroid,
+            "cond_inchi_smiles": cond_inchi_smiles,
+        }
+        # return cond_ion_mode and cond_mz_array
 
-        total_condition = cond_library and cond_charge and cond_pepmass and cond_mz_array and cond_ion_mode and cond_name and cond_centroid and cond_inchi_smiles
-        return  total_condition, dict_results
-                
+        total_condition = (
+            cond_library
+            and cond_charge
+            and cond_pepmass
+            and cond_mz_array
+            and cond_ion_mode
+            and cond_name
+            and cond_centroid
+            and cond_inchi_smiles
+        )
+        return total_condition, dict_results
 
-    def _parse_spectrum(spectrum_dict: Dict, compute_classes=False,
-                                use_gnps_format=True) -> SpectrumExt:
+    def _parse_spectrum(
+        spectrum_dict: Dict, compute_classes=False, use_gnps_format=True
+    ) -> SpectrumExt:
         """
         Parse the Pyteomics spectrum dict.
 
@@ -155,16 +190,15 @@ class LoadData:
         SprectumExt
             The parsed spectrum.
         """
-        #identifier = spectrum_dict['params']['title']
-        if use_gnps_format: #GNPS
+        # identifier = spectrum_dict['params']['title']
+        if use_gnps_format:  # GNPS
             identifier = spectrum_dict["params"]["spectrumid"]
             inchi = spectrum_dict["params"]["inchi"]
-            library=spectrum_dict["params"]["organism"]
-        else: #JANSSEN
+            library = spectrum_dict["params"]["organism"]
+        else:  # JANSSEN
             identifier = spectrum_dict["params"]["id"]
-            inchi = ''
-            library= 'janssen'
-
+            inchi = ""
+            library = "janssen"
 
         params = spectrum_dict["params"]
         library = library
@@ -173,87 +207,94 @@ class LoadData:
         ionmode = spectrum_dict["params"]["ionmode"]
 
         # compute hash id value
-        spectrum_hash_result= spectrum_hash(spectrum_dict["m/z array"], spectrum_dict["intensity array"])
+        spectrum_hash_result = spectrum_hash(
+            spectrum_dict["m/z array"], spectrum_dict["intensity array"]
+        )
 
         # calculate Murcko-Scaffold class
-        bms=MurckoScaffold.get_bm_scaffold(smiles)
+        bms = MurckoScaffold.get_bm_scaffold(smiles)
 
         # classes
         if compute_classes:
             clss = PreprocessingUtils.get_class(inchi, smiles)
-            superclass= clss[0]
+            superclass = clss[0]
             classe = clss[1]
             subclass = clss[2]
         else:
-            superclass=None
-            classe= None
-            subclass=None
+            superclass = None
+            classe = None
+            subclass = None
 
-        
         spec = SpectrumExt(
-                    identifier=identifier,
-                    precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
-                    # Re-assign charge 0 to 1.
-                    precursor_charge=max(int(spectrum_dict["params"]["charge"][0]), 1),
-                    mz=np.array(spectrum_dict["m/z array"]),
-                    intensity=np.array(spectrum_dict["intensity array"]),
-                    retention_time=np.nan,
-                    params=params,
-                    library=library,
-                    inchi=inchi,
-                    smiles=smiles, 
-                    ionmode=ionmode,
-                    bms=bms, 
-                    superclass=superclass,
-                    classe=classe,
-                    subclass=subclass,
-                    spectrum_hash=spectrum_hash_result,
-                )
-        
+            identifier=identifier,
+            precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
+            # Re-assign charge 0 to 1.
+            precursor_charge=max(int(spectrum_dict["params"]["charge"][0]), 1),
+            mz=np.array(spectrum_dict["m/z array"]),
+            intensity=np.array(spectrum_dict["intensity array"]),
+            retention_time=np.nan,
+            params=params,
+            library=library,
+            inchi=inchi,
+            smiles=smiles,
+            ionmode=ionmode,
+            bms=bms,
+            superclass=superclass,
+            classe=classe,
+            subclass=subclass,
+            spectrum_hash=spectrum_hash_result,
+        )
+
         # postprocessing
-        #spec=spec.remove_precursor_peak(0.1, "Da")
-        #spec=spec.filter_intensity(0.01)
-        
-         
+        # spec=spec.remove_precursor_peak(0.1, "Da")
+        # spec=spec.filter_intensity(0.01)
+
         return spec
 
-
-    
-    def get_all_spectrums_mgf(file, num_samples=10, 
-                                compute_classes=False, 
-                                use_tqdm=True, 
-                                config=None,
-                                use_gnps_format=True):
-        spectrums=[] #to save all the spectrums
-        spectra = LoadData.get_spectra(file, 
-                                        compute_classes=compute_classes, 
-                                       config=config,
-                                       use_gnps_format = use_gnps_format,
-                                       )
+    def get_all_spectrums_mgf(
+        file,
+        num_samples=10,
+        compute_classes=False,
+        use_tqdm=True,
+        config=None,
+        use_gnps_format=True,
+    ):
+        spectrums = []  # to save all the spectrums
+        spectra = LoadData.get_spectra(
+            file,
+            compute_classes=compute_classes,
+            config=config,
+            use_gnps_format=use_gnps_format,
+        )
 
         if use_tqdm:
             iterator = tqdm(range(0, num_samples))
         else:
             iterator = range(0, num_samples)
-        
-        #preprocessor 
+
+        # preprocessor
         pp = Preprocessor()
 
         for i in iterator:
             try:
                 spectrum = next(spectra)
-                #spectrum = pp.preprocess_spectrum(spectrum)
+                # spectrum = pp.preprocess_spectrum(spectrum)
                 spectrums.append(spectrum)
-            except StopIteration: #in case it is not possible to get more samples
-                print(f'We reached the end of the array at index {i}')
+            except StopIteration:  # in case it is not possible to get more samples
+                print(f"We reached the end of the array at index {i}")
                 break
             # go to next iteration
-            
-        return spectrums
-    
 
-    
-    def get_all_spectrums_nist(file, num_samples=10, compute_classes=False, use_tqdm=True, config=None, initial_line_number=0):
+        return spectrums
+
+    def get_all_spectrums_nist(
+        file,
+        num_samples=10,
+        compute_classes=False,
+        use_tqdm=True,
+        config=None,
+        initial_line_number=0,
+    ):
         """
         Get the MS/MS spectra from the given MGF file, optionally filtering by
         scan number.
@@ -272,55 +313,69 @@ class LoadData:
         Iterator[SpectrumExt]
             An iterator over the requested spectra in the given file.
         """
-        nist_loader =NistLoader()
-        spectrums, current_line_number = nist_loader.parse_file(file,  num_samples=num_samples, initial_line_number=initial_line_number)
-        
+        nist_loader = NistLoader()
+        spectrums, current_line_number = nist_loader.parse_file(
+            file, num_samples=num_samples, initial_line_number=initial_line_number
+        )
 
         # check adducts
-        #print([s['identifier'] for s in spectrums])
+        # print([s['identifier'] for s in spectrums])
 
         spectrums = nist_loader.compute_all_smiles(spectrums, use_tqdm=use_tqdm)
 
         # processing
-        all_spectrums=[]
+        all_spectrums = []
         pp = Preprocessor()
-        
+
         for spectrum in spectrums:
-                # use the validation from gnps format since it is the format we are parsing
-                condition, res =LoadData.is_valid_spectrum_gnps(spectrum, config=config)
-                #print(res)
-                if condition:
-                    #yield spectrum['params']['name']
-                    spec= LoadData._parse_spectrum(spectrum, compute_classes=compute_classes)
-                    #spec = pp.preprocess_spectrum(spec)
-                    all_spectrums.append(spec)
+            # use the validation from gnps format since it is the format we are parsing
+            condition, res = LoadData.is_valid_spectrum_gnps(spectrum, config=config)
+            # print(res)
+            if condition:
+                # yield spectrum['params']['name']
+                spec = LoadData._parse_spectrum(
+                    spectrum, compute_classes=compute_classes
+                )
+                # spec = pp.preprocess_spectrum(spec)
+                all_spectrums.append(spec)
 
         return all_spectrums, current_line_number
 
+    def get_all_spectrums(
+        file,
+        num_samples=10,
+        compute_classes=False,
+        use_tqdm=True,
+        use_nist=False,
+        config=None,
+        use_janssen=False,
+    ):
 
-    def get_all_spectrums(file, num_samples=10, compute_classes=False, use_tqdm=True, use_nist=False, config=None, use_janssen=False):
-     
-        
         if use_janssen:
-            spectrums = LoadData.get_all_spectrums_mgf(file=file, 
-                                                        num_samples=num_samples, 
-                                                        compute_classes=compute_classes, 
-                                                        use_tqdm=use_tqdm,
-                                                        config=config,
-                                                        use_gnps_format=False) #use format from Janssen
+            spectrums = LoadData.get_all_spectrums_mgf(
+                file=file,
+                num_samples=num_samples,
+                compute_classes=compute_classes,
+                use_tqdm=use_tqdm,
+                config=config,
+                use_gnps_format=False,
+            )  # use format from Janssen
         elif use_nist:
-            spectrums = LoadData.get_all_spectrums_nist(file=file, 
-                                                        num_samples=num_samples, 
-                                                        compute_classes=compute_classes, 
-                                                        use_tqdm=use_tqdm, 
-                                                        config=config)
+            spectrums = LoadData.get_all_spectrums_nist(
+                file=file,
+                num_samples=num_samples,
+                compute_classes=compute_classes,
+                use_tqdm=use_tqdm,
+                config=config,
+            )
         else:
-            spectrums = LoadData.get_all_spectrums_mgf(file=file, 
-                                                        num_samples=num_samples, 
-                                                        compute_classes=compute_classes, 
-                                                        use_tqdm=use_tqdm,
-                                                        config=config,
-                                                        use_gnps_format=True)
+            spectrums = LoadData.get_all_spectrums_mgf(
+                file=file,
+                num_samples=num_samples,
+                compute_classes=compute_classes,
+                use_tqdm=use_tqdm,
+                config=config,
+                use_gnps_format=True,
+            )
 
         return spectrums
-    

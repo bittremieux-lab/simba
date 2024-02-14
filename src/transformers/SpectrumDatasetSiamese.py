@@ -22,6 +22,7 @@ from depthcharge.data import arrow
 from depthcharge import utils
 from depthcharge.data import preprocessing
 
+
 def _get_records_temp(
     data: list[pl.DataFrame | PathLike], **kwargs: dict
 ) -> Generator[pa.RecordBatch]:
@@ -36,25 +37,30 @@ def _get_records_temp(
     """
     for spectra in data:
         try:
-            
+
             spectra = spectra.lazy().collect().to_arrow().to_batches()
         except AttributeError:
             try:
                 spectra = pq.ParquetFile(spectra).iter_batches()
             except (pa.ArrowInvalid, TypeError):
-                spectra = arrow.spectra_to_stream(spectra, preprocessing_fn=  [
-                preprocessing.set_mz_range(min_mz=140),
-                preprocessing.filter_intensity(max_num_peaks=200),
-                preprocessing.scale_intensity(scaling="root"),
-                preprocessing.scale_to_unit_norm,
-            ], **kwargs)
+                spectra = arrow.spectra_to_stream(
+                    spectra,
+                    preprocessing_fn=[
+                        preprocessing.set_mz_range(min_mz=140),
+                        preprocessing.filter_intensity(max_num_peaks=200),
+                        preprocessing.scale_intensity(scaling="root"),
+                        preprocessing.scale_to_unit_norm,
+                    ],
+                    **kwargs,
+                )
 
         for batch in spectra:
             yield batch
 
+
 class SpectrumDatasetSiamese(SpectrumDataset):
-     
-     def __init__(
+
+    def __init__(
         self,
         spectra: pl.DataFrame | PathLike | Iterable[PathLike],
         path: PathLike | None = None,

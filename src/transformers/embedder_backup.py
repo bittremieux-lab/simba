@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from depthcharge.data import AnnotatedSpectrumDataset
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.transformers import (
-    SpectrumTransformerEncoder, 
+    SpectrumTransformerEncoder,
     PeptideTransformerEncoder,
 )
 import torch
@@ -24,12 +24,14 @@ sns.set_style("ticks")
 # Set random seeds
 pl.seed_everything(42, workers=True)
 
+
 class Embedder(pl.LightningModule):
     """Embed spectra and peptides in the same space."""
+
     def __init__(self, d_model, n_layers):
         """Initialize the CCSPredictor"""
         super().__init__()
-    
+
         self.spectrum_encoder = SpectrumTransformerEncoder(
             d_model=d_model,
             n_layers=n_layers,
@@ -41,18 +43,16 @@ class Embedder(pl.LightningModule):
         """The inference pass"""
         emb, _ = self.spectrum_encoder(batch[0].float())
 
-    
         return emb[:, 0, :]
 
     def step(self, batch, batch_idx):
         """A training/validation/inference step."""
         spec = self(batch)
 
-
         # Calculate the loss efficiently:
         spec = spec.expand(spec.shape).reshape(-1, *spec.shape[1:])
         target = torch.ones(spec.shape[0]).to(self.device)
-        target[spec.shape[0]:] = -1
+        target[spec.shape[0] :] = -1
         loss = self.cosine_loss(spec, spec, target)
         return loss
 

@@ -3,11 +3,12 @@ import numpy as np
 import operator
 from src.load_data import LoadData
 
+
 class AdductsCleaning:
-     def _get_adduct_count(adduct: str):
+    def _get_adduct_count(adduct: str):
         """
         Split the adduct string in count and raw adduct.
-    
+
         Parameters
         ----------
          adduct : str
@@ -19,30 +20,30 @@ class AdductsCleaning:
         """
         # Formula and charge mapping for data cleaning and harmonization.
         formulas = {
-     "AC": "CH3COO",
-     "Ac": "CH3COO",
-    "ACN": "C2H3N",
-    "AcN": "C2H3N",
-    "C2H3O2": "CH3COO",
-    "C2H3OO": "CH3COO",
-    "EtOH": "C2H6O",
-    "FA": "CHOO",
-    "Fa": "CHOO",
-    "Formate": "CHOO",
-    "formate": "CHOO",
-    "H3C2OO": "CH3COO",
-    "HAc": "CH3COOH",
-    "HCO2": "CHOO",
-    "HCOO": "CHOO",
-    "HFA": "CHOOH",
-    "MeOH": "CH4O",
-    "OAc": "CH3COO",
-    "Oac": "CH3COO",
-    "OFA": "CHOO",
-    "OFa": "CHOO",
-    "Ofa": "CHOO",
-    "TFA": "CF3COOH",
-}
+            "AC": "CH3COO",
+            "Ac": "CH3COO",
+            "ACN": "C2H3N",
+            "AcN": "C2H3N",
+            "C2H3O2": "CH3COO",
+            "C2H3OO": "CH3COO",
+            "EtOH": "C2H6O",
+            "FA": "CHOO",
+            "Fa": "CHOO",
+            "Formate": "CHOO",
+            "formate": "CHOO",
+            "H3C2OO": "CH3COO",
+            "HAc": "CH3COOH",
+            "HCO2": "CHOO",
+            "HCOO": "CHOO",
+            "HFA": "CHOOH",
+            "MeOH": "CH4O",
+            "OAc": "CH3COO",
+            "Oac": "CH3COO",
+            "OFA": "CHOO",
+            "OFa": "CHOO",
+            "Ofa": "CHOO",
+            "TFA": "CF3COOH",
+        }
         count, adduct = re.match(r"^(\d*)([A-Z]?.*)$", adduct).groups()
         count = int(count) if count else 1
         adduct = formulas.get(adduct, adduct)
@@ -52,8 +53,8 @@ class AdductsCleaning:
             adduct, count_new = wrong_order.groups()
             count = int(count_new) if count_new else count
         return count, adduct
-     
-     def _clean_adduct(adduct: str) -> str:
+
+    def _clean_adduct(adduct: str) -> str:
         """
         Consistent encoding of adducts, including charge information.
 
@@ -61,7 +62,7 @@ class AdductsCleaning:
         ----------
         adduct : str
             The original adduct string.
-    
+
         Returns
         -------
         str
@@ -95,7 +96,7 @@ class AdductsCleaning:
                 break
         # Now remove trailing delimiters after charge detection.
         new_adduct = re.sub("[\]/]", "", new_adduct)
-    
+
         # Unknown adduct.
         if new_adduct.lower() in map(
             str.lower, ["?", "??", "???", "M", "M+?", "M-?", "unk", "unknown"]
@@ -117,60 +118,57 @@ class AdductsCleaning:
             mol = mol[0], "M"
             charge, charge_sign = 1, "+"
         charges = {
-        # Positive, singly charged.
-        "H": 1,
-        "K": 1,
-        "Li": 1,
-        "Na": 1,
-        "NH4": 1,
-        # Positive, doubly charged.
-        "Ca": 2,
-        "Fe": 2,
-        "Mg": 2,
-        # Negative, singly charged.
-        "AC": -1,
-        "Ac": -1,
-        "Br": -1,
-        "C2H3O2": -1,
-        "C2H3OO": -1,
-        "CH3COO": -1,
-        "CHO2": -1,
-        "CHOO": -1,
-        "Cl": -1,
-        "FA": -1,
-        "Fa": -1,
-        "Formate": -1,
-        "formate": -1,
-        "H3C2OO": -1,
-        "HCO2": -1,
-        "HCOO": -1,
-        "I": -1,
-        "OAc": -1,
-        "Oac": -1,
-        "OFA": -1,
-        "OFa": -1,
-        "Ofa": -1,
-        "OH": -1,
-        # Neutral.
-        "ACN": 0,
-        "AcN": 0,
-        "EtOH": 0,
-        "H2O": 0,
-        "HFA": 0,
-        "i": 0,
-        "MeOH": 0,
-        "TFA": 0,
-        # Misceallaneous.
-        "Cat": 1,
-    }
+            # Positive, singly charged.
+            "H": 1,
+            "K": 1,
+            "Li": 1,
+            "Na": 1,
+            "NH4": 1,
+            # Positive, doubly charged.
+            "Ca": 2,
+            "Fe": 2,
+            "Mg": 2,
+            # Negative, singly charged.
+            "AC": -1,
+            "Ac": -1,
+            "Br": -1,
+            "C2H3O2": -1,
+            "C2H3OO": -1,
+            "CH3COO": -1,
+            "CHO2": -1,
+            "CHOO": -1,
+            "Cl": -1,
+            "FA": -1,
+            "Fa": -1,
+            "Formate": -1,
+            "formate": -1,
+            "H3C2OO": -1,
+            "HCO2": -1,
+            "HCOO": -1,
+            "I": -1,
+            "OAc": -1,
+            "Oac": -1,
+            "OFA": -1,
+            "OFa": -1,
+            "Ofa": -1,
+            "OH": -1,
+            # Neutral.
+            "ACN": 0,
+            "AcN": 0,
+            "EtOH": 0,
+            "H2O": 0,
+            "HFA": 0,
+            "i": 0,
+            "MeOH": 0,
+            "TFA": 0,
+            # Misceallaneous.
+            "Cat": 1,
+        }
         # Calculate the charge from the individual components.
         if charge_sign is None:
             charge = sum(
-                [
-                    count * charges.get(adduct, 0)
-                    for count, adduct in positive_parts
-                ]
-            )  + sum(
+                [count * charges.get(adduct, 0) for count, adduct in positive_parts]
+            ) + sum(
                 [
                     count * -abs(charges.get(adduct, 0))
                     for count, adduct in negative_parts
@@ -186,9 +184,5 @@ class AdductsCleaning:
             for count, adduct in positive_parts:
                 cleaned_adduct.append(f"+{count if count > 1 else ''}{adduct}")
         cleaned_adduct.append("]")
-        cleaned_adduct.append(
-            f"{abs(charge) if abs(charge) > 1 else ''}{charge_sign}"
-        )
+        cleaned_adduct.append(f"{abs(charge) if abs(charge) > 1 else ''}{charge_sign}")
         return "".join(cleaned_adduct)
-
-        

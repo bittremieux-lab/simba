@@ -1,4 +1,5 @@
 """A PyTorch Dataset class for annotated spectra."""
+
 from typing import Optional, Tuple
 
 import depthcharge
@@ -59,9 +60,7 @@ class SpectrumDatasetCasanovo(Dataset):
         """The number of spectra."""
         return self.n_spectra
 
-    def __getitem__(
-        self, idx
-    ) -> Tuple[torch.Tensor, float, int, Tuple[str, str]]:
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, float, int, Tuple[str, str]]:
         """
         Return the MS/MS spectrum with the given index.
 
@@ -157,9 +156,7 @@ class SpectrumDatasetCasanovo(Dataset):
             if len(spectrum.mz) == 0:
                 raise ValueError
             spectrum.scale_intensity("root", 1)
-            intensities = spectrum.intensity / np.linalg.norm(
-                spectrum.intensity
-            )
+            intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
             return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
         except ValueError:
             # Replace invalid spectra by a dummy spectrum.
@@ -184,4 +181,3 @@ class SpectrumDatasetCasanovo(Dataset):
     def rng(self, seed):
         """Set the NumPy random number generator."""
         self._rng = np.random.default_rng(seed)
-

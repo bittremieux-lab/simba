@@ -1,4 +1,3 @@
-
 import numpy as np
 from itertools import groupby
 import requests
@@ -7,14 +6,15 @@ import json
 import pandas as pd
 import functools
 
+
 class PreprocessingUtils:
 
     @staticmethod
     def is_centroid(intensity_array):
         return np.all(intensity_array > 0)
-    
+
     @staticmethod
-    def order_by_charge(spectrums): 
+    def order_by_charge(spectrums):
         spectrums_new = spectrums.copy()
 
         # Sort the list based on the property 'x' (optional, but required for groupby)
@@ -28,30 +28,30 @@ class PreprocessingUtils:
 
     @staticmethod
     def order_spectrums_by_mz(spectrums):
-        '''
+        """
         in order to take into account mass differences
-        '''
+        """
 
-        spectrums_by_charge =  PreprocessingUtils.order_by_charge(spectrums) # return a dictionary
-        
-        total_spectrums=[]
+        spectrums_by_charge = PreprocessingUtils.order_by_charge(
+            spectrums
+        )  # return a dictionary
+
+        total_spectrums = []
         for charge in spectrums_by_charge:
 
             # order by mz
             mzs = np.array([s.precursor_mz for s in spectrums_by_charge[charge]])
-            ordered_indexes= np.argsort(mzs)
+            ordered_indexes = np.argsort(mzs)
             temp_spectrums = [spectrums_by_charge[charge][r] for r in ordered_indexes]
             total_spectrums = total_spectrums + temp_spectrums
 
         return total_spectrums
-    
 
     def _smiles_to_mol(smiles):
         try:
             return Chem.MolFromSmiles(smiles)
         except ArgumentError:
             return None
-    
 
     @functools.lru_cache
     def get_class(inchi, smiles):
@@ -64,7 +64,8 @@ class PreprocessingUtils:
             mol = PreprocessingUtils._smiles_to_mol(smiles)
             clss = (
                 PreprocessingUtils._get_class("smiles", Chem.MolToSmiles(mol, False))
-                if mol is not None else None
+                if mol is not None
+                else None
             )
         return clss if clss is not None else (None, None, None)
 
@@ -80,9 +81,9 @@ class PreprocessingUtils:
             if not classyfire_json:
                 return None
             if (
-                "superclass" not in classyfire_json or
-                "class" not in classyfire_json or
-                "subclass" not in classyfire_json
+                "superclass" not in classyfire_json
+                or "class" not in classyfire_json
+                or "subclass" not in classyfire_json
             ):
                 return None
             superclass = classyfire_json["superclass"]
@@ -96,6 +97,4 @@ class PreprocessingUtils:
                 subclass = subclass["name"]
             return superclass, clss, subclass
         except json.decoder.JSONDecodeError:
-            return None   
-
-        
+            return None
