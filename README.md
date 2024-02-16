@@ -17,16 +17,14 @@ Development of a learned similarity model for MS/MS spectrums in order to predic
 
 ## GPU problem solving
 
-Make sure that pytorch library is not cpu one
+* Make sure that pytorch library is not the cpu one in order to use the gpu.
 
 conda remove pytorch cudatoolkit
 conda clean --all
 
-3)Instal things separately and activating tensorflow-
-
 conda install -c anaconda cudatoolkit (11.8)
 
-4)Instal PyTorch (GPU version compatible with CUDA verison):
+* Instal PyTorch (GPU version compatible with CUDA verison):
 
 conda install pytorch=2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
 
