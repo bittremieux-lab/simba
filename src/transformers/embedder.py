@@ -52,6 +52,7 @@ class Embedder(pl.LightningModule):
 
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
         self.regression_loss = nn.MSELoss(reduction="none")
+        self.dropout = nn.Dropout(p=dropout)
         # self.regression_loss = weighted_MSELoss()
 
         # Lists to store training and validation loss
@@ -95,6 +96,7 @@ class Embedder(pl.LightningModule):
 
         emb = torch.cat((emb, mass_0, charge_0, mass_1, charge_1), dim=1)
         emb = self.linear(emb)
+        emb = self.dropout(emb)
         emb = self.relu(emb)
         emb = self.linear_regression(emb)
 

@@ -45,9 +45,8 @@ class LossCallback(Callback):
         ax1.grid()
 
         ax2.plot(self.val_loss[1:], label="val epoch", marker="o", color="r")
-        ax2.plot(self.val_loss_step[1:], label="val step", marker="o", color="k")
         ax2.set_title("Val Loss")
-        ax2.set_xlabel("Number of Steps")
+        ax2.set_xlabel("Number of Epochs")
         ax2.set_ylabel("Loss")
         ax2.legend()
         ax2.grid()
