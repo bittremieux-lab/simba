@@ -37,6 +37,10 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
     def fit(self, X, y):
         return self
 
+    def predict_from_molecule_pair(self, molecule_pairs):
+        X= self.get_X_from_all_molecule_pairs(molecule_pairs)
+        return self.predict(X)
+        
     def predict(self, X):
         # Convert numpy array to PyTorch tensor
 
