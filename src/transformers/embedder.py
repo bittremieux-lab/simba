@@ -35,7 +35,7 @@ class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
 
     def __init__(self, d_model, n_layers, dropout=0.1, weights=None, lr=None, 
-                 use_element_wise=False, #element wise instead of concat for mixing info between embeddings
+                 use_element_wise=True, #element wise instead of concat for mixing info between embeddings
                  ):
         """Initialize the CCSPredictor"""
         super().__init__()
