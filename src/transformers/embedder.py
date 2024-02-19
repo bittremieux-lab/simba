@@ -34,15 +34,23 @@ pl.seed_everything(42, workers=True)
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
 
-    def __init__(self, d_model, n_layers, dropout=0.1, weights=None, lr=None):
+    def __init__(self, d_model, n_layers, dropout=0.1, weights=None, lr=None, 
+                 use_element_wise=False, #element wise instead of concat for mixing info between embeddings
+                 ):
         """Initialize the CCSPredictor"""
         super().__init__()
         self.weights = weights
 
         # Add a linear layer for projection
-        self.linear = nn.Linear(d_model * 2 + 4, 32)
+        self.use_element_wise = use_element_wise
+        if self.use_element_wise:
+            self.linear = nn.Linear(d_model, d_model)
+            self.linear_regression = nn.Linear(d_model, 1)
+        else:
+            self.linear = nn.Linear(d_model * 2 + 4, 32)
+            self.linear_regression = nn.Linear(32, 1)
         self.relu = nn.ReLU()
-        self.linear_regression = nn.Linear(32, 1)
+        
 
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
@@ -59,6 +67,7 @@ class Embedder(pl.LightningModule):
         self.train_loss_list = []
         self.val_loss_list = []
         self.lr = lr
+        
 
     def forward(self, batch):
         """The inference pass"""
@@ -86,15 +95,18 @@ class Embedder(pl.LightningModule):
         emb0 = emb0[:, 0, :]
         emb1 = emb1[:, 0, :]
 
-        emb = torch.cat((emb0, emb1), dim=1)
+        if self.use_element_wise:
+            emb = emb0 + emb1
+        else:
+            emb = torch.cat((emb0, emb1), dim=1)
+            # stack global features
+            mass_0 = batch["precursor_mass_0"].float()
+            charge_0 = batch["precursor_charge_0"].float()
+            mass_1 = batch["precursor_mass_1"].float()
+            charge_1 = batch["precursor_charge_1"].float()
+            
+            emb = torch.cat((emb, mass_0, charge_0, mass_1, charge_1), dim=1)
 
-        # stack global features
-        mass_0 = batch["precursor_mass_0"].float()
-        charge_0 = batch["precursor_charge_0"].float()
-        mass_1 = batch["precursor_mass_1"].float()
-        charge_1 = batch["precursor_charge_1"].float()
-
-        emb = torch.cat((emb, mass_0, charge_0, mass_1, charge_1), dim=1)
         emb = self.linear(emb)
         emb = self.dropout(emb)
         emb = self.relu(emb)

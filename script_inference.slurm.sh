@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -t 24:00:00
-#SBATCH -p  pascal_gpu
+#SBATCH -p  ampere_gpu
 #SBATCH --gpus=1
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
