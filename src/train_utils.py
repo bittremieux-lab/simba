@@ -225,9 +225,20 @@ class TrainUtils:
         counter_indexes = 0
 
         while counter_indexes < (max_combinations):
+
+            # to use the whole range or only a small range?
+            use_all_range= np.random.randint(0,2)
+
+            if use_all_range==1:
+                max_mass_diff_effective=10000
+                min_mass_diff_effective=0
+            else:
+                max_mass_diff_effective=max_mass_diff+0
+                min_mass_diff_effective=min_mass_diff+0
+
             i = np.random.randint(0, len(all_spectrums) - 2)
-            diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff)
-            diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff)
+            diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff_effective)
+            diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff_effective)
             min_mz_index = np.where((diff_total_min > 0))[0]
             max_mz_index = np.where((diff_total_max > 0))[0]  # get list
 
@@ -389,15 +400,15 @@ class TrainUtils:
             number_bins_effective = number_bins
 
         for p in range(number_bins_effective):
-            low = p * (1 / number_bins_effective)
+            low = p * (1 / number_bins)
 
             if bin_sim_1:
-                high = (p + 1) * (1 / number_bins_effective)
+                high = (p + 1) * (1 / number_bins)
             else:
                 if p == (number_bins_effective - 1):
                     high = 1 + 0.1
                 else:
-                    high = (p + 1) * (1 / number_bins_effective)
+                    high = (p + 1) * (1 / number_bins)
 
             # temp_molecule_pairs = [m for m in molecule_pairs if ((m.similarity>=low) and (m.similarity<high))]
             # check the similarity

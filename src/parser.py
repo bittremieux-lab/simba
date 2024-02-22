@@ -23,8 +23,11 @@ class Parser:
                 or (at == "D_MODEL")
                 or (at == "epochs")
             )
+            is_string_attribute= (at == 'extra_info')
             if is_integer_attribute:
                 self.parser.add_argument(f"--{at}", type=int, help=at, default=None)
+            elif is_string_attribute:
+                self.parser.add_argument(f"--{at}", type=str, help=at, default=None)
             else:
                 self.parser.add_argument(f"--{at}", type=float, help=at, default=None)
 
