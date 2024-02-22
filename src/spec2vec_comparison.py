@@ -39,6 +39,7 @@ class Spec2VecComparison:
         preprocessed_spectrums,
         target_hashes_subset,
         spec2vec_similarity,
+        compute_tanimoto=False, #if to retrieve the similarity from the molecular pairs
     ):
         tanimotos = []
         scores = []
@@ -66,8 +67,11 @@ class Spec2VecComparison:
 
                 score = score.scores_by_query(spectrum_found_1_ms, sort=True)[0][1]
 
-                tanimoto_measure = FingerprintSimilarity(similarity_measure="jaccard")
-                tani = tanimoto_measure.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+                if compute_tanimoto:
+                    tanimoto_measure = FingerprintSimilarity(similarity_measure="jaccard")
+                    tani = tanimoto_measure.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+                else:
+                    tani = m.similarity
                 tanimotos.append(tani)
                 # tanimotos.append(m.similarity)
                 scores.append(score)

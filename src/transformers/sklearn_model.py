@@ -38,18 +38,46 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_from_molecule_pair(self, molecule_pairs):
-        X= self.get_X_from_all_molecule_pairs(molecule_pairs)
+        X = self.get_X_from_all_molecule_pairs(molecule_pairs)
+
+        dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
+        dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
+         ##get item
+        dataiter = iter(dataloader_test)
+        item = next(dataiter)
+
+        # load size of each key:
+        self.size_per_key = self.load_size_per_key(item)
+
+        predictions = self.model.predict(
+            self.pytorch_object,
+            dataloader_test,
+        )
+
+        # flat the results
+        #flat_pred_test = []
+        #for pred in pred_test:
+        #    flat_pred_test = flat_pred_test + [float(p) for p in pred]
+
+        #return np.array(flat_pred_test)
         return self.predict(X)
         
     def predict(self, X):
+
+        
         # Convert numpy array to PyTorch tensor
 
         item = self.x_to_item(X.values, self.size_per_key)
         dataset_test = CustomDataset(item)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
-        print("Prediction has been called")
+        ##get item
+        dataiter = iter(dataloader_test)
+        item = next(dataiter)
+        # load size of each key:
+        self.size_per_key = self.load_size_per_key(item)
 
+        print("Prediction has been called")
         pred_test = self.model.predict(
             self.pytorch_object,
             dataloader_test,
