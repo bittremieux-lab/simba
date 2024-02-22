@@ -117,7 +117,7 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
 ## CALCULATION OF WEIGHTS
 train_binned_list, _ = TrainUtils.divide_data_into_bins(
-    molecule_pairs_train, bins_uniformise
+    molecule_pairs_train, config.bins_uniformise_TRAINING,
 )
 weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
