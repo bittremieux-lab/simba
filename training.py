@@ -230,6 +230,7 @@ if config.load_pretrained:
         n_layers=int(config.N_LAYERS),
         weights=None,
         lr=config.LR,
+        use_cosine_distance=config.use_cosine_distance,
     )
     print("Loaded pretrained model")
 else:
@@ -238,6 +239,7 @@ else:
         n_layers=int(config.N_LAYERS),
         weights=None,
         lr=config.LR,
+        use_cosine_distance=config.use_cosine_distance,
     )
     print("Not loaded pretrained model")
 

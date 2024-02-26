@@ -95,7 +95,8 @@ class Embedder(pl.LightningModule):
         emb1 = emb1[:, 0, :]
 
         if self.use_cosine_distance:
-            emb = F.cosine_similarity(emb0, emb1, dim=1)
+            #emb = F.cosine_similarity(emb0, emb1, dim=1)
+            emb = [emb0, emb1]
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)
@@ -113,16 +114,15 @@ class Embedder(pl.LightningModule):
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1)
 
-        # apply weight loss
 
-        # weight = 2*torch.abs(target.view(-1, 1)-0.5)
-        weight = 1
+        if not(self.use_cosine_distance):
+            # apply weight loss
+            weight = 1
+            loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+            loss = torch.mean(torch.mul(loss, weight))
+        else:
+            loss = self.cosine_loss(spec[0], spec[1], target)
 
-        # print('to compute loss')
-        loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
-        loss = torch.mean(torch.mul(loss, weight))
-
-        # print(loss)
         return loss.float()
 
     def training_step(self, batch, batch_idx):
@@ -141,7 +141,11 @@ class Embedder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         """A predict step"""
-        spec = self(batch)
+        if not(self.use_cosine_distance):
+            spec = self(batch)
+        else:
+            spec = self(batch)
+            spec = F.cosine_similarity(spec[0],spec[1])
         return spec
 
     def configure_optimizers(self):
