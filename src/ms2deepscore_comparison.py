@@ -51,6 +51,8 @@ class MS2DeepScoreComparison:
                 tanimotos.append(tani)
                 score = similarity_ms2.pair(spectrum_found_0_ms, spectrum_found_1_ms)
                 scores_ms2d.append(score)
-
+            else:
+                tanimotos.append(None)
+                scores_ms2d.append(None)
         return tanimotos, scores_ms2d
 
