@@ -6,5 +6,5 @@
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
 
-srun python inference.py --enable_progress_bar=0 
+srun python inference.py --enable_progress_bar=0 --extra_info=_cosine_sim 
 #srun python evaluate_model_outputs.py --enable_progress_bar=0

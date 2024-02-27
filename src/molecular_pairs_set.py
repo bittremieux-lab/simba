@@ -12,18 +12,45 @@ class MolecularPairsSet:
         it receives a set of spectrums, and a tuple with indexes i,j, tani tuple
         """
         self.spectrums = spectrums
-        self.indexes_tani = indexes_tani
 
+        # treat the first 2 columns as int and the 3 column as float
+        self.indexes_tani = MolecularPairsSet.adjust_data_format(np.array(indexes_tani))
+
+        
+        
+
+    @staticmethod
+    def adjust_data_format(indexes_tani):
+        # Extracting the first two columns and changing their data type to int
+        int_columns = indexes_tani[:, 0:2].astype(np.int32)
+
+        # Extracting the last column and changing its data type to float
+        float_column = indexes_tani[:, 2].astype(np.float32)
+
+        # Combining the modified columns to create a new array
+        new_indexes_tani = np.column_stack((int_columns, float_column))    
+        return new_indexes_tani
+    
     def __len__(self):
         return len(self.indexes_tani)
 
+    def are_spectrums_the_same(self, spectrums0, spectrums1):
+        spectrum_hash_0 = [s.spectrum_hash for s in spectrums0]
+        spectrum_hash_1 = [s.spectrum_hash for s in spectrums1]
+        return all([ s0==s1 for s0,s1 in zip(spectrum_hash_0, spectrum_hash_1)])
+
     def __add__(self, other):
         # only to be used when the spectrums are the same
-        new_spectrums = self.spectrums
-        new_indexes_tani = np.concatenate(
-            (self.indexes_tani, other.indexes_tani), axis=0
-        )
-        return MolecularPairsSet(spectrums=new_spectrums, indexes_tani=new_indexes_tani)
+
+        if self.are_spectrums_the_same(self.spectrums, other.spectrums):
+            new_spectrums = self.spectrums
+            new_indexes_tani = np.concatenate(
+                (self.indexes_tani, other.indexes_tani), axis=0
+            )
+            return MolecularPairsSet(spectrums=new_spectrums, indexes_tani=new_indexes_tani)
+        else:
+            print('ERROR: Attempting to add 2 set of spectrums with different content')
+            return 0
 
     def __getitem__(self, index):
         return self.get_molecular_pair(index)
@@ -138,6 +165,13 @@ class MolecularPairsSet:
             spectrums=self.spectrums, indexes_tani=np.array(indexes_tani)
         )
         return molecule_pairs
+
+    # remove janssen pairs from training and validation
+    def remove_library_pairs(self, library):
+        spectrums=self.spectrums
+        indexes_tani= self.indexes_tani
+        new_indexes_tani = [row for row in indexes_tani if ((spectrums[int(row[0])].library!=library)and (spectrums[int(row[1])].library!=library))]
+        return MolecularPairsSet(spectrums=spectrums, indexes_tani=new_indexes_tani)
 
     def filter_by_similarity(self, min_sim, max_sim):
         new_indexes_tani = self.indexes_tani[

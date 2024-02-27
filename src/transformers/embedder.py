@@ -57,7 +57,6 @@ class Embedder(pl.LightningModule):
             dropout=dropout,
         )
 
-        self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
         self.regression_loss = nn.MSELoss(reduction="none")
         self.dropout = nn.Dropout(p=dropout)
         # self.regression_loss = weighted_MSELoss()
@@ -95,8 +94,12 @@ class Embedder(pl.LightningModule):
         emb1 = emb1[:, 0, :]
 
         if self.use_cosine_distance:
-            #emb = F.cosine_similarity(emb0, emb1, dim=1)
-            emb = [emb0, emb1]
+            # Normalize input tensors
+            input0_normalized = F.normalize(emb0, p=2, dim=1)
+            input1_normalized = F.normalize(emb1, p=2, dim=1)
+
+            # Compute cosine similarity
+            emb = F.cosine_similarity(input0_normalized, input1_normalized)
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)
@@ -115,14 +118,12 @@ class Embedder(pl.LightningModule):
         target = target.view(-1)
 
 
-        if not(self.use_cosine_distance):
-            # apply weight loss
-            weight = 1
-            loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
-            loss = torch.mean(torch.mul(loss, weight))
-        else:
-            loss = self.cosine_loss(spec[0], spec[1], target)
 
+        # apply weight loss
+        weight = 1
+        loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        loss = torch.mean(torch.mul(loss, weight))
+        
         return loss.float()
 
     def training_step(self, batch, batch_idx):
@@ -141,11 +142,7 @@ class Embedder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         """A predict step"""
-        if not(self.use_cosine_distance):
-            spec = self(batch)
-        else:
-            spec = self(batch)
-            spec = F.cosine_similarity(spec[0],spec[1])
+        spec = self(batch)
         return spec
 
     def configure_optimizers(self):
