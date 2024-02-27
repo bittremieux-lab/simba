@@ -26,9 +26,9 @@ def write_data(
 
 
 # load data
-dataset_path_1 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240201_gnps_nist_janssen.pkl"
-dataset_path_2 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240205_gnps_nist_janssen_extra_5_millions.pkl"
-dataset_path_out = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240207_gnps_nist_janssen_15_millions.pkl"
+dataset_path_1 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240207_gnps_nist_janssen_15_millions.pkl"
+dataset_path_2 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240222_gnps_nist_janssen_extra_5_millions_OUTSIDE_MAX_DIFF.pkl"
+dataset_path_out = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF.pkl"
 
 print("Loading data 1 ... ")
 with open(dataset_path_1, "rb") as file:

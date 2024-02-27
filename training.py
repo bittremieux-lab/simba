@@ -173,10 +173,25 @@ del m_val
 
 print("Generating samplers")
 # data loaders
-train_sampler = WeightedRandomSampler(
+
+class CustomWeightedRandomSampler(WeightedRandomSampler):
+    """WeightedRandomSampler except allows for more than 2^24 samples to be sampled"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __iter__(self):
+        rand_tensor = np.random.choice(range(0, len(self.weights)),
+                                       size=self.num_samples,
+                                       p=self.weights.numpy() / torch.sum(self.weights).numpy(),
+                                       replace=self.replacement)
+        rand_tensor = torch.from_numpy(rand_tensor)
+        return iter(rand_tensor.tolist())
+    
+
+train_sampler = CustomWeightedRandomSampler(
     weights=weights_tr, num_samples=len(dataset_train), replacement=True
 )
-val_sampler = WeightedRandomSampler(
+val_sampler = CustomWeightedRandomSampler(
     weights=weights_val, num_samples=len(dataset_val), replacement=True
 )
 
