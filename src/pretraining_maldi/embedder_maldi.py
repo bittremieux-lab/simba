@@ -45,7 +45,8 @@ class EmbedderMaldi(pl.LightningModule):
         self.use_element_wise = use_element_wise
 
         #self.linear = nn.Linear(d_model, d_model)
-        self.linear_regression = nn.Linear(d_model, self.MAX_N_PEAKS)
+        self.linear = nn.Linear(d_model, d_model)
+        self.linear_output = nn.Linear(d_model, self.MAX_N_PEAKS)
     
         self.relu = nn.ReLU()
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
@@ -54,6 +55,7 @@ class EmbedderMaldi(pl.LightningModule):
             dropout=dropout,
         )
 
+        self.cross_entropy= nn.CrossEntropyLoss()
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
         self.regression_loss = nn.MSELoss(reduction="none")
         self.dropout = nn.Dropout(p=dropout)
@@ -75,8 +77,8 @@ class EmbedderMaldi(pl.LightningModule):
             "precursor_charge": batch["precursor_charge_0"].float(),
         }
         emb, _ = self.spectrum_encoder(
-            mz_array=batch["mz_0"].float(),
-            intensity_array=batch["intensity_0"].float(),
+            mz_array=batch["sampled_mz"].float(),
+            intensity_array=batch["sampled_intensity"].float(),
             **kwargs_0
         )
 
@@ -85,8 +87,9 @@ class EmbedderMaldi(pl.LightningModule):
         emb = self.linear(emb)
         emb = self.dropout(emb)
         emb = self.relu(emb)
-        emb = self.linear_regression(emb)
-
+        emb = self.linear_output(emb)
+        emb = self.relu(emb)
+        
         return emb
 
     def step(self, batch, batch_idx, threshold=0.5):
@@ -95,12 +98,11 @@ class EmbedderMaldi(pl.LightningModule):
 
         # Calculate the loss efficiently:
         #target = torch.tensor(batch["similarity"]).to(self.device)
-        target = torch.tensor(batch["intensity_0"]).to(self.device)
+        target = torch.tensor(batch["flips"]).to(self.device)
         target = target.view(-1,100)
 
         # print('to compute loss')
-        loss = self.regression_loss(spec.float(), target.view(-1, 100).float()).float()
-        loss = torch.mean(loss)
+        loss = self.cross_entropy(spec.float(), target.view(-1, 100).float()).float()
 
         # print(loss)
         return loss.float()

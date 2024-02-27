@@ -26,11 +26,16 @@ class LoadDataMaldi:
         print("Finished preprocessing ")
 
 
+        # basic features
         mz_0 = np.zeros((len(spectrums), max_num_peaks), dtype=np.float32)
         number_of_peaks= np.zeros((len(spectrums), 1), dtype=np.float32)
         intensity_0 = np.zeros((len(spectrums), max_num_peaks), dtype=np.float32)
         precursor_mass_0 = np.zeros((len(spectrums), 1), dtype=np.float32)
         precursor_charge_0 = np.zeros((len(spectrums), 1), dtype=np.int32)
+
+        # for self supervising approach
+        sampled_mz = np.zeros((len(spectrums),max_num_peaks ), dtype=np.float32)
+        sampled_intensity = np.zeros((len(spectrums),max_num_peaks ), dtype=np.float32)
         flips = np.zeros((len(spectrums), max_num_peaks), dtype=np.int32)
 
         print("Starting the loading of the data ...")
@@ -65,6 +70,9 @@ class LoadDataMaldi:
             "precursor_mass_0": precursor_mass_0,
             "precursor_charge_0": precursor_charge_0,
             "number_peaks": number_of_peaks.astype(int),
+
+            "sampled_mz":sampled_mz,
+            "sampled_intensity":sampled_intensity,
             "flips":flips,
         }
 
