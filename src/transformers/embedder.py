@@ -153,3 +153,41 @@ class Embedder(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         # optimizer = torch.optim.RAdam(self.parameters(), lr=1e-3)
         return optimizer
+
+
+    def load_weights(self):
+        weights={}
+        for name, param in self.named_parameters():
+                    weights[name]= np.array(param.data)
+        return weights
+    
+    def load_pretrained_maldi_embedder(self, model_path):
+        # original weights
+        original_weights = self.load_weights()
+
+        # Load weights from the checkpoint
+        checkpoint = torch.load(model_path, map_location='cpu',)
+
+        # Load weights into model B from the checkpoint
+        checkpoint_keys = checkpoint['state_dict'].keys()
+        original_embedder_keys = self.state_dict().keys()  # Assuming `model` is your target model
+
+        # Load weights for shared layers
+        for key in checkpoint_keys:
+            if key in original_embedder_keys:
+                self.state_dict()[key].copy_(checkpoint['state_dict'][key])
+
+        # new weights
+        new_weights = self.load_weights()
+        
+        ## sanity check (the weights of the model changed?):
+        if not(self.are_weights_changed(original_weights, new_weights)):
+            print('INFO: Correctly loaded pretrained Maldi Model')
+        else:
+            raise ValueError('ERROR!!!: Error loading Maldi model')
+
+    def are_weights_changed(self,original_weights, new_weights, layer_test='spectrum_encoder.transformer_encoder.layers.0.norm2.bias'):
+        return np.array_equal(original_weights[layer_test], new_weights[layer_test])
+    
+
+

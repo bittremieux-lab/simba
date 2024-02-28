@@ -11,13 +11,16 @@ class Config:
         # training
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 128  # transformer parameters
-        self.use_cosine_distance= True
+        self.use_cosine_distance= False
         self.LR = 1e-4
         self.epochs = 100
         self.BATCH_SIZE = 128
         self.enable_progress_bar = True
         self.threshold_class = 0.7  # threshold classification binary
-        self.load_pretrained = False
+
+        self.load_maldi_embedder=True
+        self.maldi_embedder_path='/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt'
+        self.load_pretrained = False # a whole SIMBA model
 
         self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF_NO_JANSSEN.pkl"
 
