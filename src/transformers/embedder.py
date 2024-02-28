@@ -57,6 +57,7 @@ class Embedder(pl.LightningModule):
             dropout=dropout,
         )
 
+        self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
         self.regression_loss = nn.MSELoss(reduction="none")
         self.dropout = nn.Dropout(p=dropout)
         # self.regression_loss = weighted_MSELoss()
@@ -95,11 +96,12 @@ class Embedder(pl.LightningModule):
 
         if self.use_cosine_distance:
             # Normalize input tensors
-            input0_normalized = F.normalize(emb0, p=2, dim=1)
-            input1_normalized = F.normalize(emb1, p=2, dim=1)
+            #input0_normalized = F.normalize(emb0, p=2, dim=1)
+            #input1_normalized = F.normalize(emb1, p=2, dim=1)
 
             # Compute cosine similarity
-            emb = F.cosine_similarity(input0_normalized, input1_normalized)
+            #emb = F.cosine_similarity(input0_normalized, input1_normalized)
+            emb = self.cos(emb0, emb1)
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)

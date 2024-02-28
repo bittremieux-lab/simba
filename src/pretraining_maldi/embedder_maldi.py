@@ -55,7 +55,6 @@ class EmbedderMaldi(pl.LightningModule):
             dropout=dropout,
         )
 
-        self.cross_entropy= nn.CrossEntropyLoss()
         self.cosine_loss = nn.CosineEmbeddingLoss(0.5)
         self.regression_loss = nn.MSELoss(reduction="none")
         self.dropout = nn.Dropout(p=dropout)
@@ -84,12 +83,10 @@ class EmbedderMaldi(pl.LightningModule):
 
 
         emb = emb[:, 0, :]
-        emb = self.linear(emb)
-        emb = self.dropout(emb)
-        emb = self.relu(emb)
+        emb= self.linear(emb)
+        emb=self.relu(emb)
         emb = self.linear_output(emb)
-        emb = self.relu(emb)
-        
+
         return emb
 
     def step(self, batch, batch_idx, threshold=0.5):
@@ -98,12 +95,23 @@ class EmbedderMaldi(pl.LightningModule):
 
         # Calculate the loss efficiently:
         #target = torch.tensor(batch["similarity"]).to(self.device)
+
+        
         target = torch.tensor(batch["flips"]).to(self.device)
         target = target.view(-1,100)
 
-        # print('to compute loss')
-        loss = self.cross_entropy(spec.float(), target.view(-1, 100).float()).float()
+        #print('target')
+        #print(target)
 
+        #print('spec')
+        #print(spec)
+        #print('')
+        # print('to compute loss')
+        #loss = self.cross_entropy(spec.float(), target.view(-1, 100).float()).float()
+        loss = F.binary_cross_entropy_with_logits(spec.float(), target.view(-1, 100).float()).float()
+
+        #print('loss')
+        #print(loss)
         # print(loss)
         return loss.float()
 
