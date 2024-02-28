@@ -101,7 +101,10 @@ class Embedder(pl.LightningModule):
 
             # Compute cosine similarity
             #emb = F.cosine_similarity(input0_normalized, input1_normalized)
+
+
             emb = self.cos(emb0, emb1)
+            emb = (emb + 1)/2 # change range from  -1-1 to 0-1
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)
@@ -116,16 +119,18 @@ class Embedder(pl.LightningModule):
         spec = self(batch)
 
         # Calculate the loss efficiently:
+        
+
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1)
 
-
-
+    
         # apply weight loss
         weight = 1
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
         loss = torch.mean(torch.mul(loss, weight))
         
+
         return loss.float()
 
     def training_step(self, batch, batch_idx):
