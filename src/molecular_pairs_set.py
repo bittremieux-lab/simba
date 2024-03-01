@@ -124,6 +124,21 @@ class MolecularPairsSet:
         self.indexes_tani = np.unique(self.indexes_tani, axis=0)
         return self
 
+    def get_janssen_pairs(self):
+        """
+        filter our pairs that are not from janssen
+        """
+        indexes_tani = []
+        for i, m in enumerate([mol for mol in self]):
+            if (m.spectrum_object_0.library == 'janssen') and (m.spectrum_object_1.library == 'janssen'):
+                    # molecule_pairs.append(m)
+                    indexes_tani.append(self.indexes_tani[i])
+
+        molecule_pairs = MolecularPairsSet(
+            spectrums=self.spectrums, indexes_tani=np.array(indexes_tani)
+        )
+        return molecule_pairs
+    
     def get_gnps_pairs(self):
         """
         filter only pairs that have exclusively gnps data
@@ -141,6 +156,7 @@ class MolecularPairsSet:
             spectrums=self.spectrums, indexes_tani=np.array(indexes_tani)
         )
         return molecule_pairs
+    
 
     def get_no_gnps_pairs(self):
         """

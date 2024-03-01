@@ -66,8 +66,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
 
         
         # Convert numpy array to PyTorch tensor
-
-        item = self.x_to_item(X, self.size_per_key)
+        item = self.x_to_item(X.values, self.size_per_key)
         dataset_test = CustomDataset(item)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
