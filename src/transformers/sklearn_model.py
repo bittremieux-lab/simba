@@ -67,7 +67,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         
         # Convert numpy array to PyTorch tensor
 
-        item = self.x_to_item(X.values, self.size_per_key)
+        item = self.x_to_item(X, self.size_per_key)
         dataset_test = CustomDataset(item)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
@@ -173,10 +173,17 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         # load size of each key:
         self.size_per_key = self.load_size_per_key(item)
 
-        explainer = shap.Explainer(
+        #explainer = shap.Explainer(
+        #    self.predict,
+        #    X_total,
+        #)
+
+        explainer = shap.KernelExplainer(
             self.predict,
-            X_total,
+            X_total[0:100],
         )
+
+        
 
         return explainer
 

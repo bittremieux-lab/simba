@@ -72,8 +72,10 @@ class EmbedderMaldi(pl.LightningModule):
 
         # extra data
         kwargs_0 = {
-            "precursor_mass": batch["precursor_mass_0"].float(),
-            "precursor_charge": batch["precursor_charge_0"].float(),
+            #"precursor_mass": batch["precursor_mass_0"].float(), 
+            #"precursor_charge": batch["precursor_charge_0"].float(),
+            "precursor_mass": 0*batch["precursor_mass_0"].float(),  #put to zero to not use precursor information
+            "precursor_charge": 0*batch["precursor_charge_0"].float(),
         }
         emb, _ = self.spectrum_encoder(
             mz_array=batch["sampled_mz"].float(),

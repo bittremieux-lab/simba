@@ -37,12 +37,12 @@ class SelfSupervision:
         # no interchange the intensities
         no_flip_mz= data_sample['mz_0'][no_flip_peaks]
         no_flip_int= data_sample['intensity_0'][no_flip_peaks]
-        no_flip_mask = np.ones(len(no_flip_peaks))
+        no_flip_mask = np.zeros(len(no_flip_peaks))
 
         # interchange the intensities
         #flip_mz= data_sample['mz_0'][flip_peaks]  # the MZ values are not interchanged
         flip_mz, flip_int = SelfSupervision.get_random_peaks(data_total, len(flip_peaks))
-        flip_mask = np.zeros(len(flip_peaks))
+        flip_mask = np.ones(len(flip_peaks))
         
         
         # concatenate 
