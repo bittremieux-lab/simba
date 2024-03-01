@@ -50,7 +50,7 @@ class Embedder(pl.LightningModule):
             self.linear_regression = nn.Linear(32, 1)
         self.relu = nn.ReLU()
         
-
+        
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
             n_layers=n_layers,
@@ -67,6 +67,16 @@ class Embedder(pl.LightningModule):
         self.val_loss_list = []
         self.lr = lr
         self.use_cosine_distance=use_cosine_distance
+        if self.use_cosine_distance:
+            self.linear_cosine = nn.Linear(d_model, d_model)
+    def normalized_dot_product(self,a, b):
+        # Normalize inputs
+        a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
+        b_norm = torch.nn.functional.normalize(b, p=2, dim=-1)
+        
+        # Compute dot product
+        dot_product = torch.sum(a_norm * b_norm, dim=-1)
+        return dot_product
 
     def forward(self, batch):
         """The inference pass"""
@@ -102,8 +112,9 @@ class Embedder(pl.LightningModule):
             # Compute cosine similarity
             #emb = F.cosine_similarity(input0_normalized, input1_normalized)
 
+            # apply a linear function to the embeddings
 
-            emb = self.cos(emb0, emb1)
+            emb = self.normalized_dot_product(emb0, emb1)
             emb = (emb + 1)/2 # change range from  -1-1 to 0-1
         else:
             emb = emb0 + emb1

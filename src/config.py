@@ -18,7 +18,7 @@ class Config:
         self.enable_progress_bar = True
         self.threshold_class = 0.7  # threshold classification binary
 
-        self.load_maldi_embedder=True
+        self.load_maldi_embedder=False
         self.maldi_embedder_path='/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt'
         self.load_pretrained = False # a whole SIMBA model
 
