@@ -237,6 +237,21 @@ progress_bar_callback = ProgressBar()
 losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
 
 print("define model")
+
+
+    
+model = Embedder(
+        d_model=int(config.D_MODEL),
+        n_layers=int(config.N_LAYERS),
+        weights=None,
+        lr=config.LR,
+        use_cosine_distance=config.use_cosine_distance,
+    )
+
+
+if config.load_maldi_embedder:
+    model.load_pretrained_maldi_embedder(config.maldi_embedder_path)
+    
 # Create a model:
 if config.load_pretrained:
     model = Embedder.load_from_checkpoint(
@@ -249,13 +264,6 @@ if config.load_pretrained:
     )
     print("Loaded pretrained model")
 else:
-    model = Embedder(
-        d_model=int(config.D_MODEL),
-        n_layers=int(config.N_LAYERS),
-        weights=None,
-        lr=config.LR,
-        use_cosine_distance=config.use_cosine_distance,
-    )
     print("Not loaded pretrained model")
 
 trainer = pl.Trainer(
