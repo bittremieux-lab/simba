@@ -15,7 +15,7 @@ from datetime import datetime
 from rdkit import Chem
 from itertools import product
 from numba import njit
-
+import pandas as pd
 
 class TrainUtils:
 
@@ -183,6 +183,35 @@ class TrainUtils:
         return number_of_pairs
 
     @staticmethod
+    def precompute_min_max_indexes(all_spectrums, min_mass_diff, max_mass_diff):
+            '''
+            precompute the min and max indexes for molecule pair computation
+            '''
+
+            print('Precomputing min and max index')
+            df = pd.DataFrame()
+
+            # get mz
+            total_mz = np.array([s.precursor_mz for s in all_spectrums])
+            df['index']= [i for i, s in all_spectrums]
+            for i, s in enumerate(all_spectrums):
+                # compute max and min
+                diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff)
+                diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff)
+                min_mz_index = np.where((diff_total_min > 0))[0]
+                max_mz_index = np.where((diff_total_max > 0))[0]  # get list
+
+                min_mz_index = min_mz_index[0] if len(min_mz_index) > 0 else 0
+                max_mz_index = (
+                    max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
+                )
+                df.loc[i,'min_index']=min_mz_index
+                df.loc[i, 'max_index']=max_mz_index
+            
+            return df
+                
+
+    @staticmethod
     def compute_all_tanimoto_results(
         all_spectrums,
         max_combinations=1000000,
@@ -224,28 +253,40 @@ class TrainUtils:
         print(f"Number of workers: {num_workers}")
         counter_indexes = 0
 
+
+        # precompute min and max index
+        df_precomputed_indexes= TrainUtils.precompute_min_max_indexes(all_spectrums, min_mass_diff=min_mass_diff, max_mass_diff=max_mass_diff)
+        
         while counter_indexes < (max_combinations):
 
             # to use the whole range or only a small range?
             use_all_range= np.random.randint(0,2)
 
-            if use_all_range==1:
-                max_mass_diff_effective=10000
-                min_mass_diff_effective=0
-            else:
-                max_mass_diff_effective=max_mass_diff+0
-                min_mass_diff_effective=min_mass_diff+0
+            #if use_all_range==1:
+            #    max_mass_diff_effective=10000
+            #    min_mass_diff_effective=0
+            #else:
+            #    max_mass_diff_effective=max_mass_diff+0
+            #    min_mass_diff_effective=min_mass_diff+0
 
+            #i = np.random.randint(0, len(all_spectrums) - 2)
+            #diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff_effective)
+            #diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff_effective)
+            #min_mz_index = np.where((diff_total_min > 0))[0]
+            #max_mz_index = np.where((diff_total_max > 0))[0]  # get list
+
+            #min_mz_index = min_mz_index[0] if len(min_mz_index) > 0 else 0
+            #max_mz_index = (
+            #    max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
+            #)
+            
             i = np.random.randint(0, len(all_spectrums) - 2)
-            diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff_effective)
-            diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff_effective)
-            min_mz_index = np.where((diff_total_min > 0))[0]
-            max_mz_index = np.where((diff_total_max > 0))[0]  # get list
-
-            min_mz_index = min_mz_index[0] if len(min_mz_index) > 0 else 0
-            max_mz_index = (
-                max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
-            )
+            if use_all_range==1:
+                min_mz_index = 0
+                max_mz_index= len(all_spectrums)
+            else:
+                min_mz_index = df_precomputed_indexes.loc[i, 'min_index']
+                max_mz_index = df_precomputed_indexes.loc[i, 'max_index']
 
             # get the other index
             j = random.randint(min_mz_index, max_mz_index)
@@ -278,6 +319,80 @@ class TrainUtils:
 
         print(datetime.now())
         return molecular_pair_set
+
+    @staticmethod
+    def compute_all_tanimoto_simple(
+        all_spectrums,
+        max_combinations=1000000,
+        limit_low_tanimoto=True,
+        max_low_pairs=0.5,
+        use_tqdm=True,
+        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
+        min_mass_diff=0,
+        num_workers=15,
+        MIN_SIM=0.8,
+        MAX_SIM=1,
+    ):
+        '''
+        compute tanimoto without ordering by mz
+        '''
+        # indexes=[]
+        indexes_np = np.zeros((max_combinations, 3))
+        counter_indexes = 0
+        # Iterate through the list to form pairsi
+
+        print("Computing all the tanimoto results")
+        if use_tqdm:
+            # Initialize tqdm with the total number of iterations
+            progress_bar = tqdm(total=max_combinations, desc="Processing")
+            # progress_bar = tqdm(total=len(all_spectrums), desc="Processing")
+        # Compute all the fingerprints:
+        print("Compute all the fingerprints")
+        fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
+
+        # get random indexes for the first part of the pair
+        # random_i_np = np.random.randint(0, len(all_spectrums)-2, max_combinations)
+
+        print(f"Number of workers: {num_workers}")
+        counter_indexes = 0
+
+        while counter_indexes < (max_combinations):
+
+            # to use the whole range or only a small range?
+
+            i = np.random.randint(0, len(all_spectrums) - 1)
+            j=  np.random.randint(0, len(all_spectrums) - 1)
+
+
+            # Submit the task to the executor
+            tani = Tanimoto.compute_tanimoto(
+                fingerprints[i],
+                fingerprints[j],
+            )
+
+            if tani is not None:
+                # if tani>MIN_SIM and tani<MAX_SIM:
+                if (counter_indexes < max_low_pairs * max_combinations) or (tani > 0.5):
+
+                    indexes_np[counter_indexes, 0] = i
+                    indexes_np[counter_indexes, 1] = j
+                    indexes_np[counter_indexes, 2] = tani
+                    counter_indexes = counter_indexes + 1
+                    if use_tqdm:
+                        progress_bar.update(1)
+
+        # avoid duplicates:
+        indexes_np = np.unique(indexes_np, axis=0)
+
+        print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
+        # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+        molecular_pair_set = MolecularPairsSet(
+            spectrums=all_spectrums, indexes_tani=indexes_np
+        )
+
+        print(datetime.now())
+        return molecular_pair_set
+
 
     @staticmethod
     def compute_all_tanimoto_results_parallel(
