@@ -67,6 +67,7 @@ class Plotting:
         plt.title(title)
         plt.legend(loc="lower right")
         #plt.savefig(roc_file_path)
+        return tpr, fpr
 
     @staticmethod
     def plot_n_roc_curves(y_true_list, y_scores_list, labels, colors, title="ROC Curve",):
