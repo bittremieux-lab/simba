@@ -183,7 +183,7 @@ class TrainUtils:
         return number_of_pairs
 
     @staticmethod
-    def precompute_min_max_indexes(all_spectrums, min_mass_diff, max_mass_diff):
+    def precompute_min_max_indexes(all_spectrums, min_mass_diff, max_mass_diff, use_tqdm):
             '''
             precompute the min and max indexes for molecule pair computation
             '''
@@ -193,8 +193,8 @@ class TrainUtils:
 
             # get mz
             total_mz = np.array([s.precursor_mz for s in all_spectrums])
-            df['index']= [i for i, s in all_spectrums]
-            for i, s in enumerate(all_spectrums):
+            df['index']= [i for i,s in enumerate(all_spectrums)]
+            for i, s in tqdm(enumerate(all_spectrums)):
                 # compute max and min
                 diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff)
                 diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff)
@@ -207,7 +207,7 @@ class TrainUtils:
                 )
                 df.loc[i,'min_index']=min_mz_index
                 df.loc[i, 'max_index']=max_mz_index
-            
+                #print(f'min_index: {min_mz_index},max_index:{max_mz_index}')
             return df
                 
 
@@ -235,6 +235,8 @@ class TrainUtils:
 
         # indexes=[]
         indexes_np = np.zeros((max_combinations, 3))
+        indexes_np = MolecularPairsSet.adjust_data_format(np.array(indexes_np))
+
         counter_indexes = 0
         # Iterate through the list to form pairsi
 
@@ -255,7 +257,7 @@ class TrainUtils:
 
 
         # precompute min and max index
-        df_precomputed_indexes= TrainUtils.precompute_min_max_indexes(all_spectrums, min_mass_diff=min_mass_diff, max_mass_diff=max_mass_diff)
+        df_precomputed_indexes= TrainUtils.precompute_min_max_indexes(all_spectrums, min_mass_diff=min_mass_diff, max_mass_diff=max_mass_diff, use_tqdm=use_tqdm)
         
         while counter_indexes < (max_combinations):
 
@@ -279,17 +281,18 @@ class TrainUtils:
             #max_mz_index = (
             #    max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
             #)
-            
-            i = np.random.randint(0, len(all_spectrums) - 2)
+
+            i = np.random.randint(0, len(all_spectrums) - 1)
             if use_all_range==1:
                 min_mz_index = 0
-                max_mz_index= len(all_spectrums)
+                max_mz_index= len(all_spectrums)-1
             else:
                 min_mz_index = df_precomputed_indexes.loc[i, 'min_index']
                 max_mz_index = df_precomputed_indexes.loc[i, 'max_index']
 
             # get the other index
             j = random.randint(min_mz_index, max_mz_index)
+
 
             # Submit the task to the executor
             tani = Tanimoto.compute_tanimoto(

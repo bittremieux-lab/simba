@@ -55,6 +55,9 @@ class Plotting:
 
         # plt.figure(figsize=(8, 8))
         plt.plot(fpr, tpr, color=color, lw=2, label=f"{label} AUC = {roc_auc:.2f}",)
+
+        print(f'tpr: {tpr}')
+        print(f'fpr: {fpr}')
         # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.0])

@@ -24,7 +24,7 @@ janssen_path = r"/scratch/antwerpen/209/vsc20939/data/drug_plus.mgf"
 
 # pickle files
 output_pairs_file = (
-    "../data/merged_gnps_nist_20240222_gnps_nist_janssen_extra_5_millions_OUTSIDE_MAX_DIFF.pkl"
+    "../data/merged_gnps_nist_20240301_gnps_nist_100_millions.pkl"
 )
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
@@ -35,7 +35,7 @@ output_spectrums_file = "../data/all_spectrums_gnps_nist_20240201_gnps_nist_jans
 max_number_spectra_gnps = 1000000000
 max_number_spectra_janssen = 1000000000
 max_number_spectra_nist = 10000000000
-train_molecules = 5 * (10**6)
+train_molecules = 100 * (10**6)
 val_molecules = 10**6
 test_molecules = 10**6
 
