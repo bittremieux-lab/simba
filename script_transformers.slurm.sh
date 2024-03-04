@@ -8,5 +8,5 @@ source activate transformers
 
 nvidia-smi 
 
-srun python training.py --enable_progress_bar=0  --load_pretrained=1 --extra_info=_no_use_maldi
+srun python training.py --enable_progress_bar=0  --load_maldi_embedder=1 --extra_info=_comparison_use_maldi
 srun python inference.py --enable_progress_bar=0
