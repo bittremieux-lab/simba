@@ -27,8 +27,20 @@ from src.config import Config
 # sns.set_style("ticks")
 
 # Set random seeds
-pl.seed_everything(42, workers=True)
+#pl.seed_everything(42, workers=True)
+class FixedLinearRegression(nn.Module):
+    def __init__(self, d_model):
+        super(FixedLinearRegression, self).__init__()
+        self.weight = nn.Parameter(torch.ones(1, d_model))  # Fixed weight initialized to 1
+        self.bias = nn.Parameter(torch.zeros(1))  # Bias initialized to 0
 
+        # Freeze the parameters
+        self.weight.requires_grad = False
+        self.bias.requires_grad = False
+
+    def forward(self, x):
+        return torch.matmul(x, self.weight.t()) + self.bias
+    
 
 class Embedder(pl.LightningModule):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
@@ -42,12 +54,10 @@ class Embedder(pl.LightningModule):
 
         # Add a linear layer for projection
         self.use_element_wise = use_element_wise
-        if self.use_element_wise:
-            self.linear = nn.Linear(d_model, d_model)
-            self.linear_regression = nn.Linear(d_model, 1)
-        else:
-            self.linear = nn.Linear(d_model * 2 + 4, 32)
-            self.linear_regression = nn.Linear(32, 1)
+        self.linear = nn.Linear(d_model, d_model)
+        self.linear_regression = nn.Linear(d_model, 1)
+        self.fixed_linear_regression= FixedLinearRegression(d_model)
+
         self.relu = nn.ReLU()
         
         
@@ -57,8 +67,11 @@ class Embedder(pl.LightningModule):
             dropout=dropout,
         )
 
-        self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
-        self.regression_loss = nn.MSELoss(reduction="none")
+        self.linear_pre_embedding_1= nn.Linear(d_model, d_model)
+        self.linear_pre_embedding_2= nn.Linear(d_model, d_model)
+
+        #self.regression_loss = nn.MSELoss(reduction="none")
+        self.regression_loss = nn.MSELoss()
         self.dropout = nn.Dropout(p=dropout)
         # self.regression_loss = weighted_MSELoss()
 
@@ -69,6 +82,8 @@ class Embedder(pl.LightningModule):
         self.use_cosine_distance=use_cosine_distance
         if self.use_cosine_distance:
             self.linear_cosine = nn.Linear(d_model, d_model)
+
+
     def normalized_dot_product(self,a, b):
         # Normalize inputs
         a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
@@ -105,17 +120,10 @@ class Embedder(pl.LightningModule):
         emb1 = emb1[:, 0, :]
 
         if self.use_cosine_distance:
-            # Normalize input tensors
-            #input0_normalized = F.normalize(emb0, p=2, dim=1)
-            #input1_normalized = F.normalize(emb1, p=2, dim=1)
-
-            # Compute cosine similarity
-            #emb = F.cosine_similarity(input0_normalized, input1_normalized)
-
-            # apply a linear function to the embeddings
-
-            emb = self.normalized_dot_product(emb0, emb1)
-            emb = (emb + 1)/2 # change range from  -1-1 to 0-1
+            emb0_l2 = torch.norm(emb0, p=2, dim=-1,keepdim=True)
+            emb1_l2 = torch.norm(emb1, p=2, dim=-1,keepdim=True)
+            emb = (emb0*emb1)/(emb0_l2*emb1_l2)
+            emb = self.fixed_linear_regression(emb)
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)
@@ -129,19 +137,29 @@ class Embedder(pl.LightningModule):
         """A training/validation/inference step."""
         spec = self(batch)
 
-        # Calculate the loss efficiently:
         
 
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1)
 
-    
-        # apply weight loss
-        weight = 1
-        loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
-        loss = torch.mean(torch.mul(loss, weight))
         
 
+        # apply weight loss
+        #weight = 1
+        #loss_no_reduction = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        #loss = torch.mean(torch.mul(loss_no_reduction, weight))
+        loss= self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
+        #if loss.float() < 0.1:
+        #    print('')
+        #    # Calculate the loss efficiently:
+        #    print('spec')
+        #    print(spec) 
+        #    print('target')
+        #    print(target)
+        #    #print('loss_no_reduction')
+        #    #print(loss_no_reduction)
+        #    print('loss')
+        #    print(loss)
         return loss.float()
 
     def training_step(self, batch, batch_idx):
@@ -206,4 +224,21 @@ class Embedder(pl.LightningModule):
         return np.array_equal(original_weights[layer_test], new_weights[layer_test])
     
 
+    def set_freeze_layers(self, layer_names_to_freeze, freeze):
+        # Freeze specified layers
+        for name, param in self.named_parameters():
+            if any(layer_name in name for layer_name in layer_names_to_freeze):
+                param.requires_grad = not(freeze)  
+            else:
+                param.requires_grad = True
 
+
+    def get_maldi_embedder_keys(self, model_path):
+        # Load weights from the checkpoint
+        checkpoint = torch.load(model_path, map_location='cpu',)
+
+        # Load weights into model B from the checkpoint
+        return checkpoint['state_dict'].keys()
+    
+    def get_all_keys(self):
+        return self.state_dict().keys()

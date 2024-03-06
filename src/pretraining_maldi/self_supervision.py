@@ -1,19 +1,22 @@
 import numpy as np
 import random
-
+import math
 class SelfSupervision:
     @staticmethod
-    def modify_peaks(data_sample, data_total, prob_peaks=0.5, max_peaks=100, prop_no_flips=0.5):
+    def modify_peaks(data_sample, data_total, prob_peaks=0.6, max_peaks=100, prop_no_flips=0.5):
         '''
         it receives a dara row, and the total dataset. It must apply the sampling for selecting 15% of the peaks for training.
         '''
 
 
         # select the number of samples taken
+        number_peaks= data_sample['number_peaks'][0]
+        number_peaks_sampled= ((prob_peaks)*number_peaks).astype(int)
 
-        number_peaks_sampled= ((prob_peaks)*data_sample['number_peaks'][0]).astype(int)
+        #peak at least 2
+        number_peaks_sampled = max(number_peaks_sampled,2)
         # Select the peaks
-        peaks_sampled = np.random.choice( data_sample['number_peaks'][0], size=number_peaks_sampled, replace=False) 
+        peaks_sampled = np.random.choice( number_peaks, size=number_peaks_sampled, replace=False) 
 
         #print(f'peaks_sampled')
         #print(peaks_sampled)
@@ -32,37 +35,38 @@ class SelfSupervision:
         # create vector of output
         output_mz = np.zeros((max_peaks ), dtype=np.float32)
         output_intensity = np.zeros((max_peaks ), dtype=np.float32)
-        sample_mask = np.zeros((max_peaks), dtype=np.int32)
+        output_mask = np.zeros((max_peaks), dtype=np.int32)
 
-        # no interchange the intensities
-        no_flip_mz= data_sample['mz_0'][no_flip_peaks]
-        no_flip_int= data_sample['intensity_0'][no_flip_peaks]
-        no_flip_mask = np.zeros(len(no_flip_peaks))
+        # get mz and intensity
+        new_mz = data_sample['mz_0'].copy()[0:number_peaks]
+        new_intensity = data_sample['intensity_0'].copy()[0:number_peaks]
+        new_mask = np.zeros(number_peaks, dtype=np.int32)
+
+        # for the no flip peaks we only set the mask with the correspoding no flip code=1
+        new_mask[no_flip_peaks]= 1
+        #no_flip_mz= data_sample['mz_0'][no_flip_peaks]
+        #no_flip_int= data_sample['intensity_0'][no_flip_peaks]
+        #no_flip_mask = 1*np.ones(len(no_flip_peaks))  # 1 if it was selected as no flip
 
         # interchange the intensities
         #flip_mz= data_sample['mz_0'][flip_peaks]  # the MZ values are not interchanged
         flip_mz, flip_int = SelfSupervision.get_random_peaks(data_total, len(flip_peaks))
-        flip_mask = np.ones(len(flip_peaks))
-        
+        #flip_mask = 2*np.ones(len(flip_peaks)) # 2 if it was selected as flip
+        new_mz[flip_peaks] = flip_mz
+        new_intensity[flip_peaks]=flip_int
+        new_mask[flip_peaks] =2
         
         # concatenate 
-        mz = np.concatenate([no_flip_mz, flip_mz])
-        intensity = np.concatenate([no_flip_int, flip_int])
-        
-        
-        mask = np.concatenate([no_flip_mask,flip_mask], axis=0)
+        #mz = np.concatenate([no_flip_mz, flip_mz])
+        #intensity = np.concatenate([no_flip_int, flip_int])
+        #mask = np.concatenate([no_flip_mask,flip_mask], axis=0)
 
         #order by mz
         
-        ordered_indexes = np.argsort(mz)
-        mz= mz[ordered_indexes]
-        intensity= intensity[ordered_indexes]
-        mask = mask[ordered_indexes]
-
-        # assign values
-        output_mz[0:len(mz)]= mz
-        output_intensity[0:len(mz)]=intensity
-        sample_mask[0:len(mz)]=mask 
+        ordered_indexes = np.argsort(new_mz)
+        new_mz= new_mz[ordered_indexes]
+        new_intensity= new_intensity[ordered_indexes]
+        new_mask = new_mask[ordered_indexes]
         
         # assign values
         #output_mz[no_flip_peaks] = no_flip_mz
@@ -78,15 +82,23 @@ class SelfSupervision:
         #print('sample_mask')
         #print(sample_mask)
         # normalize intensity
+
+        # assign values
+        output_mz[0:number_peaks]=new_mz
+        output_intensity[0:number_peaks]=new_intensity
+        output_mask[0:number_peaks]=new_mask
+
+        # normalization
         output_intensity = output_intensity / np.sqrt(
             np.sum(output_intensity**2, axis=0, keepdims=True)
         ) 
+
         # modify the flips array accordingly
         data_sample['sampled_mz']=output_mz
         data_sample['sampled_intensity']=output_intensity
         #data_sample['no_flip_peaks_indexes']=no_flip_peaks
         #data_sample['flip_peaks_indexes'] = flip_peaks
-        data_sample['flips']= sample_mask #1 if the peak is not exchanged
+        data_sample['flips']= output_mask #1 if the peak is not exchanged
 
         
         return data_sample
