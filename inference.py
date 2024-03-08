@@ -33,9 +33,9 @@ fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 roc_file_path = config.CHECKPOINT_DIR + f"roc_curve_{config.MODEL_CODE}.png"
 enable_progress_bar = config.enable_progress_bar
 write_uniform_test_data = True
-uniformed_molecule_pairs_test_path = (
-    "/scratch/antwerpen/209/vsc20939/data/uniformed_molecule_pairs_test.pkl"
-)
+#uniformed_molecule_pairs_test_path = (
+#    "/scratch/antwerpen/209/vsc20939/data/uniformed_molecule_pairs_test.pkl"
+#)
 
 if not os.path.exists(config.CHECKPOINT_DIR):
     os.makedirs(config.CHECKPOINT_DIR)
@@ -94,7 +94,9 @@ dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
 trainer = pl.Trainer(max_epochs=2, enable_progress_bar=enable_progress_bar)
 best_model = Embedder.load_from_checkpoint(
-    best_model_path, d_model=int(config.D_MODEL), n_layers=int(config.N_LAYERS)
+    best_model_path, d_model=int(config.D_MODEL), 
+    n_layers=int(config.N_LAYERS),
+    use_element_wise=True, use_cosine_distance=config.use_cosine_distance, 
 )
 
 # plot loss:

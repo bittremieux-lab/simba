@@ -60,13 +60,13 @@ class DetSimilarity:
 
     @staticmethod
     def call_saved_transformer_model(
-        molecule_pairs, model_file, d_model=64, n_layers=2, batch_size=128
+        molecule_pairs, model_file, d_model=64, n_layers=2, batch_size=128, use_cosine_distance=True,
     ):
         # transformer
         dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False)
         best_model = Embedder.load_from_checkpoint(
-            model_file, d_model=d_model, n_layers=n_layers
+            model_file, d_model=d_model, n_layers=n_layers, use_cosine_distance=use_cosine_distance,
         )
         trainer = pl.Trainer(max_epochs=1, enable_progress_bar=False)
         pred_test = trainer.predict(best_model, dataloader_test)
@@ -111,7 +111,9 @@ class DetSimilarity:
         scores = []
         # model_scores = DetSimilarity.call_saved_model(molecule_pairs, model_file)
         model_scores = DetSimilarity.call_saved_transformer_model(
-            molecule_pairs, model_file, d_model=config.D_MODEL, n_layers=config.N_LAYERS
+            molecule_pairs, model_file, d_model=config.D_MODEL, 
+            n_layers=config.N_LAYERS, 
+            use_cosine_distance=config.use_cosine_distance,
         )
 
         for i, m in tqdm(enumerate(molecule_pairs)):
