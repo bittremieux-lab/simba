@@ -16,7 +16,8 @@ from rdkit import Chem
 from itertools import product
 from numba import njit
 import pandas as pd
-
+from src.spectrum_ext import SpectrumExt
+from src.molecule_pairs_opt import MoleculePairsOpt
 class TrainUtils:
 
     @staticmethod
@@ -209,7 +210,114 @@ class TrainUtils:
                 df.loc[i, 'max_index']=max_mz_index
                 #print(f'min_index: {min_mz_index},max_index:{max_mz_index}')
             return df
+
+    @staticmethod
+    def get_unique_spectra(all_spectrums):
+        '''
+        table witht he information of indexes per unique smiles
+        
+        '''        
+        canon_smiles= [Chem.CanonSmiles(s.smiles) for s in all_spectrums]
+
+        print('getting metadata')
+        #get all metadata
+        all_mz= [s.precursor_mz for s in all_spectrums]
+        all_charge = [s.precursor_charge for s in all_spectrums]
+        all_library= [s.library for s in all_spectrums]
+        all_inchi = [s.inchi for s in all_spectrums]
+        all_ionmode = [s.ionmode for s in all_spectrums]
+        all_bms = [s.murcko_scaffold for s in all_spectrums]
+        all_superclass= [s.superclass for s in all_spectrums]
+        all_classe=[s.classe for s in all_spectrums]
+        all_subclass=[s.subclass for s in all_spectrums]
+        print('finished getting metadata')
+
+        unique_smiles = np.unique(canon_smiles)
+        #indexes 
+        table_smiles = {s: [i for i,c in enumerate(canon_smiles) if c==s] for s in unique_smiles}
+
+        df_smiles = pd.DataFrame()
+        df_smiles['canon_smiles']=list(unique_smiles)
+        df_smiles['indexes'] = [table_smiles[k] for k in unique_smiles]
+        df_smiles['number_indexes']= [len(table_smiles[k]) for k in unique_smiles]
+
+        indexes_original = [canon_smiles.index(u_s) for u_s in unique_smiles]
+
+        df_smiles['mz'] =    [all_mz[u_s] for u_s in indexes_original]
+        df_smiles['charge'] =    [all_charge[u_s] for u_s in indexes_original]
+        df_smiles['library'] =    [all_library[u_s] for u_s in indexes_original]
+        df_smiles['inchi'] =    [all_inchi[u_s] for u_s in indexes_original]
+        df_smiles['ionmode'] =    [all_ionmode[u_s] for u_s in indexes_original]
+        df_smiles['bms'] =    [all_bms[u_s] for u_s in indexes_original]
+        df_smiles['superclass'] =    [all_superclass[u_s] for u_s in indexes_original]
+        df_smiles['classe'] =    [all_classe[u_s] for u_s in indexes_original]
+        df_smiles['subclass'] =    [all_subclass[u_s] for u_s in indexes_original]
+
+        print('creating dummy spectra...')
+        spectrums_unique = TrainUtils.create_dummy_spectra(df_smiles)
+
+        return spectrums_unique, df_smiles
+    
+    @staticmethod
+    def create_dummy_spectra(df_smiles):
+        spectrums_dummy=[]
+        for index, row in df_smiles.iterrows():
+            spectrum_temp = SpectrumExt(
+                        identifier=str(index),
+                        precursor_mz=row['mz'],
+                        precursor_charge=row['charge'],
+                        mz=np.zeros(1),
+                        intensity=np.zeros(1),
+                        retention_time=np.nan,
+                        params={'smiles':row['canon_smiles']},
+                        library=row['library'],
+                        inchi=row['inchi'],
+                        smiles=row['canon_smiles'], 
+                        ionmode = row['ionmode'], 
+                    bms=row['bms'], 
+                    superclass=row['superclass'], 
+                classe=row['classe'], 
+                subclass=row['subclass'], 
                 
+                    )
+            spectrums_dummy.append(spectrum_temp)
+        return spectrums_dummy
+
+    @staticmethod
+    def compute_all_tanimoto_results_unique(spectrums_original,max_combinations=1000000,
+        limit_low_tanimoto=True,
+        max_low_pairs=0.5,
+        use_tqdm=True,
+        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
+        min_mass_diff=0,
+        num_workers=15,
+        MIN_SIM=0.8,
+        MAX_SIM=1,):
+        '''
+        compute tanimoto results using unique spectrums
+        '''
+
+        print('Computing tanimoto results based on unique smiles')
+        spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
+
+        
+        molecule_pairs_unique = TrainUtils.compute_all_tanimoto_results(
+        spectrums_unique,
+        max_combinations=max_combinations,
+        limit_low_tanimoto=limit_low_tanimoto,
+        max_low_pairs=max_low_pairs,
+        use_tqdm=use_tqdm,
+        max_mass_diff=max_mass_diff,  # maximum number of elements in which we stop adding new items
+        min_mass_diff=min_mass_diff,
+        num_workers=num_workers,
+        MIN_SIM=MIN_SIM,
+        MAX_SIM=MAX_SIM,
+    )
+        return MoleculePairsOpt(spectrums_original=spectrums_original, 
+                                spectrums_unique=spectrums_unique , 
+                                df_smiles=df_smiles,
+                                indexes_tani_unique=molecule_pairs_unique.indexes_tani)
+        
 
     @staticmethod
     def compute_all_tanimoto_results(
@@ -263,24 +371,6 @@ class TrainUtils:
 
             # to use the whole range or only a small range?
             use_all_range= np.random.randint(0,2)
-
-            #if use_all_range==1:
-            #    max_mass_diff_effective=10000
-            #    min_mass_diff_effective=0
-            #else:
-            #    max_mass_diff_effective=max_mass_diff+0
-            #    min_mass_diff_effective=min_mass_diff+0
-
-            #i = np.random.randint(0, len(all_spectrums) - 2)
-            #diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff_effective)
-            #diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff_effective)
-            #min_mz_index = np.where((diff_total_min > 0))[0]
-            #max_mz_index = np.where((diff_total_max > 0))[0]  # get list
-
-            #min_mz_index = min_mz_index[0] if len(min_mz_index) > 0 else 0
-            #max_mz_index = (
-            #    max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
-            #)
 
             i = np.random.randint(0, len(all_spectrums) - 1)
             if use_all_range==1:

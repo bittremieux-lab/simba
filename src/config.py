@@ -11,7 +11,7 @@ class Config:
         # training
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 128  # transformer parameters
-        self.use_cosine_distance= False
+        self.use_cosine_distance= True
         self.LR = 1e-4
         self.epochs = 100
         self.BATCH_SIZE = 128

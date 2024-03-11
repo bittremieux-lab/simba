@@ -3,7 +3,7 @@ import random
 import math
 class SelfSupervision:
     @staticmethod
-    def modify_peaks(data_sample, data_total, prob_peaks=0.0, max_peaks=100, prop_no_flips=0.5):
+    def modify_peaks(data_sample, data_total, prob_peaks=0.15, max_peaks=100, prop_no_flips=0.5):
         '''
         it receives a dara row, and the total dataset. It must apply the sampling for selecting 15% of the peaks for training.
         '''

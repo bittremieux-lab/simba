@@ -105,6 +105,8 @@ class Embedder(pl.LightningModule):
             "precursor_mass": batch["precursor_mass_1"].float(),
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
+
+
         emb0, _ = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),

@@ -12,7 +12,8 @@ class LoadDataMaldi:
     def from_spectra_to_dataset(
         spectrums_input,
         max_num_peaks=100,
-        training=False,  # shuffle the spectrum 0 and 1 for data augmentation
+        training=False,  # shuffle the spectrum 0 and 1 for data augmentation,
+        min_intensity=0.00,
     ):
         """
         preprocess the spectra and convert it for being used in Pytorch
@@ -23,8 +24,7 @@ class LoadDataMaldi:
         pp = Preprocessor()
         print("Preprocessing all the data for MALDI...")
 
-        spectrums = pp.preprocess_all_spectrums(spectrums,
-                                                min_intensity=0.01)
+        spectrums = pp.preprocess_all_spectrums(spectrums,min_intensity=min_intensity)
         print("Finished preprocessing ")
 
 

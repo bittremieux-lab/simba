@@ -133,15 +133,23 @@ class EmbedderMaldi(pl.LightningModule):
         #print(target)
         # change the no fliped peak to 0, the fliped to 1
 
-        spec[batch['sampled_mz']==0]=0
+        # mask the mz that are 0s
+        mask =torch.ones((spec.shape[0],spec.shape[1])).to(self.device)
+        mask[batch['sampled_mz']==0] = 0
+        mask[target==0]=0
+
+        #mask the mz that are higher than 0s but the target=0, to not take them into account
+        spec  =spec*mask
+
+        # rescoring
         target[target==1]=0
         target[target==2]=1
 
         #print('after adjustment of target')
-        #print(target)
         #print('')
         #print('target')
-        ##print(target)
+        #print(target)
+        
 
         #print('spec')
         #print(spec)
