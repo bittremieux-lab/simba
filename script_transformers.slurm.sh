@@ -8,5 +8,5 @@ source activate transformers
 
 nvidia-smi 
 
-srun python training.py --enable_progress_bar=0 --extra_info=_use_cosine_20240306_ --use_cosine_distance=1
+srun python training.py --enable_progress_bar=0 --extra_info=_unique_smiles 
 srun python inference.py --enable_progress_bar=0

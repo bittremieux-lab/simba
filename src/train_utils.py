@@ -64,11 +64,14 @@ class TrainUtils:
             indexes_np[index, 2] = 1
 
         # add info to
-        new_molecule_pairs = MolecularPairsSet(
-            spectrums=molecule_pairs.spectrums,
-            indexes_tani=np.concatenate(
+        new_molecule_pairs = MoleculePairsOpt(
+            spectrums_unique=molecule_pairs.spectrums,
+            indexes_tani_unique=np.concatenate(
                 (molecule_pairs.indexes_tani, indexes_np), axis=0
             ),
+            spectrums_original=molecule_pairs.spectrums_original,
+            df_smiles = molecule_pairs.df_smiles,
+
         )
 
         return new_molecule_pairs
@@ -343,7 +346,7 @@ class TrainUtils:
 
         # indexes=[]
         indexes_np = np.zeros((max_combinations, 3))
-        indexes_np = MolecularPairsSet.adjust_data_format(np.array(indexes_np))
+        indexes_np = MoleculePairsOpt.adjust_data_format(np.array(indexes_np))
 
         counter_indexes = 0
         # Iterate through the list to form pairsi
@@ -626,8 +629,11 @@ class TrainUtils:
                 & (molecule_pairs.indexes_tani[:, 2] < high)
             ]
 
-            temp_molecule_pairs = MolecularPairsSet(
-                spectrums=molecule_pairs.spectrums, indexes_tani=temp_indexes_tani
+            temp_molecule_pairs = MoleculePairsOpt(
+                spectrums_unique=molecule_pairs.spectrums, 
+                indexes_tani_unique=temp_indexes_tani,
+                df_smiles=molecule_pairs.df_smiles,
+                spectrums_original=molecule_pairs.spectrums_original,
             )
             binned_molecule_pairs.append(temp_molecule_pairs)
 
@@ -673,9 +679,11 @@ class TrainUtils:
             )
             sampled_indexes_tani = target_molecule_pairs.indexes_tani[sampled_rows]
 
-            sampled_molecule_pairs = MolecularPairsSet(
-                spectrums=target_molecule_pairs.spectrums,
-                indexes_tani=sampled_indexes_tani,
+            sampled_molecule_pairs = MoleculePairsOpt(
+                spectrums_unique=target_molecule_pairs.spectrums,
+                spectrums_original=target_molecule_pairs.spectrums_original,
+                indexes_tani_unique=sampled_indexes_tani,
+                df_smiles=target_molecule_pairs.df_smiles
             )
             # add to the final list
 
