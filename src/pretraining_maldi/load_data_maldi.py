@@ -21,8 +21,10 @@ class LoadDataMaldi:
 
         ## Preprocess the data
         pp = Preprocessor()
-        print("Preprocessing all the data ...")
-        spectrums = pp.preprocess_all_spectrums(spectrums)
+        print("Preprocessing all the data for MALDI...")
+
+        spectrums = pp.preprocess_all_spectrums(spectrums,
+                                                min_intensity=0.01)
         print("Finished preprocessing ")
 
 
@@ -43,14 +45,14 @@ class LoadDataMaldi:
         for i, s in enumerate(spectrums):
             # check for maximum length
             length_0 = (
-                len(s.mz_array)
-                if len(s.mz_array) <= max_num_peaks
+                len(s.mz)
+                if len(s.mz) <= max_num_peaks
                 else max_num_peaks
             )
             # assign the values to the array
-            mz_0[i, 0:length_0] = np.array(s.mz_array[0:length_0])
+            mz_0[i, 0:length_0] = np.array(s.mz[0:length_0])
             intensity_0[i, 0:length_0] = np.array(
-                s.intensity_array[0:length_0]
+                s.intensity[0:length_0]
             )
             
             number_of_peaks[i]=length_0

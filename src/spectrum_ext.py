@@ -43,8 +43,8 @@ class SpectrumExt(MsmsSpectrum):
 
         # extra variables
         self.params = params
-        self.intensity_array = intensity
-        self.mz_array = mz
+        self.intensity_array =None
+        self.mz_array = None
         self.spectrum_vector = ""
         self.smiles = smiles
         self.max_peak = ""
@@ -65,8 +65,8 @@ class SpectrumExt(MsmsSpectrum):
     def set_params(self, params):
         self.params = params
 
-    def set_mz_array(self, mz_array):
-        self.mz_array = mz_array
+    #def set_mz_array(self, mz_array):
+    #    self.mz_array = mz_array
 
     def __getstate__(self):
         # Get the state of the base class
@@ -124,8 +124,8 @@ class SpectrumExt(MsmsSpectrum):
         except:
             self.spectrum_hash = None
 
-    def set_intesity_array(self, intensity_array):
-        self.intensity_array = intensity_array
+    #def set_intesity_array(self, intensity_array):
+    #    self.intensity_array = intensity_array
 
     def set_spectrum_vector(self, spectrum_vector):
         self.spectrum_vector = spectrum_vector

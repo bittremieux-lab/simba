@@ -10,8 +10,8 @@ import functools
 class PreprocessingUtils:
 
     @staticmethod
-    def is_centroid(intensity_array):
-        return np.all(intensity_array > 0)
+    def is_centroid(intensity):
+        return np.all(intensity > 0)
 
     @staticmethod
     def order_by_charge(spectrums):

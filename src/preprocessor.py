@@ -15,10 +15,19 @@ class Preprocessor:
         self.max_mz = max_mz
         self.num_bins = int((max_mz - min_mz) / bin_width) + 1
 
-    def preprocess_all_spectrums(self, spectrums):
+    def preprocess_all_spectrums(self, spectrums, fragment_tol_mass=10,
+        fragment_tol_mode="ppm",
+        min_intensity=0.000,
+        max_num_peaks=100,
+        scale_intensity="root",):
         for i, spectrum in tqdm(enumerate(spectrums)):
             # try:
-            spectrum = self.preprocess_spectrum(spectrum)
+            spectrums[i] = self.preprocess_spectrum(spectrum, 
+                                                fragment_tol_mass=fragment_tol_mass,
+        fragment_tol_mode=fragment_tol_mode,
+        min_intensity=min_intensity,
+        max_num_peaks=max_num_peaks,
+        scale_intensity=scale_intensity,)
         # except:
         #    print('Error preprocessing spectrum')
 
@@ -35,6 +44,7 @@ class Preprocessor:
         max_num_peaks=100,
         scale_intensity="root",
     ):
+        
         # Process the spectrum.
         return (
             spectrum

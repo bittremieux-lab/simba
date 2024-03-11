@@ -68,24 +68,24 @@ class LoadData:
         for i, l in enumerate(molecule_pairs):
             # check for maximum length
             length_0 = (
-                len(l.spectrum_object_0.mz_array)
-                if len(l.spectrum_object_0.mz_array) <= max_num_peaks
+                len(l.spectrum_object_0.mz)
+                if len(l.spectrum_object_0.mz) <= max_num_peaks
                 else max_num_peaks
             )
             length_1 = (
-                len(l.spectrum_object_1.mz_array)
-                if len(l.spectrum_object_1.mz_array) <= max_num_peaks
+                len(l.spectrum_object_1.mz)
+                if len(l.spectrum_object_1.mz) <= max_num_peaks
                 else max_num_peaks
             )
 
             # assign the values to the array
-            mz_0[i, 0:length_0] = np.array(l.spectrum_object_0.mz_array[0:length_0])
+            mz_0[i, 0:length_0] = np.array(l.spectrum_object_0.mz[0:length_0])
             intensity_0[i, 0:length_0] = np.array(
-                l.spectrum_object_0.intensity_array[0:length_0]
+                l.spectrum_object_0.intensity[0:length_0]
             )
-            mz_1[i, 0:length_1] = np.array(l.spectrum_object_1.mz_array[0:length_1])
+            mz_1[i, 0:length_1] = np.array(l.spectrum_object_1.mz[0:length_1])
             intensity_1[i, 0:length_1] = np.array(
-                l.spectrum_object_1.intensity_array[0:length_1]
+                l.spectrum_object_1.intensity[0:length_1]
             )
 
             precursor_mass_0[i] = l.global_feats_0[0]
