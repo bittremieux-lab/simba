@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -t 72:00:00
-#SBATCH -p broadwell
+#SBATCH -p zen2
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate molecular_pairs

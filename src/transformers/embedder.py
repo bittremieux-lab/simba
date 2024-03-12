@@ -22,12 +22,7 @@ from src.transformers.spectrum_transformer_encoder_custom import (
 )
 import torch
 from src.config import Config
-# from dadaptation import DAdaptAdam
-# Set our plotting theme:
-# sns.set_style("ticks")
 
-# Set random seeds
-#pl.seed_everything(42, workers=True)
 class FixedLinearRegression(nn.Module):
     def __init__(self, d_model):
         super(FixedLinearRegression, self).__init__()
@@ -67,15 +62,10 @@ class Embedder(pl.LightningModule):
             dropout=dropout,
         )
 
-        self.linear_pre_embedding_1= nn.Linear(d_model, d_model)
-        self.linear_pre_embedding_2= nn.Linear(d_model, d_model)
 
-        #self.regression_loss = nn.MSELoss(reduction="none")
         self.regression_loss = nn.MSELoss()
         self.dropout = nn.Dropout(p=dropout)
-        # self.regression_loss = weighted_MSELoss()
-
-        # Lists to store training and validation loss
+        
         self.train_loss_list = []
         self.val_loss_list = []
         self.lr = lr
@@ -139,29 +129,12 @@ class Embedder(pl.LightningModule):
         """A training/validation/inference step."""
         spec = self(batch)
 
-        
-
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1)
 
         
-
-        # apply weight loss
-        #weight = 1
-        #loss_no_reduction = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
-        #loss = torch.mean(torch.mul(loss_no_reduction, weight))
         loss= self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
-        #if loss.float() < 0.1:
-        #    print('')
-        #    # Calculate the loss efficiently:
-        #    print('spec')
-        #    print(spec) 
-        #    print('target')
-        #    print(target)
-        #    #print('loss_no_reduction')
-        #    #print(loss_no_reduction)
-        #    print('loss')
-        #    print(loss)
+        
         return loss.float()
 
     def training_step(self, batch, batch_idx):
