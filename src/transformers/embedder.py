@@ -25,6 +25,9 @@ from src.config import Config
 
 
 class FixedLinearRegression(nn.Module):
+    '''
+    linear layer for computing sum of dot product
+    '''
     def __init__(self, d_model):
         super(FixedLinearRegression, self).__init__()
         self.weight = nn.Parameter(
