@@ -1,6 +1,3 @@
-
-
-
 class SimilarityMetric:
 
     def compute_scores_tanimoto(
@@ -8,7 +5,7 @@ class SimilarityMetric:
         preprocessed_spectrums,
         target_hashes_subset,
         similarity,
-        compute_tanimoto=False, #if to retrieve the similarity from the molecular pairs
+        compute_tanimoto=False,  # if to retrieve the similarity from the molecular pairs
     ):
         tanimotos = []
         scores = []
@@ -37,8 +34,12 @@ class SimilarityMetric:
                 score = score.scores_by_query(spectrum_found_1_ms, sort=True)[0][1]
 
                 if compute_tanimoto:
-                    tanimoto_measure = FingerprintSimilarity(similarity_measure="jaccard")
-                    tani = tanimoto_measure.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+                    tanimoto_measure = FingerprintSimilarity(
+                        similarity_measure="jaccard"
+                    )
+                    tani = tanimoto_measure.pair(
+                        spectrum_found_0_ms, spectrum_found_1_ms
+                    )
                 else:
                     tani = m.similarity
                 tanimotos.append(tani)

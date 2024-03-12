@@ -2,6 +2,7 @@ import dill
 from src.sanity_checks import SanityChecks
 from src.molecular_pairs_set import MolecularPairsSet
 
+
 def write_data(
     file_path,
     all_spectrums_train=None,
@@ -41,27 +42,54 @@ molecule_pairs_test_1 = dataset_1["molecule_pairs_test"]
 uniformed_molecule_pairs_test_1 = dataset_1["uniformed_molecule_pairs_test"]
 
 
-print(f"Number of pairs for train dataset before Janssen removal: {len(molecule_pairs_train_1)}")
-print(f"Number of pairs for val dataset before Janssen removal: {len(molecule_pairs_val_1)}")
-print(f"Number of pairs for test dataset before Janssen removal: {len(molecule_pairs_test_1)}")
-print(f"Number of pairs for unif test dataset before Janssen removal: {len(uniformed_molecule_pairs_test_1)}")
+print(
+    f"Number of pairs for train dataset before Janssen removal: {len(molecule_pairs_train_1)}"
+)
+print(
+    f"Number of pairs for val dataset before Janssen removal: {len(molecule_pairs_val_1)}"
+)
+print(
+    f"Number of pairs for test dataset before Janssen removal: {len(molecule_pairs_test_1)}"
+)
+print(
+    f"Number of pairs for unif test dataset before Janssen removal: {len(uniformed_molecule_pairs_test_1)}"
+)
 
 
-
-molecule_pairs_train_1=molecule_pairs_train_1.remove_library_pairs(library='janssen')
-molecule_pairs_val_1=molecule_pairs_val_1.remove_library_pairs(library='janssen')
+molecule_pairs_train_1 = molecule_pairs_train_1.remove_library_pairs(library="janssen")
+molecule_pairs_val_1 = molecule_pairs_val_1.remove_library_pairs(library="janssen")
 
 # sanity check removal
 
-libraries_train = [(molecule_pairs_train_1.spectrums[int(row[0])].library and molecule_pairs_train_1.spectrums[int(row[1])].library)  for row in molecule_pairs_train_1.indexes_tani]
-libraries_val = [(molecule_pairs_val_1.spectrums[int(row[0])].library and molecule_pairs_val_1.spectrums[int(row[1])].library) for row in molecule_pairs_val_1.indexes_tani]
-sanity_check_janssen = not('janssen' in libraries_train+libraries_val)
+libraries_train = [
+    (
+        molecule_pairs_train_1.spectrums[int(row[0])].library
+        and molecule_pairs_train_1.spectrums[int(row[1])].library
+    )
+    for row in molecule_pairs_train_1.indexes_tani
+]
+libraries_val = [
+    (
+        molecule_pairs_val_1.spectrums[int(row[0])].library
+        and molecule_pairs_val_1.spectrums[int(row[1])].library
+    )
+    for row in molecule_pairs_val_1.indexes_tani
+]
+sanity_check_janssen = not ("janssen" in libraries_train + libraries_val)
 
-print('')
-print(f"Number of pairs for train dataset after Janssen removal: {len(molecule_pairs_train_1)}")
-print(f"Number of pairs for val dataset after Janssen removal: {len(molecule_pairs_val_1)}")
-print(f"Number of pairs for test dataset after Janssen removal: {len(molecule_pairs_test_1)}")
-print(f"Number of pairs for unif test dataset after Janssen removal: {len(uniformed_molecule_pairs_test_1)}")
+print("")
+print(
+    f"Number of pairs for train dataset after Janssen removal: {len(molecule_pairs_train_1)}"
+)
+print(
+    f"Number of pairs for val dataset after Janssen removal: {len(molecule_pairs_val_1)}"
+)
+print(
+    f"Number of pairs for test dataset after Janssen removal: {len(molecule_pairs_test_1)}"
+)
+print(
+    f"Number of pairs for unif test dataset after Janssen removal: {len(uniformed_molecule_pairs_test_1)}"
+)
 # check that the spectrums of train are not in test or val
 
 
@@ -72,7 +100,7 @@ sanity_check_ids = SanityChecks.sanity_checks_ids(
     uniformed_molecule_pairs_test_1,
 )
 sanity_check_bms = SanityChecks.sanity_checks_bms(
-     molecule_pairs_train_1,
+    molecule_pairs_train_1,
     molecule_pairs_val_1,
     molecule_pairs_test_1,
     uniformed_molecule_pairs_test_1,

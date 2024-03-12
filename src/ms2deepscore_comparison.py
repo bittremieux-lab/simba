@@ -19,7 +19,7 @@ class MS2DeepScoreComparison:
         original_spectrum_match_hash,
         target_hashes_subset,
         similarity_ms2,
-        compute_tanimoto=False,#if to retrieve the similarity from the molecular pairs
+        compute_tanimoto=False,  # if to retrieve the similarity from the molecular pairs
     ):
         tanimotos = []
         scores_ms2d = []
@@ -44,8 +44,12 @@ class MS2DeepScoreComparison:
             if (spectrum_found_0_ms is not None) and (spectrum_found_1_ms is not None):
 
                 if compute_tanimoto:
-                    tanimoto_measure = FingerprintSimilarity(similarity_measure="jaccard")
-                    tani = tanimoto_measure.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+                    tanimoto_measure = FingerprintSimilarity(
+                        similarity_measure="jaccard"
+                    )
+                    tani = tanimoto_measure.pair(
+                        spectrum_found_0_ms, spectrum_found_1_ms
+                    )
                 else:
                     tani = m.similarity
                 tanimotos.append(tani)
@@ -55,4 +59,3 @@ class MS2DeepScoreComparison:
                 tanimotos.append(None)
                 scores_ms2d.append(None)
         return tanimotos, scores_ms2d
-

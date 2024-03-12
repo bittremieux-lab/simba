@@ -42,7 +42,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
 
         dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
-         ##get item
+        ##get item
         dataiter = iter(dataloader_test)
         item = next(dataiter)
 
@@ -55,16 +55,15 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         )
 
         # flat the results
-        #flat_pred_test = []
-        #for pred in pred_test:
+        # flat_pred_test = []
+        # for pred in pred_test:
         #    flat_pred_test = flat_pred_test + [float(p) for p in pred]
 
-        #return np.array(flat_pred_test)
+        # return np.array(flat_pred_test)
         return self.predict(X)
-        
+
     def predict(self, X):
 
-        
         # Convert numpy array to PyTorch tensor
         item = self.x_to_item(X.values, self.size_per_key)
         dataset_test = CustomDataset(item)
@@ -172,17 +171,15 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         # load size of each key:
         self.size_per_key = self.load_size_per_key(item)
 
-        #explainer = shap.Explainer(
+        # explainer = shap.Explainer(
         #    self.predict,
         #    X_total,
-        #)
+        # )
 
         explainer = shap.KernelExplainer(
             self.predict,
             X_total[0:100],
         )
-
-        
 
         return explainer
 

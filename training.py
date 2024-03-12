@@ -117,7 +117,8 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
 ## CALCULATION OF WEIGHTS
 train_binned_list, _ = TrainUtils.divide_data_into_bins(
-    molecule_pairs_train, config.bins_uniformise_TRAINING,
+    molecule_pairs_train,
+    config.bins_uniformise_TRAINING,
 )
 weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
@@ -174,19 +175,23 @@ del m_val
 print("Generating samplers")
 # data loaders
 
+
 class CustomWeightedRandomSampler(WeightedRandomSampler):
     """WeightedRandomSampler except allows for more than 2^24 samples to be sampled"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def __iter__(self):
-        rand_tensor = np.random.choice(range(0, len(self.weights)),
-                                       size=self.num_samples,
-                                       p=self.weights.numpy() / torch.sum(self.weights).numpy(),
-                                       replace=self.replacement)
+        rand_tensor = np.random.choice(
+            range(0, len(self.weights)),
+            size=self.num_samples,
+            p=self.weights.numpy() / torch.sum(self.weights).numpy(),
+            replace=self.replacement,
+        )
         rand_tensor = torch.from_numpy(rand_tensor)
         return iter(rand_tensor.tolist())
-    
+
 
 train_sampler = CustomWeightedRandomSampler(
     weights=weights_tr, num_samples=len(dataset_train), replacement=True
@@ -239,19 +244,18 @@ losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
 print("define model")
 
 
-    
 model = Embedder(
-        d_model=int(config.D_MODEL),
-        n_layers=int(config.N_LAYERS),
-        weights=None,
-        lr=config.LR,
-        use_cosine_distance=config.use_cosine_distance,
-    )
+    d_model=int(config.D_MODEL),
+    n_layers=int(config.N_LAYERS),
+    weights=None,
+    lr=config.LR,
+    use_cosine_distance=config.use_cosine_distance,
+)
 
 
 if config.load_maldi_embedder:
     model.load_pretrained_maldi_embedder(config.maldi_embedder_path)
-    
+
 # Create a model:
 if config.load_pretrained:
     model = Embedder.load_from_checkpoint(

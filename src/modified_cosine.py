@@ -2,18 +2,18 @@ from matchms.similarity import ModifiedCosine
 from tqdm import tqdm
 from matchms import calculate_scores
 
+
 class ModCosine:
     @staticmethod
     def get_mod_cosine():
-        return  ModifiedCosine(tolerance=0.1)
-
+        return ModifiedCosine(tolerance=0.1)
 
     def compute_scores_tanimoto(
         molecule_pairs,
         preprocessed_spectrums,
         target_hashes_subset,
         modified_cosine,
-        compute_tanimoto=False, #if to retrieve the similarity from the molecular pairs
+        compute_tanimoto=False,  # if to retrieve the similarity from the molecular pairs
     ):
         tanimotos = []
         scores = []
@@ -34,26 +34,36 @@ class ModCosine:
             )
 
             # calculate scores
-            not_none= (spectrum_found_0_ms is not None) and (spectrum_found_1_ms is not None)
-            
+            not_none = (spectrum_found_0_ms is not None) and (
+                spectrum_found_1_ms is not None
+            )
+
             if not_none:
-                precursor_mz_positive = (spectrum_found_0_ms.metadata['precursor_mz']>0) and (spectrum_found_1_ms.metadata['precursor_mz']>0)
-                
-                if  precursor_mz_positive:
-                
+                precursor_mz_positive = (
+                    spectrum_found_0_ms.metadata["precursor_mz"] > 0
+                ) and (spectrum_found_1_ms.metadata["precursor_mz"] > 0)
+
+                if precursor_mz_positive:
+
                     if compute_tanimoto:
-                        tanimoto_measure = FingerprintSimilarity(similarity_measure="jaccard")
-                        tani = tanimoto_measure.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+                        tanimoto_measure = FingerprintSimilarity(
+                            similarity_measure="jaccard"
+                        )
+                        tani = tanimoto_measure.pair(
+                            spectrum_found_0_ms, spectrum_found_1_ms
+                        )
                     else:
                         tani = m.similarity
-                    score = modified_cosine.pair(spectrum_found_0_ms,spectrum_found_1_ms)
+                    score = modified_cosine.pair(
+                        spectrum_found_0_ms, spectrum_found_1_ms
+                    )
                     tanimotos.append(tani)
                     # tanimotos.append(m.similarity)
-                    score=float(score['score']) 
+                    score = float(score["score"])
                     scores.append(score)
                 else:
                     tanimotos.append(None)
-                    scores.append(None) 
+                    scores.append(None)
             else:
                 tanimotos.append(None)
                 scores.append(None)

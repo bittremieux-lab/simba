@@ -4,6 +4,7 @@ import random
 from src.pretraining_maldi.self_supervision import SelfSupervision
 import random
 
+
 class CustomDatasetMaldi(Dataset):
     def __init__(self, your_dict, training=False):
         self.data = your_dict
@@ -20,7 +21,7 @@ class CustomDatasetMaldi(Dataset):
         # print(idx)
         ## get a random index
         sample = {k: self.data[k][idx] for k in self.keys}
-        
+
         # Convert your sample to PyTorch tensors if needed
         # e.g., use torch.tensor(sample) if sample is a numpy array
 
@@ -32,9 +33,9 @@ class CustomDatasetMaldi(Dataset):
     def random_integer_excluding(N, m):
         # Generate a random integer in the range [0, N - 1]
         rand_int = random.randint(0, N - 1)
-        
+
         # Adjust the random integer if it equals m
         if rand_int == m:
             rand_int += 1
-        
+
         return rand_int

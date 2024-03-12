@@ -22,9 +22,7 @@ gnps_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
-output_pairs_file = (
-    "../data/merged_gnps_nist_20240311_unique_smiles.pkl"
-)
+output_pairs_file = "../data/merged_gnps_nist_20240311_unique_smiles.pkl"
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
 output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
@@ -120,7 +118,7 @@ else:
     print(f"Total of NIST spectra: {len(all_spectrums_nist)}")
     print(f"Current time: {datetime.now()}")
     # merge spectrums
-    all_spectrums = all_spectrums_gnps + all_spectrums_nist 
+    all_spectrums = all_spectrums_gnps + all_spectrums_nist
 
     print(f"Total of all spectra: {len(all_spectrums)}")
     # divide data

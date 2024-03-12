@@ -41,10 +41,12 @@ class Plotting:
 
     @staticmethod
     def plot_roc_curve(
-        y_true, y_scores, title="ROC Curve", 
-        roc_file_path="./roc_curve.png", 
-        label='', 
-        color='r',
+        y_true,
+        y_scores,
+        title="ROC Curve",
+        roc_file_path="./roc_curve.png",
+        label="",
+        color="r",
     ):
         """
         Compute and plot the Receiver Operating Characteristic (ROC) curve.
@@ -54,10 +56,16 @@ class Plotting:
         roc_auc = auc(fpr, tpr)
 
         # plt.figure(figsize=(8, 8))
-        plt.plot(fpr, tpr, color=color, lw=2, label=f"{label} AUC={roc_auc:.2f}",)
+        plt.plot(
+            fpr,
+            tpr,
+            color=color,
+            lw=2,
+            label=f"{label} AUC={roc_auc:.2f}",
+        )
 
-        print(f'tpr: {tpr}')
-        print(f'fpr: {fpr}')
+        print(f"tpr: {tpr}")
+        print(f"fpr: {fpr}")
         # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.0])
@@ -66,16 +74,26 @@ class Plotting:
         plt.grid()
         plt.title(title)
         plt.legend(loc="lower right")
-        #plt.savefig(roc_file_path)
+        # plt.savefig(roc_file_path)
         return tpr, fpr
 
     @staticmethod
-    def plot_n_roc_curves(y_true_list, y_scores_list, labels, colors, title="ROC Curve",):
-        plt.rcParams['font.size'] = 14
-        plt.figure(figsize=(8,8))
-        plt.plot([0,1],[0,1],linestyle='--', color= 'k')
-        for y_true_list, y_scores_list,l, c in zip(y_true_list, y_scores_list, labels, colors):
-            Plotting.plot_roc_curve(y_true_list, y_scores_list, title=title, label=l, color=c)
+    def plot_n_roc_curves(
+        y_true_list,
+        y_scores_list,
+        labels,
+        colors,
+        title="ROC Curve",
+    ):
+        plt.rcParams["font.size"] = 14
+        plt.figure(figsize=(8, 8))
+        plt.plot([0, 1], [0, 1], linestyle="--", color="k")
+        for y_true_list, y_scores_list, l, c in zip(
+            y_true_list, y_scores_list, labels, colors
+        ):
+            Plotting.plot_roc_curve(
+                y_true_list, y_scores_list, title=title, label=l, color=c
+            )
 
     def plot_roc_curve_comparison(
         y_true,

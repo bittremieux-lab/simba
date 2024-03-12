@@ -11,27 +11,29 @@ class Config:
         # training
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 128  # transformer parameters
-        self.use_cosine_distance= True
+        self.use_cosine_distance = True
         self.LR = 1e-4
         self.epochs = 100
         self.BATCH_SIZE = 128
         self.enable_progress_bar = True
         self.threshold_class = 0.7  # threshold classification binary
 
-        self.load_maldi_embedder=False
-        self.maldi_embedder_path='/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt'
-        self.load_pretrained = False # a whole SIMBA model
+        self.load_maldi_embedder = False
+        self.maldi_embedder_path = (
+            "/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt"
+        )
+        self.load_pretrained = False  # a whole SIMBA model
 
         self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF_NO_JANSSEN.pkl"
-        #self.dataset_path =  "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240311_unique_smiles.pkl"
-        
+        # self.dataset_path =  "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240311_unique_smiles.pkl"
+
         self.use_uniform_data_TRAINING = False
         self.bins_uniformise_TRAINING = 10
 
         self.use_uniform_data_INFERENCE = True
         self.bins_uniformise_INFERENCE = 10
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
-        self.extra_info= ''
+        self.extra_info = ""
         self.derived_variables()
 
     def derived_variables(self):
