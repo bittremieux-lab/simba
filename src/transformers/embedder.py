@@ -84,6 +84,8 @@ class Embedder(pl.LightningModule):
         if self.use_cosine_distance:
             self.linear_cosine = nn.Linear(d_model, d_model)
 
+        self.cosine_similarity = nn.CosineSimilarity(dim=1)
+
     def normalized_dot_product(self, a, b):
         # Normalize inputs
         a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
@@ -125,6 +127,7 @@ class Embedder(pl.LightningModule):
             emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
             emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
             emb = self.fixed_linear_regression(emb)
+            #emb = self.cosine_similarity(emb0,emb1)
             emb = (emb+1)/2
         else:
             emb = emb0 + emb1
@@ -142,6 +145,8 @@ class Embedder(pl.LightningModule):
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1)
 
+        # adjust scale
+        #target = 2*(target-0.5)
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
 
         return loss.float()
