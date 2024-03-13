@@ -86,6 +86,8 @@ class Embedder(pl.LightningModule):
 
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
 
+        self.use_cosine_library=False
+
     def normalized_dot_product(self, a, b):
         # Normalize inputs
         a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
@@ -123,12 +125,16 @@ class Embedder(pl.LightningModule):
         emb1 = emb1[:, 0, :]
 
         if self.use_cosine_distance:
-            emb0_l2 = torch.norm(emb0, p=2, dim=-1, keepdim=True)
-            emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
-            emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
-            emb = self.fixed_linear_regression(emb)
-            #emb = self.cosine_similarity(emb0,emb1)
-            emb = (emb+1)/2
+        
+            if self.use_cosine_library:
+                emb = self.cosine_similarity(emb0,emb1)
+            else:
+                emb0_l2 = torch.norm(emb0, p=2, dim=-1, keepdim=True)
+                emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
+                emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
+                emb = self.fixed_linear_regression(emb)
+                emb = (emb+1)/2
+
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)
@@ -146,7 +152,8 @@ class Embedder(pl.LightningModule):
         target = target.view(-1)
 
         # adjust scale
-        #target = 2*(target-0.5)
+        if self.use_cosine_library:
+            target = 2*(target-0.5)
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
 
         return loss.float()
@@ -168,6 +175,8 @@ class Embedder(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         """A predict step"""
         spec = self(batch)
+        #if self.use_cosine_library:
+        #    spec= (spec+1)/2
         return spec
 
     def configure_optimizers(self):
