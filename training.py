@@ -1,7 +1,7 @@
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data import LoadData
+from src.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
 from src.transformers.embedder import Embedder
 from pytorch_lightning.callbacks import ProgressBar
@@ -156,9 +156,9 @@ else:
 print(f"number of train molecule pairs: {len(m_train)}")
 
 
-dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train, training=True)
+dataset_train = LoadDataUnique.from_molecule_pairs_to_dataset(m_train, training=True)
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataset_val = LoadData.from_molecule_pairs_to_dataset(m_val)
+dataset_val = LoadDataUnique.from_molecule_pairs_to_dataset(m_val)
 
 
 # delete variables that are not useful for memory savings

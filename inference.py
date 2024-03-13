@@ -1,7 +1,7 @@
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data import LoadData
+from src.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
 from src.transformers.embedder import Embedder
 from src.transformers.embedder_fingerprint import EmbedderFingerprint
@@ -88,7 +88,7 @@ else:
 
 
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
+dataset_test = LoadDataUnique.from_molecule_pairs_to_dataset(m_test)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
