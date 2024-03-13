@@ -287,7 +287,17 @@ class TrainUtils:
         print("creating dummy spectra...")
         spectrums_unique = TrainUtils.create_dummy_spectra(df_smiles)
 
-        return spectrums_unique, df_smiles
+        # organize the spectrums based on mz 
+        spectrums_unique_ordered = PreprocessingUtils.order_spectrums_by_mz(spectrums_unique)
+
+        # reindex df_smiles
+        canon_smiles_not_ordered = [s.smiles for s in spectrums_unique]
+        canon_smiles_ordered = [s.smiles for s in spectrums_unique_ordered]
+
+        new_indexes = [canon_smiles_ordered.index(s) for s in canon_smiles_not_ordered]
+        df_smiles.set_index(pd.Index(new_indexes), inplace=True)
+        df_smiles = df_smiles.sort_index()
+        return spectrums_unique_ordered, df_smiles
 
     @staticmethod
     def create_dummy_spectra(df_smiles):
@@ -370,9 +380,6 @@ class TrainUtils:
         print(datetime.now())
         # order the spectrums by mass
         all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
-
-        # get mz
-        total_mz = np.array([s.precursor_mz for s in all_spectrums])
 
         # indexes=[]
         indexes_np = np.zeros((max_combinations, 3))
