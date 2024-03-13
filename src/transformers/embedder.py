@@ -125,6 +125,7 @@ class Embedder(pl.LightningModule):
             emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
             emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
             emb = self.fixed_linear_regression(emb)
+            emb = (emb+1)/2
         else:
             emb = emb0 + emb1
             emb = self.linear(emb)

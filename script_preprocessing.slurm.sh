@@ -5,4 +5,4 @@
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate molecular_pairs
 
-srun python compute_molecular_pairs.py --enable_progress_bar=0.0
+srun python compute_molecular_pairs_unique_smiles.py --enable_progress_bar=0.0

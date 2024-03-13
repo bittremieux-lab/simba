@@ -23,7 +23,30 @@ from src.molecule_pairs_opt import MoleculePairsOpt
 class TrainUtils:
 
     @staticmethod
-    def compute_unique_combinations(molecule_pairs, pairs_per_compound=40):
+    def compute_unique_combinations(molecule_pairs):
+
+        lenght_total = len(molecule_pairs.spectrums)
+        indexes_np = np.zeros((lenght_total, 3))
+        print(f"number of pairs: {lenght_total}")
+        for index, l in enumerate(molecule_pairs.spectrums):
+            indexes_np[index, 0] = index
+            indexes_np[index, 1] = index
+            indexes_np[index, 2] = 1
+
+        # add info to
+        new_molecule_pairs = MoleculePairsOpt(
+            spectrums_unique=molecule_pairs.spectrums,
+            indexes_tani_unique=np.concatenate(
+                (molecule_pairs.indexes_tani, indexes_np), axis=0
+            ),
+            spectrums_original=molecule_pairs.spectrums_original,
+            df_smiles=molecule_pairs.df_smiles,
+        )
+
+        return new_molecule_pairs
+
+    @staticmethod
+    def compute_unique_combinations_temp(molecule_pairs, pairs_per_compound=40):
         """
         get pairs with sim=1
         """
