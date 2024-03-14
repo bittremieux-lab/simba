@@ -17,7 +17,8 @@ class WeightSampling:
         #for the ranges that are lower than 0.5 treat them as an only range
         sum_freq_low_range=sum(freq[0:index_half])
         freq_low_range= sum_freq_low_range/(len(freq[0:index_half]))
-        freq_low_range[0:index_half] = freq_low_range
+
+        freq[0:index_half] = freq_low_range
 
         weights = np.sum(freq) / freq
 
