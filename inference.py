@@ -132,7 +132,7 @@ y = np.clip(y, 0, 1)
 # plot scatter
 plt.xlabel("tanimoto similarity")
 plt.ylabel("prediction similarity")
-plt.scatter(x, y, label="test", alpha=0.5)
+plt.scatter(x, y, label="test", alpha=0.01)
 # plt.scatter(similarities_test,cosine_similarity_test, label='test')
 plt.legend()
 plt.grid()

@@ -22,7 +22,7 @@ gnps_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
-output_pairs_file = "../data/merged_gnps_nist_20240311_unique_smiles_20_million.pkl"
+output_pairs_file = "../data/merged_gnps_nist_20240311_unique_smiles_200_million.pkl"
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
 output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
@@ -30,7 +30,7 @@ output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
 # params
 max_number_spectra_gnps = 1000000000
 max_number_spectra_nist = 10000000000
-train_molecules = 20 * (10**6)
+train_molecules = 200 * (10**6)
 val_molecules = 10**6
 test_molecules = 10**6
 

@@ -1,6 +1,6 @@
 from src.molecular_pairs_set import MolecularPairsSet
 import numpy as np
-
+from src.molecule_pair import MoleculePair
 
 class MoleculePairsOpt(MolecularPairsSet):
     """
@@ -39,3 +39,5 @@ class MoleculePairsOpt(MolecularPairsSet):
             print("ERROR: Attempting to add 2 set of spectrums with different content")
             return 0
         
+    #def get_molecular_pair(self, index):
+    #    raise Exception('Not implemented functionality')

@@ -435,7 +435,7 @@ class TrainUtils:
 
             if tani is not None:
                 # if tani>MIN_SIM and tani<MAX_SIM:
-                if (counter_indexes < max_low_pairs * max_combinations) or (tani > 0.5):
+                if (counter_indexes < (max_low_pairs * max_combinations)) or (tani > 0.5):
 
                     indexes_np[counter_indexes, 0] = i
                     indexes_np[counter_indexes, 1] = j
