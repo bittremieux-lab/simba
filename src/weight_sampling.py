@@ -14,11 +14,16 @@ class WeightSampling:
 
         # remove 1 from using the last bin for sim=1
 
-        #index_half = int((len(binned_list) - 1) / 2)
+        index_half = int((len(binned_list) - 1) / 2)
 
         # deprecated
         # for the ranges that are lower than 0.5, put half the weight on the highest range
         #weights[0:index_half] = 0.5 * weights[0:index_half]
+
+        #for the ranges that are lower than 0.5 treat them as an only range
+        sum_weights_low_range=sum(weights[0:index_half])
+        weight_low_range= sum_weights_low_range/(len(weights[0:index_half]))
+        weights[0:index_half] = weight_low_range
 
         # normalize the weights
         weights = weights / np.sum(weights)
