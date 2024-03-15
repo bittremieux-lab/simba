@@ -88,6 +88,7 @@ class Embedder(pl.LightningModule):
 
         self.use_cosine_library=False
 
+        print(f'Using cosine library from Pytorch?: {self.use_cosine_library}')
     def normalized_dot_product(self, a, b):
         # Normalize inputs
         a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
@@ -124,17 +125,19 @@ class Embedder(pl.LightningModule):
         emb0 = emb0[:, 0, :]
         emb1 = emb1[:, 0, :]
 
+        emb0 = self.relu(emb0)
+        emb1 = self.relu(emb1)
+
         if self.use_cosine_distance:
         
             if self.use_cosine_library:
-                emb0 = self.relu(emb0)
-                emb1 = self.relu(emb1)
                 emb = self.cosine_similarity(emb0,emb1)
+
+                # Reshape the tensor
+                emb = emb.reshape(-1, 1)
+
             else:
                 # ensure the embeddings are positive
-                emb0 = self.relu(emb0)
-                emb1 = self.relu(emb1)
-
                 emb0_l2 = torch.norm(emb0, p=2, dim=-1, keepdim=True)
                 emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
                 emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
