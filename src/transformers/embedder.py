@@ -127,13 +127,19 @@ class Embedder(pl.LightningModule):
         if self.use_cosine_distance:
         
             if self.use_cosine_library:
+                emb0 = self.relu(emb0)
+                emb1 = self.relu(emb1)
                 emb = self.cosine_similarity(emb0,emb1)
             else:
+                # ensure the embeddings are positive
+                emb0 = self.relu(emb0)
+                emb1 = self.relu(emb1)
+
                 emb0_l2 = torch.norm(emb0, p=2, dim=-1, keepdim=True)
                 emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
                 emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
                 emb = self.fixed_linear_regression(emb)
-                emb = (emb+1)/2
+                #emb = (emb+1)/2
 
         else:
             emb = emb0 + emb1
@@ -152,8 +158,7 @@ class Embedder(pl.LightningModule):
         target = target.view(-1)
 
         # adjust scale
-        if self.use_cosine_library:
-            target = 2*(target-0.5)
+        #target = 2*(target-0.5)
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
 
         return loss.float()
@@ -176,7 +181,7 @@ class Embedder(pl.LightningModule):
         """A predict step"""
         spec = self(batch)
         #if self.use_cosine_library:
-        #    spec= (spec+1)/2
+        #spec= (spec+1)/2
         return spec
 
     def configure_optimizers(self):
