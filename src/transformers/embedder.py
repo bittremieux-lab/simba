@@ -54,7 +54,7 @@ class Embedder(pl.LightningModule):
         weights=None,
         lr=None,
         use_element_wise=True,
-        use_cosine_distance=False,  # element wise instead of concat for mixing info between embeddings
+        use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
     ):
         """Initialize the CCSPredictor"""
         super().__init__()
