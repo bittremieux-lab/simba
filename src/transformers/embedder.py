@@ -86,7 +86,7 @@ class Embedder(pl.LightningModule):
 
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
 
-        self.use_cosine_library=False
+        self.use_cosine_library=True
 
         print(f'Using cosine library from Pytorch?: {self.use_cosine_library}')
     def normalized_dot_product(self, a, b):
