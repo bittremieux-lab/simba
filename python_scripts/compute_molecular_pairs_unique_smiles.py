@@ -1,3 +1,6 @@
+import os
+os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
+
 import dill
 from src.load_data import LoadData
 from sklearn.model_selection import train_test_split
@@ -9,6 +12,8 @@ from src.config import Config
 from src.parser import Parser
 from datetime import datetime
 from src.loader_saver import LoaderSaver
+
+
 
 # Get the current date and time
 print("Initiating molecular pair script ...")
