@@ -44,6 +44,7 @@ class Spec2VecComparison:
         tanimotos = []
         scores = []
         for m in tqdm(molecule_pairs):
+
             hash_0 = m.spectrum_object_0.spectrum_hash
             hash_1 = m.spectrum_object_1.spectrum_hash
 

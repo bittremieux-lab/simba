@@ -65,6 +65,7 @@ class ModCosine:
                     tanimotos.append(None)
                     scores.append(None)
             else:
-                tanimotos.append(None)
-                scores.append(None)
+                print("Some Nones in spectrums")
+            #    tanimotos.append(None)
+            #    scores.append(None)
         return tanimotos, scores

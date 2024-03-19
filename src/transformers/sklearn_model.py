@@ -6,14 +6,14 @@ from src.transformers.embedder import Embedder
 from src.config import Config
 import dill
 from src.train_utils import TrainUtils
-from src.transformers.load_data import LoadData
+from src.transformers.load_data_unique import LoadDataUnique
 from src.molecular_pairs_set import MolecularPairsSet
 from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from src.transformers.postprocessing import Postprocessing
 import numpy as np
 import pandas as pd
-from src.transformers.CustomDataset import CustomDataset
+from src.transformers.CustomDatasetUnique import CustomDatasetUnique
 
 
 class SklearnModel(BaseEstimator, ClassifierMixin):
@@ -40,7 +40,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
     def predict_from_molecule_pair(self, molecule_pairs):
         X = self.get_X_from_all_molecule_pairs(molecule_pairs)
 
-        dataset_test = LoadData.from_molecule_pairs_to_dataset(molecule_pairs)
+        dataset_test = LoadDataUnique.from_molecule_pairs_to_dataset(molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
         ##get item
         dataiter = iter(dataloader_test)
@@ -55,18 +55,19 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         )
 
         # flat the results
-        # flat_pred_test = []
-        # for pred in pred_test:
-        #    flat_pred_test = flat_pred_test + [float(p) for p in pred]
+        flat_pred_test = []
+        for pred in predictions:
+            flat_pred_test = flat_pred_test + [float(p) for p in pred]
 
-        # return np.array(flat_pred_test)
-        return self.predict(X)
+        return np.array(flat_pred_test)
+        # return flat_pred_test
+        # return self.predict(X)
 
     def predict(self, X):
 
         # Convert numpy array to PyTorch tensor
         item = self.x_to_item(X.values, self.size_per_key)
-        dataset_test = CustomDataset(item)
+        dataset_test = CustomDatasetUnique(item)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
         ##get item
@@ -145,6 +146,8 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
             index_temp = 0
             for k in size_per_key.keys():
                 size = size_per_key[k]
+                print(k)
+                print([x[n, index_temp : index_temp + size]])
                 new_item[k][n] = np.array(
                     [x[n, index_temp : index_temp + size]], dtype=np.float32
                 )
@@ -152,8 +155,9 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         return new_item
 
     def get_X_from_all_molecule_pairs(self, all_molecule_pairs):
-        dataset_test = LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
-        dictionary = dataset_test.data
+        dataset_test = LoadDataUnique.from_molecule_pairs_to_dataset(all_molecule_pairs)
+        # dictionary = dataset_test.data
+        dictionary = dataset_test.get_original_dictionary()
         return self.item_to_x(dictionary)
 
     def get_explainer(self, all_molecule_pairs):
@@ -161,7 +165,7 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
         X_total = self.get_X_from_all_molecule_pairs(all_molecule_pairs)
 
         # get example of one item
-        dataset_test = LoadData.from_molecule_pairs_to_dataset(all_molecule_pairs)
+        dataset_test = LoadDataUnique.from_molecule_pairs_to_dataset(all_molecule_pairs)
         dataloader_test = DataLoader(dataset_test, batch_size=1, shuffle=False)
 
         ##get item
