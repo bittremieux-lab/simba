@@ -25,9 +25,10 @@ from src.config import Config
 
 
 class FixedLinearRegression(nn.Module):
-    '''
+    """
     linear layer for computing sum of dot product
-    '''
+    """
+
     def __init__(self, d_model):
         super(FixedLinearRegression, self).__init__()
         self.weight = nn.Parameter(
@@ -86,9 +87,10 @@ class Embedder(pl.LightningModule):
 
         self.cosine_similarity = nn.CosineSimilarity(dim=1)
 
-        self.use_cosine_library=True
+        self.use_cosine_library = True
 
-        print(f'Using cosine library from Pytorch?: {self.use_cosine_library}')
+        print(f"Using cosine library from Pytorch?: {self.use_cosine_library}")
+
     def normalized_dot_product(self, a, b):
         # Normalize inputs
         a_norm = torch.nn.functional.normalize(a, p=2, dim=-1)
@@ -114,12 +116,12 @@ class Embedder(pl.LightningModule):
         emb0, _ = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),
-            **kwargs_0
+            **kwargs_0,
         )
         emb1, _ = self.spectrum_encoder(
             mz_array=batch["mz_1"].float(),
             intensity_array=batch["intensity_1"].float(),
-            **kwargs_1
+            **kwargs_1,
         )
 
         emb0 = emb0[:, 0, :]
@@ -129,9 +131,9 @@ class Embedder(pl.LightningModule):
         emb1 = self.relu(emb1)
 
         if self.use_cosine_distance:
-        
+
             if self.use_cosine_library:
-                emb = self.cosine_similarity(emb0,emb1)
+                emb = self.cosine_similarity(emb0, emb1)
 
                 # Reshape the tensor
                 emb = emb.reshape(-1, 1)
@@ -142,7 +144,7 @@ class Embedder(pl.LightningModule):
                 emb1_l2 = torch.norm(emb1, p=2, dim=-1, keepdim=True)
                 emb = (emb0 * emb1) / (emb0_l2 * emb1_l2)
                 emb = self.fixed_linear_regression(emb)
-                #emb = (emb+1)/2
+                # emb = (emb+1)/2
 
         else:
             emb = emb0 + emb1
@@ -161,7 +163,7 @@ class Embedder(pl.LightningModule):
         target = target.view(-1)
 
         # adjust scale
-        #target = 2*(target-0.5)
+        # target = 2*(target-0.5)
         loss = self.regression_loss(spec.float(), target.view(-1, 1).float()).float()
 
         return loss.float()
@@ -183,8 +185,8 @@ class Embedder(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         """A predict step"""
         spec = self(batch)
-        #if self.use_cosine_library:
-        #spec= (spec+1)/2
+        # if self.use_cosine_library:
+        # spec= (spec+1)/2
         return spec
 
     def configure_optimizers(self):

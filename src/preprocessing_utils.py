@@ -7,6 +7,7 @@ import pandas as pd
 import functools
 import copy
 
+
 class PreprocessingUtils:
 
     @staticmethod
@@ -15,9 +16,9 @@ class PreprocessingUtils:
 
     @staticmethod
     def order_by_charge(spectrums):
-        #spectrums_new = spectrums.copy()
-        spectrums_new= copy.deepcopy(spectrums)
-        
+        # spectrums_new = spectrums.copy()
+        spectrums_new = copy.deepcopy(spectrums)
+
         # Sort the list based on the property 'x' (optional, but required for groupby)
         spectrums_new.sort(key=lambda a: a.precursor_charge)
 

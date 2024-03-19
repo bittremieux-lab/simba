@@ -287,8 +287,10 @@ class TrainUtils:
         print("creating dummy spectra...")
         spectrums_unique = TrainUtils.create_dummy_spectra(df_smiles)
 
-        # organize the spectrums based on mz 
-        spectrums_unique_ordered = PreprocessingUtils.order_spectrums_by_mz(spectrums_unique)
+        # organize the spectrums based on mz
+        spectrums_unique_ordered = PreprocessingUtils.order_spectrums_by_mz(
+            spectrums_unique
+        )
 
         # reindex df_smiles
         canon_smiles_not_ordered = [s.smiles for s in spectrums_unique]
@@ -435,7 +437,9 @@ class TrainUtils:
 
             if tani is not None:
                 # if tani>MIN_SIM and tani<MAX_SIM:
-                if (counter_indexes < (max_low_pairs * max_combinations)) or (tani > 0.5):
+                if (counter_indexes < (max_low_pairs * max_combinations)) or (
+                    tani > 0.5
+                ):
 
                     indexes_np[counter_indexes, 0] = i
                     indexes_np[counter_indexes, 1] = j
@@ -445,6 +449,7 @@ class TrainUtils:
                         progress_bar.update(1)
 
         # avoid duplicates:
+        print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
         indexes_np = np.unique(indexes_np, axis=0)
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")

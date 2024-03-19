@@ -2,6 +2,7 @@ from src.molecular_pairs_set import MolecularPairsSet
 import numpy as np
 from src.molecule_pair import MoleculePair
 
+
 class MoleculePairsOpt(MolecularPairsSet):
     """
     optimized version of molecule pairs set with the possiblitiy of working over unique smiles
@@ -21,11 +22,12 @@ class MoleculePairsOpt(MolecularPairsSet):
             np.array(indexes_tani_unique)
         )
 
-    
     def __add__(self, other):
         # only to be used when the spectrums are the same
 
-        if self.are_spectrums_the_same(self.spectrums_original, other.spectrums_original):
+        if self.are_spectrums_the_same(
+            self.spectrums_original, other.spectrums_original
+        ):
             new_indexes_tani = np.concatenate(
                 (self.indexes_tani, other.indexes_tani), axis=0
             )
@@ -38,6 +40,66 @@ class MoleculePairsOpt(MolecularPairsSet):
         else:
             print("ERROR: Attempting to add 2 set of spectrums with different content")
             return 0
-        
-    #def get_molecular_pair(self, index):
-    #    raise Exception('Not implemented functionality')
+
+    def get_molecular_pair(self, index):
+        """
+        get a molecular pair.
+        For the first molecule of the pair, retrieve the first element, for the second element retrieve the last index
+        this is to avoid to retrieve the same spectrum when the indexes are the same : sim=1
+        """
+        # i,j,tani = self.indexes_tani[index]
+        i = int(self.indexes_tani[index, 0])
+        j = int(self.indexes_tani[index, 1])
+        tani = self.indexes_tani[index, 2]
+
+        molecule_pair = MoleculePair(
+            vector_0=None,
+            vector_1=None,
+            smiles_0=self.spectrums[i].smiles,
+            smiles_1=self.spectrums[j].smiles,
+            similarity=tani,
+            global_feats_0=MolecularPairsSet.get_global_variables(self.spectrums[i]),
+            global_feats_1=MolecularPairsSet.get_global_variables(self.spectrums[j]),
+            index_in_spectrum_0=self.get_original_index_from_unique_index(
+                i, 0
+            ),  # index in the spectrum list used as input
+            index_in_spectrum_1=self.get_original_index_from_unique_index(j, 1),
+            spectrum_object_0=self.get_original_spectrum_from_unique_index(i, 0),
+            spectrum_object_1=self.get_original_spectrum_from_unique_index(j, 1),
+            params_0=self.get_original_spectrum_from_unique_index(i).params,
+            params_1=self.get_original_spectrum_from_unique_index(j).params,
+        )
+
+        return molecule_pair
+
+    def get_original_spectrum_from_unique_index(self, unique_index, pair):
+
+        return self.spectrums_original[
+            self.get_original_index_from_unique_index(unique_index, pair)
+        ]
+
+    def get_original_index_from_unique_index(self, index, pair):
+        """
+        obtain the mapped spectrum from index computed in the unique compound space
+        if pair=0, return the first index, else return the last index
+        """
+        if pair == 0:
+            return self.df_smiles.loc[index, "indexes"][0]
+        else:
+            return self.df_smiles.loc[index, "indexes"][-1]
+
+    def get_spectrums_from_indexes(self, pair_index):
+        indexes = [index for index in self.indexes_tani[:, pair_index]]
+        original_indexes = [
+            self.get_original_index_from_unique_index(index, pair_index)
+            for index in indexes
+        ]
+        return [self.spectrums_original[index] for index in original_indexes]
+
+    def get_sampled_spectrums(self):
+        """
+        retrieve the sampled spectrums for the first and second molecule of the pairs
+        """
+        spectrums_index_0 = self.get_spectrums_from_indexes(0)
+        spectrums_index_1 = self.get_spectrums_from_indexes(1)
+        return spectrums_index_0, spectrums_index_1

@@ -14,6 +14,7 @@ from src.config import Config
 from scipy.stats import spearmanr
 from src.plotting import Plotting
 import copy
+
 # from src.ml_model import MlModel
 
 
@@ -101,7 +102,7 @@ class DetSimilarity:
         max_num_peaks=100,
         scale_intensity="root",
     ):
-        spectrum_copy= copy.deepcopy(spectrum)
+        spectrum_copy = copy.deepcopy(spectrum)
         return (
             spectrum_copy.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
             .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
@@ -126,22 +127,12 @@ class DetSimilarity:
             n_layers=config.N_LAYERS,
             use_cosine_distance=config.use_cosine_distance,
         )
-        
-        indexes_tani = molecule_pairs.indexes_tani
 
-        for i, row in tqdm(enumerate(indexes_tani)):
-
-            # index in the smiles space 
-            index_0 = row[0]
-            index_1 = row[1]
-
-            # index with the original spectrum, take the first spectrum
-            index_original_0 = molecule_pairs.df_smiles.loc[index_0, 'indexes'][0]
-            index_original_1 = molecule_pairs.df_smiles.loc[index_1, 'indexes'][0]
+        for i, m in tqdm(enumerate(molecule_pairs)):
 
             # get the spectra
-            spectra_0 = molecule_pairs.spectrums_original[index_original_0]
-            spectra_1 = molecule_pairs.spectrums_original[index_original_1]
+            spectra_0 = m.spectrum_object_0
+            spectra_1 = m.spectrum_object_1
 
             # apply specific preprocessing for spectra going into the deterministic metrics
             spectra_0 = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_0)
