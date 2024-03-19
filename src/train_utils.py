@@ -33,73 +33,22 @@ class TrainUtils:
             indexes_np[index, 1] = index
             indexes_np[index, 2] = 1
 
+        new_indexes_np = np.concatenate(
+                (molecule_pairs.indexes_tani, indexes_np), axis=0
+            )
+        
+        new_indexes_np = np.unique(new_indexes_np, axis=0)
         # add info to
         new_molecule_pairs = MoleculePairsOpt(
             spectrums_unique=molecule_pairs.spectrums,
-            indexes_tani_unique=np.concatenate(
-                (molecule_pairs.indexes_tani, indexes_np), axis=0
-            ),
+            indexes_tani_unique=new_indexes_np,
             spectrums_original=molecule_pairs.spectrums_original,
             df_smiles=molecule_pairs.df_smiles,
         )
 
         return new_molecule_pairs
 
-    @staticmethod
-    def compute_unique_combinations_temp(molecule_pairs, pairs_per_compound=40):
-        """
-        get pairs with sim=1
-        """
-        # get spectra
-        all_spectrums = molecule_pairs.spectrums
-
-        ## How many unique smiles there are?
-        smiles = [spec.smiles for spec in all_spectrums]
-        # smiles = [s for s in smiles if s!= '']
-
-        # compute canon smiles
-        for s in smiles:
-            try:
-                s = Chem.CanonSmiles(s)
-            except:
-                s = "NO_CANON"
-        # smiles = [s for s in smiles if s!= 'NO_CANON']
-
-        # Get unique values and their counts
-        unique_values, counts = np.unique(smiles, return_counts=True)
-        print(f"Unique compounds: {len(unique_values)}")
-        print(f"Mean number of counts per compound: {np.mean(counts)}")
-        print(f"std  of counts per compound: {np.std(counts)}")
-
-        list_total = []
-        for u in unique_values:
-            if (u != "NO_CANON") and (u != ""):
-                indices = np.where(np.array(smiles) == u)[0]
-                index_combinations = list(product(indices, repeat=2))
-                random.shuffle(index_combinations)
-                list_total = list_total + index_combinations[0:pairs_per_compound]
-
-        lenght_total = len(list_total)
-
-        indexes_np = np.zeros((lenght_total, 3))
-        print(f"number of pairs: {lenght_total}")
-        for index, l in enumerate(list_total):
-            indexes_np[index, 0] = l[0]
-            indexes_np[index, 1] = l[1]
-            indexes_np[index, 2] = 1
-
-        # add info to
-        new_molecule_pairs = MoleculePairsOpt(
-            spectrums_unique=molecule_pairs.spectrums,
-            indexes_tani_unique=np.concatenate(
-                (molecule_pairs.indexes_tani, indexes_np), axis=0
-            ),
-            spectrums_original=molecule_pairs.spectrums_original,
-            df_smiles=molecule_pairs.df_smiles,
-        )
-
-        return new_molecule_pairs
-
+   
     @staticmethod
     def train_val_test_split_bms(spectrums, val_split=0.1, test_split=0.1):
 
@@ -161,7 +110,7 @@ class TrainUtils:
 
     @staticmethod
     def compute_number_of_pairs(
-        all_spectrums,
+        all_spectrums, #ordered from low mz to high mz
         max_combinations=1000000,
         limit_low_tanimoto=True,
         max_low_pairs=0.3,
@@ -172,8 +121,8 @@ class TrainUtils:
 
         print("Starting computation of number of pairs")
         print(datetime.now())
-        # order the spectrums by mass
-        all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+        # asume the spectrums received are ordered already
+        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
 
         # get mz
         total_mz = np.array([s.precursor_mz for s in all_spectrums])
@@ -418,16 +367,19 @@ class TrainUtils:
             # to use the whole range or only a small range?
             use_all_range = np.random.randint(0, 2)
 
-            i = np.random.randint(0, len(all_spectrums) - 1)
+            i = np.random.randint(0, len(all_spectrums))
             if use_all_range == 1:
-                min_mz_index = 0
-                max_mz_index = len(all_spectrums) - 1
+                min_mz_index = i
+                max_mz_index = len(all_spectrums)-1
             else:
                 min_mz_index = df_precomputed_indexes.loc[i, "min_index"]
                 max_mz_index = df_precomputed_indexes.loc[i, "max_index"]
 
             # get the other index
             j = random.randint(min_mz_index, max_mz_index)
+
+            # order indexes to avoid duplicates
+            i,j = min(i,j), max(i,j)
 
             # Submit the task to the executor
             tani = Tanimoto.compute_tanimoto(
@@ -452,77 +404,7 @@ class TrainUtils:
         print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
         indexes_np = np.unique(indexes_np, axis=0)
 
-        print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
-        # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
-        molecular_pair_set = MolecularPairsSet(
-            spectrums=all_spectrums, indexes_tani=indexes_np
-        )
-
-        print(datetime.now())
-        return molecular_pair_set
-
-    @staticmethod
-    def compute_all_tanimoto_simple(
-        all_spectrums,
-        max_combinations=1000000,
-        limit_low_tanimoto=True,
-        max_low_pairs=0.5,
-        use_tqdm=True,
-        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
-        min_mass_diff=0,
-        num_workers=15,
-        MIN_SIM=0.8,
-        MAX_SIM=1,
-    ):
-        """
-        compute tanimoto without ordering by mz
-        """
-        # indexes=[]
-        indexes_np = np.zeros((max_combinations, 3))
-        counter_indexes = 0
-        # Iterate through the list to form pairsi
-
-        print("Computing all the tanimoto results")
-        if use_tqdm:
-            # Initialize tqdm with the total number of iterations
-            progress_bar = tqdm(total=max_combinations, desc="Processing")
-            # progress_bar = tqdm(total=len(all_spectrums), desc="Processing")
-        # Compute all the fingerprints:
-        print("Compute all the fingerprints")
-        fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
-
-        # get random indexes for the first part of the pair
-        # random_i_np = np.random.randint(0, len(all_spectrums)-2, max_combinations)
-
-        print(f"Number of workers: {num_workers}")
-        counter_indexes = 0
-
-        while counter_indexes < (max_combinations):
-
-            # to use the whole range or only a small range?
-
-            i = np.random.randint(0, len(all_spectrums) - 1)
-            j = np.random.randint(0, len(all_spectrums) - 1)
-
-            # Submit the task to the executor
-            tani = Tanimoto.compute_tanimoto(
-                fingerprints[i],
-                fingerprints[j],
-            )
-
-            if tani is not None:
-                # if tani>MIN_SIM and tani<MAX_SIM:
-                if (counter_indexes < max_low_pairs * max_combinations) or (tani > 0.5):
-
-                    indexes_np[counter_indexes, 0] = i
-                    indexes_np[counter_indexes, 1] = j
-                    indexes_np[counter_indexes, 2] = tani
-                    counter_indexes = counter_indexes + 1
-                    if use_tqdm:
-                        progress_bar.update(1)
-
-        # avoid duplicates:
-        indexes_np = np.unique(indexes_np, axis=0)
+        #remove reordered 
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
         # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
@@ -533,111 +415,8 @@ class TrainUtils:
         print(datetime.now())
         return molecular_pair_set
 
-    @staticmethod
-    def compute_all_tanimoto_results_parallel(
-        all_spectrums,
-        max_combinations=1000000,
-        limit_low_tanimoto=True,
-        max_low_pairs=0.5,
-        use_tqdm=True,
-        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
-        min_mass_diff=0,
-        num_workers=15,
-        MIN_SIM=0.8,
-        MAX_SIM=1,
-    ):
-
-        print("Starting computation of molecule pairs")
-        print(datetime.now())
-        # order the spectrums by mass
-        all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
-
-        # get mz
-        total_mz = np.array([s.precursor_mz for s in all_spectrums])
-
-        # Compute all the fingerprints:
-        print("Compute all the fingerprints")
-        fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
-
-        # get random indexes for the first part of the pair
-        # random_i_np = np.random.randint(0, len(all_spectrums)-2, max_combinations)
-
-        print(f"Number of workers: {num_workers}")
-
-        def parallize():
-            i = np.random.randint(0, len(all_spectrums) - 2)
-            diff_total_max = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff)
-            diff_total_min = total_mz - (all_spectrums[i].precursor_mz + min_mass_diff)
-            min_mz_index = np.where((diff_total_min > 0))[0]
-            max_mz_index = np.where((diff_total_max > 0))[0]  # get list
-
-            min_mz_index = min_mz_index[0] if len(min_mz_index) > 0 else 0
-            max_mz_index = (
-                max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
-            )
-
-            # get the other index
-            j = random.randint(min_mz_index, max_mz_index)
-
-            # Submit the task to the executor
-            tani = Tanimoto.compute_tanimoto(
-                fingerprints[i],
-                fingerprints[j],
-            )
-
-            return i, j, tani
-            # if tani is not None:
-            #    #if tani>MIN_SIM and tani<MAX_SIM:
-            #    if (counter_indexes < max_low_pairs*max_combinations) or (tani>0.5):
-            #
-
-        # run the processing
-        # Create a ThreadPoolExecutor with a specified number of worker threads
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Submit tasks (functions) to the executor and collect futures
-            futures = [
-                executor.submit(
-                    parallize,
-                )
-                for k in range(max_combinations)
-            ]
-
-            # Wait for all futures to complete and collect results
-            results = [
-                future.result() for future in concurrent.futures.as_completed(futures)
-            ]
-
-        effective_length = len([0 for r in results if r is not None])
-        indexes_np = np.zeros((effective_length, 3))
-        indexes_np[:, 0] = [r[0] for r in results if r is not None]
-        indexes_np[:, 1] = [r[1] for r in results if r is not None]
-        indexes_np[:, 2] = [r[2] for r in results if r is not None]
-
-        # avoid duplicates:
-        indexes_np = np.unique(indexes_np, axis=0)
-
-        # remove unwanted low data to make a balance of 50% higher and 50% lower
-        indexes_np_high = indexes_np[indexes_np[:, 2] >= 0.5]
-        indexes_np_low = indexes_np[indexes_np[:, 2] < 0.5]
-        indexes_np = np.concatenate(
-            (indexes_np_high, indexes_np_low[0 : indexes_np_high.shape[0]]), axis=0
-        )
-
-        print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
-        # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
-        molecular_pair_set = MolecularPairsSet(
-            spectrums=all_spectrums, indexes_tani=indexes_np
-        )
-
-        print(datetime.now())
-        return molecular_pair_set
-
-    # @staticmethod
-    # def get_min_bin(molecule_pairs, number_bins):
-    #    similarities = [m.similarity for m in molecule_pairs]
-    #    hist, _ = np.histogram(similarities, bins=number_bins)
-    #    return np.min(hist)
-
+    
+   
     @staticmethod
     def divide_data_into_bins(
         molecule_pairs,
@@ -743,13 +522,6 @@ class TrainUtils:
         else:
             return uniform_molecule_pairs
 
-    @staticmethod
-    def insert_spectrum_vector_into_molecule_pairs(molecule_pairs):
-        pp = Preprocessor()
-        for m in molecule_pairs:
-            m.vector_0 = pp.return_vector_and_preprocess(m.spectrum_object_0)
-            m.vector_1 = pp.return_vector_and_preprocess(m.spectrum_object_1)
-        return molecule_pairs
 
     @staticmethod
     def get_data_from_indexes(spectrums, indexes):
