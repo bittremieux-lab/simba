@@ -66,8 +66,8 @@ class MoleculePairsOpt(MolecularPairsSet):
             index_in_spectrum_1=self.get_original_index_from_unique_index(j, 1),
             spectrum_object_0=self.get_original_spectrum_from_unique_index(i, 0),
             spectrum_object_1=self.get_original_spectrum_from_unique_index(j, 1),
-            params_0=self.get_original_spectrum_from_unique_index(i).params,
-            params_1=self.get_original_spectrum_from_unique_index(j).params,
+            params_0=self.get_original_spectrum_from_unique_index(i,0).params,
+            params_1=self.get_original_spectrum_from_unique_index(j,1).params,
         )
 
         return molecule_pair
