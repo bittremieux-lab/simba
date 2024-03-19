@@ -42,4 +42,4 @@ class Tanimoto:
     def compute_tanimoto_from_smiles(smiles0, smiles1):
         fp0=Tanimoto.compute_fingerprint(smiles0)
         fp1=Tanimoto.compute_fingerprint(smiles1)
-        return Tanimoto.compute_tanimoto(fp1,fp2)
+        return Tanimoto.compute_tanimoto(fp0,fp1)
