@@ -4,8 +4,6 @@ from torch.utils.data import DataLoader
 from src.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
 from src.transformers.embedder import Embedder
-from src.transformers.embedder_fingerprint import EmbedderFingerprint
-from pytorch_lightning.callbacks import ProgressBar
 from src.transformers.postprocessing import Postprocessing
 from sklearn.metrics import r2_score
 from src.train_utils import TrainUtils
@@ -14,8 +12,7 @@ from src.deterministic_similarity import DetSimilarity
 from src.plotting import Plotting
 from src.config import Config
 import numpy as np
-from torch.utils.data import DataLoader, WeightedRandomSampler
-from scipy.stats import spearmanr
+from torch.utils.data import DataLoader
 import argparse
 import sys
 import os
@@ -151,7 +148,7 @@ plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
 
 
 # comparison with
-similarities, similarities_tanimoto = DetSimilarity.compute_all_scores(
+DetSimilarity.compute_all_scores(
     m_test, model_file=best_model_path, config=config
 )
-Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)
+#Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)
