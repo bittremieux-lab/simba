@@ -3,6 +3,13 @@
 Development of a learned similarity model for MS/MS spectrums in order to predict structural similarity.
 
 
+## Organization of code:
+
+* src/ Source code
+* src/transformers: Source code for declaration of transformer model
+* slurm_scripts: Scripts for running jobs in HPC
+* python_scripts: Python scripts for different tasks
+* notebooks: Jupyter Notebooks
 
 ## NIST data
 
