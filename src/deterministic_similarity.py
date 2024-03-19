@@ -135,13 +135,13 @@ class DetSimilarity:
             spectra_1 = m.spectrum_object_1
 
             # apply specific preprocessing for spectra going into the deterministic metrics
-            spectra_0 = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_0)
-            spectra_1 = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_1)
+            spectra_0_det = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_0)
+            spectra_1_det = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_1)
 
             # compute deterministic similarities
-            cos = cosine(spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE)
+            cos = cosine(spectra_0_det, spectra_1_det, config.FRAGMENT_MZ_TOLERANCE)
             mod_cos = modified_cosine(
-                spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
+                spectra_0_det, spectra_1_det, config.FRAGMENT_MZ_TOLERANCE
             )
             # nl = neutral_loss(
             #    spectra_0, spectra_1, config.FRAGMENT_MZ_TOLERANCE
@@ -152,8 +152,8 @@ class DetSimilarity:
             # model_score= model_scores[i,0]   #for sieamese network
             model_score = model_scores[i]
 
-            fp1 = Tanimoto.compute_fingerprint(spectra_0.smiles)
-            fp2 = Tanimoto.compute_fingerprint(spectra_1.smiles)
+            fp1 = Tanimoto.compute_fingerprint(spectra_0_det.smiles)
+            fp2 = Tanimoto.compute_fingerprint(spectra_1_det.smiles)
             tan = Tanimoto.compute_tanimoto(fp1, fp2)
             scores.append(
                 (
@@ -199,73 +199,3 @@ class DetSimilarity:
             colors=["r", "b"],
         )
 
-        # check the name of the spectrum id
-        id_keys_0 = [
-            "spectrumid" if "spectrumid" in m.spectrum_object_0.params.keys() else "id"
-            for m in molecule_pairs
-        ]
-        id_keys_1 = [
-            "spectrumid" if "spectrumid" in m.spectrum_object_1.params.keys() else "id"
-            for m in molecule_pairs
-        ]
-        similarities = pd.DataFrame(
-            {
-                # "pair1": pairs[:, 0],
-                # "pair2": pairs[:, 1],
-                "id1": [
-                    m.spectrum_object_0.params[m.spectrum_object_0.params["smiles"]]
-                    for m, id_key in zip(molecule_pairs, id_keys_0)
-                ],
-                "id2": [
-                    m.spectrum_object_1.params[m.spectrum_object_1.params["smiles"]]
-                    for m, id_key in zip(molecule_pairs, id_keys_1)
-                ],
-                "class1": [m.spectrum_object_0.classe for m in molecule_pairs],
-                "class2": [m.spectrum_object_1.classe for m in molecule_pairs],
-                "superclass1": [m.spectrum_object_0.superclass for m in molecule_pairs],
-                "superclass2": [m.spectrum_object_1.superclass for m in molecule_pairs],
-                "subclass1": [m.spectrum_object_0.subclass for m in molecule_pairs],
-                "subclass2": [m.spectrum_object_1.subclass for m in molecule_pairs],
-                "smiles1": [
-                    m.spectrum_object_0.params["smiles"] for m in molecule_pairs
-                ],
-                "smiles2": [
-                    m.spectrum_object_1.params["smiles"] for m in molecule_pairs
-                ],
-                "charge1": [
-                    m.spectrum_object_0.params["charge"][0] for m in molecule_pairs
-                ],
-                "charge2": [
-                    m.spectrum_object_1.params["charge"][0] for m in molecule_pairs
-                ],
-                "mz1": [m.spectrum_object_0.precursor_mz for m in molecule_pairs],
-                "mz2": [m.spectrum_object_1.precursor_mz for m in molecule_pairs],
-            }
-        )
-        similarities[
-            [
-                "cosine",
-                "cosine_explained",
-                "modified_cosine",
-                "modified_cosine_explained",
-                "neutral_loss",
-                "neutral_loss_explained",
-                "model_score",
-                "model_score_explained",
-                "tanimoto",
-            ]
-        ] = scores
-
-        similarities["tanimoto_interval"] = pd.cut(
-            similarities["tanimoto"],
-            5,
-            labels=["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"],
-        )
-        similarities_tanimoto = pd.melt(
-            similarities,
-            id_vars="tanimoto_interval",
-            value_vars=["cosine", "neutral_loss", "modified_cosine", "model_score"],
-        )
-        return similarities, similarities_tanimoto
-        # if write:
-        #    #to_parquet(write_file)
