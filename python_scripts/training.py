@@ -1,3 +1,6 @@
+import os
+os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
+
 import dill
 import torch
 from torch.utils.data import DataLoader
