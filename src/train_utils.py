@@ -108,56 +108,6 @@ class TrainUtils:
             fingerprints.append(fp)
         return fingerprints
 
-    @staticmethod
-    def compute_number_of_pairs(
-        all_spectrums, #ordered from low mz to high mz
-        max_combinations=1000000,
-        limit_low_tanimoto=True,
-        max_low_pairs=0.3,
-        use_tqdm=True,
-        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
-        num_workers=15,
-    ):
-
-        print("Starting computation of number of pairs")
-        print(datetime.now())
-        # asume the spectrums received are ordered already
-        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
-
-        # get mz
-        total_mz = np.array([s.precursor_mz for s in all_spectrums])
-
-        # indexes=[]
-        indexes_np = np.zeros((max_combinations, 3))
-        counter_indexes = 0
-        # Iterate through the list to form pairsi
-
-        # Compute all the fingerprints:
-        # print('Compute all the fingerprints')
-        # fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
-
-        # get random indexes for the first part of the pair
-        number_of_pairs = 0
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=num_workers
-        ) as executor:
-            num_workers = executor._max_workers  # Accessing the internal attribute
-            print(f"Number of workers: {num_workers}")
-
-            for i in tqdm(range(0, len(all_spectrums))):
-
-                diff_total = total_mz - (all_spectrums[i].precursor_mz + max_mass_diff)
-                max_mz_index = np.where(diff_total > 0)[0]  # get list
-                max_mz_index = (
-                    max_mz_index[0] if len(max_mz_index) > 0 else len(all_spectrums) - 1
-                )
-
-                # get the other index
-
-                # for j in range(i, max_mz_index):
-                # number_of_pairs = number_of_pairs+1
-                number_of_pairs = number_of_pairs + (max_mz_index - i)
-        return number_of_pairs
 
     @staticmethod
     def precompute_min_max_indexes(
@@ -329,8 +279,8 @@ class TrainUtils:
 
         print("Starting computation of molecule pairs")
         print(datetime.now())
-        # order the spectrums by mass
-        all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+        # asume the spectra is already ordered previously
+        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
 
         # indexes=[]
         indexes_np = np.zeros((max_combinations, 3))

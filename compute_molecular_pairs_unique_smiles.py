@@ -1,6 +1,3 @@
-import os
-os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
-
 import dill
 from src.load_data import LoadData
 from sklearn.model_selection import train_test_split
@@ -27,7 +24,7 @@ gnps_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
-output_pairs_file = "../data/merged_gnps_nist_20240311_unique_smiles_100_million_5.pkl"
+output_pairs_file = "../data/merged_gnps_nist_20240319_unique_smiles_TEMP_million_v2.pkl"
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
 output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
@@ -36,9 +33,9 @@ print(f"output_file:{output_pairs_file}")
 # params
 max_number_spectra_gnps = 1000000000
 max_number_spectra_nist = 10000000000
-train_molecules = 100 * (10**6)
-val_molecules = 10**6
-test_molecules = 10**6
+train_molecules = 1 * (10**3)
+val_molecules = 10**3
+test_molecules = 10**3
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar
