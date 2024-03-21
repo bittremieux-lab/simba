@@ -16,6 +16,24 @@ from src.config import Config
 class Plotting:
 
     @staticmethod
+    def plot_n_pca(list_pca_data, list_labels,alpha=0.5):
+        for pca_data, label in zip(list_pca_data, list_labels):
+            Plotting.plot_pca(pca_data, label,alpha=alpha)
+        plt.legend()
+        plt.grid()
+        
+    @staticmethod
+    def plot_pca(pca_data, label='',alpha=0.5):
+        # Plot PCA projection
+        #plt.figure(figsize=(8, 6))
+        plt.scatter(pca_data[:, 0], pca_data[:, 1], label=label, alpha=alpha)
+        plt.title('PCA Projection')
+        plt.xlabel('Principal Component 1')
+        plt.ylabel('Principal Component 2')
+        plt.grid()
+
+
+    @staticmethod
     def plot_spectrum(spectrum):
         # Plot the spectrum.
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -23,6 +41,11 @@ class Plotting:
         ax.spines["right"].set_visible(False)
         ax.spines["top"].set_visible(False)
         # plt.savefig("quickstart.png", bbox_inches="tight", dpi=300, transparent=True)
+
+    @staticmethod
+    def plot_mirror_plot(spectrum_top,spectrum_bottom):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sup.mirror(spectrum_top, spectrum_bottom, ax=ax)
 
     @staticmethod
     def plot_molecule_pair_spectrum(molecule_pair, verbose=True):
