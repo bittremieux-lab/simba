@@ -26,7 +26,7 @@ class Config:
         self.load_pretrained = False  # a whole SIMBA model
 
         # self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF_NO_JANSSEN.pkl"
-        self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_100_million_v2.pkl"
+        self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_1_million_v2.pkl"
 
         self.use_uniform_data_TRAINING = False
         self.bins_uniformise_TRAINING = 10
