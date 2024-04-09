@@ -31,7 +31,10 @@ class WeightSampling:
         # weights= [1 for w in weights]
 
         # the last bin corresponds to sim=1. So if there are 6 bins, actually there are 5 bins between 0 and 1
-        bin_size = 1 / (len(binned_list) - 1)
+        #bin_size = 1 / (len(binned_list) - 1)
+
+        # currently, we do not bin sim=1
+        bin_size= 1/len(binned_list)
         range_weights = np.arange(0, len(binned_list)) * bin_size
         return weights, range_weights
 
@@ -41,7 +44,8 @@ class WeightSampling:
         # get similarities
         sim = molecule_pairs.indexes_tani[:, 2]
         # sim = [m.similarity for m in molecule_pairs]
-        index = [math.floor(s * (len(weights) - 1)) for s in sim]
+        #index = [math.floor(s * (len(weights) - 1)) for s in sim]
+        index = [math.floor(s * (len(weights))) if s != 1 else (len(weights)-1) for s in sim  ]
         weights_sample = np.array([weights[ind] for ind in index])
         weights_sample = weights_sample / (sum(weights_sample))
         return weights_sample

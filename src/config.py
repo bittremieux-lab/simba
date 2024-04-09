@@ -10,7 +10,8 @@ class Config:
 
         # training
         self.N_LAYERS = 5  # transformer parameters
-        self.D_MODEL = 128  # transformer parameters
+        self.D_MODEL = 512  # transformer parameters
+        self.EMBEDDING_DIM=256
         self.use_cosine_distance = True
         self.LR = 1e-4
         # self.LR = 1e-3
@@ -26,7 +27,7 @@ class Config:
         self.load_pretrained = False  # a whole SIMBA model
 
         # self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF_NO_JANSSEN.pkl"
-        self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_1_million_v2.pkl"
+        self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_1_million_v2_no_identity.pkl"
 
         self.use_uniform_data_TRAINING = False
         self.bins_uniformise_TRAINING = 10

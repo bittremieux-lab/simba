@@ -371,7 +371,7 @@ class TrainUtils:
     def divide_data_into_bins(
         molecule_pairs,
         number_bins,
-        bin_sim_1=True,  # if you want to try sim=1 as a different bin
+        bin_sim_1=False,  # if you want to try sim=1 as a different bin
     ):
         # Initialize lists to store values for each bin
         binned_molecule_pairs = []
