@@ -8,5 +8,5 @@ source activate transformers
 
 nvidia-smi 
 
-srun python training.py --enable_progress_bar=0 --extra_info=_unique_smiles_10_million_v4 --D_MODEL=512 --N_LAYERS=5 --LR=0.00001
+srun python training.py --enable_progress_bar=0 --extra_info=_1_million_no_sim1
 srun python inference.py --enable_progress_bar=0
