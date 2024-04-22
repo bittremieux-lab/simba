@@ -26,12 +26,12 @@ class Spec2VecComparison:
         s = msfilters.add_parent_mass(s)
         s = msfilters.normalize_intensities(s)
         s = msfilters.reduce_to_number_of_peaks(
-            s, n_required=10, ratio_desired=None, n_max=500
+            s, n_required=6, ratio_desired=None, n_max=500
         )
         # s = msfilters.reduce_to_number_of_peaks(s, n_required=10, ratio_desired=0.5, n_max=500)
         s = msfilters.select_by_mz(s, mz_from=0, mz_to=1000)
         s = msfilters.add_losses(s, loss_mz_from=10.0, loss_mz_to=200.0)
-        s = msfilters.require_minimum_number_of_peaks(s, n_required=10)
+        s = msfilters.require_minimum_number_of_peaks(s, n_required=6)
         return s
 
     def compute_scores_tanimoto(
