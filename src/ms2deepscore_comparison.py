@@ -3,7 +3,7 @@ from ms2deepscore import MS2DeepScore
 from tqdm import tqdm
 from matchms.similarity import FingerprintSimilarity
 from matchms.filtering import add_fingerprint
-
+from matchms import calculate_scores
 
 class MS2DeepScoreComparison:
 
@@ -24,6 +24,9 @@ class MS2DeepScoreComparison:
         tanimotos = []
         scores_ms2d = []
 
+        spectrum_found_0_ms_all = []
+        spectrum_found_1_ms_all = []
+        molecules_filtered= []
         for i in tqdm(molecule_pairs_indexes):
             m = molecule_pairs[i]
             hash_0 = m.spectrum_object_0.spectrum_hash
@@ -39,23 +42,46 @@ class MS2DeepScoreComparison:
                 for s, t in zip(original_spectrum_match_hash, target_hashes_subset)
                 if t == hash_1
             )
+            
 
-            # calculate scores
+            
+
             if (spectrum_found_0_ms is not None) and (spectrum_found_1_ms is not None):
+                spectrum_found_0_ms_all.append(spectrum_found_0_ms)
+                spectrum_found_1_ms_all.append(spectrum_found_1_ms)
+                molecules_filtered.append(m)
+            #else:
+            #    tanimotos.append(None)
 
+        results = calculate_scores(spectrum_found_0_ms_all, spectrum_found_1_ms_all, similarity_ms2)
+
+        for i,(s0,s1,m) in enumerate(zip(spectrum_found_0_ms_all, spectrum_found_1_ms_all,molecules_filtered)):
+            
+            try:
+                results_tuple = results.scores_by_query(s1, name='MS2DeepScore') 
+                score = results_tuple[i][1]
                 if compute_tanimoto:
-                    tanimoto_measure = FingerprintSimilarity(
-                        similarity_measure="jaccard"
-                    )
-                    tani = tanimoto_measure.pair(
-                        spectrum_found_0_ms, spectrum_found_1_ms
-                    )
+                        tanimoto_measure = FingerprintSimilarity(
+                            similarity_measure="jaccard"
+                        )
+                        tani = tanimoto_measure.pair(
+                            spectrum_found_0_ms, spectrum_found_1_ms
+                        )
                 else:
-                    tani = m.similarity
+                        tani = m.similarity
                 tanimotos.append(tani)
-                score = similarity_ms2.pair(spectrum_found_0_ms, spectrum_found_1_ms)
                 scores_ms2d.append(score)
-            else:
-                tanimotos.append(None)
-                scores_ms2d.append(None)
+            except:
+                print(i)
+                print('Problem while computing MS2')
+        #for spectrum_found_0_ms, spectrum_found_1_ms in zip(spectrum_found_0_ms_all, spectrum_found_1_ms_all):
+        #    # calculate scores
+        #    if (spectrum_found_0_ms is not None) and (spectrum_found_1_ms is not None):
+
+        #        score = similarity_ms2.pair(spectrum_found_0_ms, spectrum_found_1_ms)
+        #        scores_ms2d.append(score)
+        #    else:
+        #        tanimotos.append(None)
+        #        scores_ms2d.append(None)
+        
         return tanimotos, scores_ms2d
