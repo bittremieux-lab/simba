@@ -191,11 +191,14 @@ class DetSimilarity:
 
         Plotting.plot_roc_curve_comparison(
             x_class,
-            [model_temp, mod_cosine_temp],
+            #[model_temp, mod_cosine_temp],
+            [model_temp,],
             title="ROC Curve",
             roc_file_path=config.CHECKPOINT_DIR
             + f"roc_curve_comparison_{config.MODEL_CODE}.png",
-            labels=["model", "mod_cosine"],
-            colors=["r", "b"],
+            #labels=["model", "mod_cosine"],
+            labels=["model"],
+            #colors=["r", "b"],
+            colors=["r",],
         )
 

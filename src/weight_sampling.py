@@ -12,19 +12,22 @@ class WeightSampling:
         freq = np.array([len(r) for r in binned_list])
 
         # remove 1 from using the last bin for sim=1
-        # index_half = int((len(binned_list) - 1) / 2)
+        #index_half = int((len(binned_list)) / 2)
 
         # for the ranges that are lower than 0.5 treat them as an only range
         # sum_freq_low_range=sum(freq[0:index_half])
         # freq_low_range= sum_freq_low_range/(len(freq[0:index_half]))
 
-        # freq[0:index_half] = freq_low_range
+        #freq[0:index_half] = freq_low_range
 
         weights = np.sum(freq) / freq
 
         # deprecated
         # for the ranges that are lower than 0.5, put half the weight on the highest range
         # weights[0:index_half] = 0.5 * weights[0:index_half]
+
+        # for the weights below 0.5 increase the wiehgt to reduce false positives:
+        #weights[0:index_half] = 2 * weights[0:index_half]
 
         # normalize the weights
         weights = weights / np.sum(weights)
