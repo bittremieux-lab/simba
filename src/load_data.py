@@ -18,7 +18,7 @@ from tqdm import tqdm
 from src.nist_loader import NistLoader
 from src.preprocessor import Preprocessor
 from src.utils import spectrum_hash
-
+import pickle
 
 class LoadData:
 
@@ -340,6 +340,67 @@ class LoadData:
                 all_spectrums.append(spec)
 
         return all_spectrums, current_line_number
+
+    def get_all_spectrums_casmi(
+        file,
+        num_samples=10,
+        compute_classes=False,
+        use_tqdm=True,
+        config=None,
+        initial_line_number=0,
+    ):
+        # open casmi file 
+        with open(file, 'rb') as f:
+            spectra_df = pickle.load(f)
+        all_spectrums_parsed = []
+
+        for index,spectra_row in spectra_df.iterrows():
+
+            #initialize
+            spectrum_dict={}
+            spectrum_dict['params'] = {}
+
+            # get info
+            adduct = ' M+H' if spectra_row['prec_type'] =='[M+H]+'else spectra_row['prec_type']
+            spectrum_dict['params']['spectrumid'] = str(spectra_row['casmi_id']) + adduct
+            spectrum_dict['params']['name'] = str(spectra_row['casmi_id']) + adduct
+            spectrum_dict['params']['inchi']=''
+            spectrum_dict['params']['organism']='casmi'
+            spectrum_dict['params']['id']=spectra_row['casmi_id']
+            spectrum_dict['params']['smiles'] = spectra_row['smiles']
+            ionmode = 'Positive' if spectra_row['ion_mode']=='P' else 'Negative'
+            spectrum_dict['params']['ionmode']=ionmode
+            spectrum_dict['params']['pepmass']=[spectra_row['prec_mz']]
+            spectrum_dict['params']['charge']=[1]
+            spectrum_dict['params']['libraryquality']=1
+            #get peaks
+            peaks = spectra_row['peaks']
+            mz = np.array([p[0] for p in peaks])
+            intensity = np.array([p[1] for p in peaks])
+
+            spectrum_dict['m/z array']= mz
+            spectrum_dict['intensity array']= intensity 
+
+
+            all_spectrums_parsed.append(spectrum_dict)
+
+        # processing
+        all_spectrums = []
+        pp = Preprocessor()
+
+        for spectrum in all_spectrums_parsed:
+            # use the validation from gnps format since it is the format we are parsing
+            condition, res = LoadData.is_valid_spectrum_gnps(spectrum, config=config)
+            # print(res)
+            if condition:
+                # yield spectrum['params']['name']
+                spec = LoadData._parse_spectrum(
+                    spectrum, compute_classes=compute_classes
+                )
+                # spec = pp.preprocess_spectrum(spec)
+                all_spectrums.append(spec)
+
+        return all_spectrums
 
     def get_all_spectrums(
         file,
