@@ -238,12 +238,20 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
     save_top_k=1,
 )
 
+checkpoint_n_steps_callback = pl.callbacks.ModelCheckpoint(
+    dirpath=config.CHECKPOINT_DIR,
+    filename="best_model_n_steps",
+    every_n_train_steps=100000,
+    save_last=True,
+    save_top_k=1,
+)
+
+
 # checkpoint_callback = SaveBestModelCallback(file_path=config.best_model_path)
 progress_bar_callback = ProgressBar()
 
 # loss callback
 losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
-
 print("define model")
 
 
@@ -273,9 +281,11 @@ if config.load_pretrained:
 else:
     print("Not loaded pretrained model")
 
+
+
 trainer = pl.Trainer(
     max_epochs=epochs,
-    callbacks=[checkpoint_callback, losscallback],
+    callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],
     enable_progress_bar=enable_progress_bar,
     # val_check_interval= config.validate_after_ratio,
 )

@@ -20,7 +20,7 @@ class Preprocessor:
         spectrums,
         fragment_tol_mass=10,
         fragment_tol_mode="ppm",
-        min_intensity=0.000,
+        min_intensity=0.01,
         max_num_peaks=100,
         scale_intensity="root",
     ):
@@ -46,7 +46,7 @@ class Preprocessor:
         spectrum,
         fragment_tol_mass=10,
         fragment_tol_mode="ppm",
-        min_intensity=0.000,
+        min_intensity=0.01,
         max_num_peaks=100,
         scale_intensity="root",
     ):
@@ -54,9 +54,9 @@ class Preprocessor:
         # Process the spectrum.
         return (
             spectrum
-            # .remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
+            .remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
+            #.set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
             .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
-            # .set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
             .scale_intensity(scale_intensity)
         )
 
