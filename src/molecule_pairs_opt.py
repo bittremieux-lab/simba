@@ -18,9 +18,10 @@ class MoleculePairsOpt(MolecularPairsSet):
         self.spectrums = spectrums_unique
         self.df_smiles = df_smiles  # table containing the indexes to map unique to repetitions of the same smiles
         # treat the first 2 columns as int and the 3 column as float
-        self.indexes_tani = MolecularPairsSet.adjust_data_format(
-            np.array(indexes_tani_unique)
-        )
+        #self.indexes_tani = MolecularPairsSet.adjust_data_format(
+        #    np.array(indexes_tani_unique)
+        #)
+        self.indexes_tani = indexes_tani_unique
 
     def __add__(self, other):
         # only to be used when the spectrums are the same

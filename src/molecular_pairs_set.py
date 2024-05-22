@@ -14,15 +14,15 @@ class MolecularPairsSet:
         self.spectrums = spectrums
 
         # treat the first 2 columns as int and the 3 column as float
-        self.indexes_tani = MolecularPairsSet.adjust_data_format(np.array(indexes_tani))
-
+        #self.indexes_tani = MolecularPairsSet.adjust_data_format(np.array(indexes_tani))
+        self.indexes_tani  = indexes_tani
     @staticmethod
     def adjust_data_format(indexes_tani):
         # Extracting the first two columns and changing their data type to int
         int_columns = indexes_tani[:, 0:2].astype(np.int32)
 
         # Extracting the last column and changing its data type to float
-        float_column = indexes_tani[:, 2].astype(np.float32)
+        float_column = indexes_tani[:, 2].astype(np.float16)
 
         # Combining the modified columns to create a new array
         new_indexes_tani = np.column_stack((int_columns, float_column))

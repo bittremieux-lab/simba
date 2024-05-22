@@ -236,15 +236,20 @@ class TrainUtils:
         num_workers=15,
         MIN_SIM=0.8,
         MAX_SIM=1,
+        high_tanimoto_range=0.5,
+        use_exhaustive=True,
     ):
         """
         compute tanimoto results using unique spectrums
         """
 
         print("Computing tanimoto results based on unique smiles")
+
+        function_tanimoto=TrainUtils.compute_all_tanimoto_results_exhaustive if use_exhaustive else TrainUtils.compute_all_tanimoto_results
+
         spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
 
-        molecule_pairs_unique = TrainUtils.compute_all_tanimoto_results(
+        molecule_pairs_unique = function_tanimoto(
             spectrums_unique,
             max_combinations=max_combinations,
             limit_low_tanimoto=limit_low_tanimoto,
@@ -255,6 +260,7 @@ class TrainUtils:
             num_workers=num_workers,
             MIN_SIM=MIN_SIM,
             MAX_SIM=MAX_SIM,
+            high_tanimoto_range=high_tanimoto_range,
         )
         return MoleculePairsOpt(
             spectrums_original=spectrums_original,
@@ -275,6 +281,7 @@ class TrainUtils:
         num_workers=15,
         MIN_SIM=0.8,
         MAX_SIM=1,
+        high_tanimoto_range=0.5,
     ):
 
         print("Starting computation of molecule pairs")
@@ -340,7 +347,7 @@ class TrainUtils:
             if tani is not None:
                 # if tani>MIN_SIM and tani<MAX_SIM:
                 if (counter_indexes < (max_low_pairs * max_combinations)) or (
-                    tani > 0.5
+                    tani > high_tanimoto_range
                 ):
 
                     indexes_np[counter_indexes, 0] = i
@@ -366,7 +373,106 @@ class TrainUtils:
         return molecular_pair_set
 
     
-   
+    @staticmethod
+    def compute_all_tanimoto_results_exhaustive(
+        all_spectrums,
+        max_combinations=1000000,
+        limit_low_tanimoto=True,
+        max_low_pairs=0.5,
+        use_tqdm=True,
+        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
+        min_mass_diff=0,
+        num_workers=15,
+        MIN_SIM=0.8,
+        MAX_SIM=1,
+        high_tanimoto_range=0.5,
+    ):
+
+        print("Starting computation of molecule pairs")
+        print(datetime.now())
+        # asume the spectra is already ordered previously
+        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+
+        # indexes=[]
+        first_row=0
+        max_row=int(len(all_spectrums))
+        M= max_row-first_row
+        N= len(all_spectrums)
+
+        exhaustive_combinations = M*N
+        indexes_np = np.zeros(((exhaustive_combinations), 3),  dtype=np.float16)
+        #indexes_np = MoleculePairsOpt.adjust_data_format(np.array(indexes_np))
+
+        counter_indexes = 0
+        # Iterate through the list to form pairsi
+
+        print("Computing all the tanimoto results")
+        if use_tqdm:
+            # Initialize tqdm with the total number of iterations
+            progress_bar = tqdm(total=exhaustive_combinations, desc="Processing")
+            # progress_bar = tqdm(total=len(all_spectrums), desc="Processing")
+        # Compute all the fingerprints:
+        print("Compute all the fingerprints")
+        fingerprints = TrainUtils.compute_all_fingerprints(all_spectrums)
+
+        # get random indexes for the first part of the pair
+        # random_i_np = np.random.randint(0, len(all_spectrums)-2, max_combinations)
+
+        print(f"Number of workers: {num_workers}")
+        counter_indexes = 0
+
+        # precompute min and max index
+        df_precomputed_indexes = TrainUtils.precompute_min_max_indexes(
+            all_spectrums,
+            min_mass_diff=min_mass_diff,
+            max_mass_diff=max_mass_diff,
+            use_tqdm=use_tqdm,
+        )
+
+        for i in range(first_row,max_row):
+            # to use the whole range or only a small range?
+            for j in range(0,len(all_spectrums)):
+
+
+                # Submit the task to the executor
+                tani = Tanimoto.compute_tanimoto(
+                    fingerprints[i],
+                    fingerprints[j],
+                )
+
+
+                indexes_np[counter_indexes, 0] = i
+                indexes_np[counter_indexes, 1] = j
+                if tani is None:
+                    indexes_np[counter_indexes, 2] = 2
+                else:
+                    indexes_np[counter_indexes, 2] = tani
+
+                if use_tqdm:
+                    progress_bar.update(1)
+
+                counter_indexes=counter_indexes+1
+            
+        
+        print(f'Number of combinations computed: {counter_indexes}')
+        #print('Remove similarities not computed')
+        #indexes_np = indexes_np[indexes_np[:,2]<=1]
+        # 
+        # avoid duplicates:
+        #print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
+        #indexes_np = np.unique(indexes_np, axis=0)
+
+        #remove reordered 
+
+        print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
+        # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+        molecular_pair_set = MolecularPairsSet(
+            spectrums=all_spectrums, indexes_tani=indexes_np
+        )
+
+        print(datetime.now())
+        return molecular_pair_set  
+        
     @staticmethod
     def divide_data_into_bins(
         molecule_pairs,

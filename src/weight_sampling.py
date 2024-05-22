@@ -41,14 +41,29 @@ class WeightSampling:
         range_weights = np.arange(0, len(binned_list)) * bin_size
         return weights, range_weights
 
-    @staticmethod
-    def compute_sample_weights(molecule_pairs, weights):
+    #@staticmethod
+    #def compute_sample_weights(molecule_pairs, weights):
 
         # get similarities
+    #    sim = molecule_pairs.indexes_tani[:, 2]
+    #    # sim = [m.similarity for m in molecule_pairs]
+    #    #index = [math.floor(s * (len(weights) - 1)) for s in sim]
+    #    index = [math.floor(s * (len(weights))) if s != 1 else (len(weights)-1) for s in sim  ]
+    #    weights_sample = np.array([weights[ind] for ind in index])
+    #    weights_sample = weights_sample / (sum(weights_sample))
+    #    return weights_sample
+
+    @staticmethod
+    def compute_sample_weights(molecule_pairs, weights):
+        # get similarities
         sim = molecule_pairs.indexes_tani[:, 2]
-        # sim = [m.similarity for m in molecule_pairs]
-        #index = [math.floor(s * (len(weights) - 1)) for s in sim]
-        index = [math.floor(s * (len(weights))) if s != 1 else (len(weights)-1) for s in sim  ]
-        weights_sample = np.array([weights[ind] for ind in index])
-        weights_sample = weights_sample / (sum(weights_sample))
+        
+        # Calculate the index using vectorized operations
+        indices = np.floor(sim * (len(weights))).astype(int)
+        indices[indices == len(weights)] = len(weights) - 1
+        
+        # Map the indices to weights and normalize
+        weights_sample = weights[indices]
+        weights_sample /= weights_sample.sum()
+        
         return weights_sample
