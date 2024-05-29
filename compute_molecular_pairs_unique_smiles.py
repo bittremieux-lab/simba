@@ -1,5 +1,5 @@
 import dill
-from src.load_data import LoadData
+#from src.load_data import LoadData
 from sklearn.model_selection import train_test_split
 from src.train_utils import TrainUtils
 from src.preprocessor import Preprocessor
@@ -9,8 +9,8 @@ from src.config import Config
 from src.parser import Parser
 from datetime import datetime
 from src.loader_saver import LoaderSaver
-
-
+import pickle
+import numpy as np
 
 # Get the current date and time
 print("Initiating molecular pair script ...")
@@ -24,16 +24,23 @@ gnps_path = r"/scratch/antwerpen/209/vsc20939/data/ALL_GNPS_NO_PROPOGATED_wb.mgf
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
-output_pairs_file = "../data/merged_gnps_nist_20240319_unique_smiles_100_million_v2.pkl"
+output_pairs_file = "../data/merged_gnps_nist_20240516_exhaustive.pkl"
+output_np_indexes_train = '../data/indexes_tani_train.npy'
+output_np_indexes_val = '../data/indexes_tani_val.npy'
+output_np_indexes_test = '../data/indexes_tani_test.npy'
+
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
 output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
+USE_ONLY_LOW_RANGE=True
+high_tanimoto_range = 0 if USE_ONLY_LOW_RANGE else 0.5 # to get more high similarity pairs
 
 print(f"output_file:{output_pairs_file}")
 # params
 max_number_spectra_gnps = 1000000000
 max_number_spectra_nist = 10000000000
-train_molecules = 100 * (10**6)
+#train_molecules = 100 * (10**6)
+train_molecules = 50 * (10**6)
 val_molecules = 10**6
 test_molecules = 10**6
 
@@ -67,7 +74,7 @@ def write_data(
         "uniformed_molecule_pairs_test": uniformed_molecule_pairs_test,
     }
     with open(file_path, "wb") as file:
-        dill.dump(dataset, file)
+        pickle.dump(dataset, file)
 
 
 if load_train_val_test_data:
@@ -151,6 +158,8 @@ molecule_pairs_train = TrainUtils.compute_all_tanimoto_results_unique(
     use_tqdm=use_tqdm,
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
+    high_tanimoto_range=high_tanimoto_range,
+    use_exhaustive=True,
 )
 print(f"Current time: {datetime.now()}")
 molecule_pairs_val = TrainUtils.compute_all_tanimoto_results_unique(
@@ -159,6 +168,8 @@ molecule_pairs_val = TrainUtils.compute_all_tanimoto_results_unique(
     use_tqdm=use_tqdm,
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
+    high_tanimoto_range=high_tanimoto_range,
+    use_exhaustive=True,
 )
 print(f"Current time: {datetime.now()}")
 molecule_pairs_test = TrainUtils.compute_all_tanimoto_results_unique(
@@ -167,11 +178,13 @@ molecule_pairs_test = TrainUtils.compute_all_tanimoto_results_unique(
     use_tqdm=use_tqdm,
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
+    high_tanimoto_range=high_tanimoto_range,
+    use_exhaustive=True,
 )
 
 ## add molecules with similarity=1
-molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
-molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+#molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
+#molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
 
 # Dump the dictionary to a file using pickle
 
@@ -179,6 +192,12 @@ print(f"Total training data combinations: {len(molecule_pairs_train)}")
 print(f"Total val data combinations: {len(molecule_pairs_val)}")
 print(f"Total test data combinations: {len(molecule_pairs_test)}")
 print(f"Current time: {datetime.now()}")
+
+
+# save np files
+np.save(arr=molecule_pairs_train.indexes_tani, file= output_np_indexes_train)
+np.save(arr=molecule_pairs_val.indexes_tani, file= output_np_indexes_val)
+np.save(arr=molecule_pairs_test.indexes_tani, file= output_np_indexes_test)
 
 # create uniform test data
 uniformed_molecule_pairs_test, _ = TrainUtils.uniformise(

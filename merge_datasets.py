@@ -26,9 +26,9 @@ def write_data(
 
 
 # load data
-dataset_path_1 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240207_gnps_nist_janssen_15_millions.pkl"
-dataset_path_2 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240222_gnps_nist_janssen_extra_5_millions_OUTSIDE_MAX_DIFF.pkl"
-dataset_path_out = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240227_gnps_nist_janssen_20_millions_OUTSIDE_MAX_DIFF.pkl"
+dataset_path_1 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_100_million_v2_no_identity.pkl"
+dataset_path_2 = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240516_unique_smiles_extra_dummy_low_range.pkl"
+dataset_path_out = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240516_150_millions.pkl"
 
 print("Loading data 1 ... ")
 with open(dataset_path_1, "rb") as file:
@@ -51,17 +51,20 @@ molecule_pairs_test_2 = dataset_2["molecule_pairs_test"]
 uniformed_molecule_pairs_test_2 = dataset_2["uniformed_molecule_pairs_test"]
 
 print(f"Number of pairs for dataset 1: {len(molecule_pairs_train_1)}")
-print(f"Number of pairs for dataset 1: {len(molecule_pairs_train_2)}")
+print(f"Number of pairs for dataset 2: {len(molecule_pairs_train_2)}")
 print(f"Number of pairs for uniform test 1: {len(uniformed_molecule_pairs_test_1)}")
 print(f"Number of pairs for uniform test 2: {len(uniformed_molecule_pairs_test_2)}")
 
 # merge
 molecules_pairs_train = molecule_pairs_train_1 + molecule_pairs_train_2
-molecules_pairs_val = molecule_pairs_val_1 + molecule_pairs_val_2
-molecules_pairs_test = molecule_pairs_test_1 + molecule_pairs_test_2
-uniformed_molecule_pairs_test = (
-    uniformed_molecule_pairs_test_1 + uniformed_molecule_pairs_test_2
-)
+#molecules_pairs_val = molecule_pairs_val_1 + molecule_pairs_val_2
+#molecules_pairs_test = molecule_pairs_test_1 + molecule_pairs_test_2
+#uniformed_molecule_pairs_test = (
+#    uniformed_molecule_pairs_test_1 + uniformed_molecule_pairs_test_2
+#)
+molecules_pairs_val = molecule_pairs_val_1 
+molecules_pairs_test = molecule_pairs_test_1 
+uniformed_molecule_pairs_test =  uniformed_molecule_pairs_test_1 
 
 # remove duplicates
 molecules_pairs_train = molecules_pairs_train.remove_duplicates()
