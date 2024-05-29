@@ -4,7 +4,7 @@ from tqdm import tqdm
 from matchms.similarity import FingerprintSimilarity
 from matchms.filtering import add_fingerprint
 from matchms import calculate_scores
-
+import tensorflow as tf
 class MS2DeepScoreComparison:
 
     def get_ms2deepscore_similarity(model_ms2d_file):
@@ -52,28 +52,35 @@ class MS2DeepScoreComparison:
                 molecules_filtered.append(m)
             #else:
             #    tanimotos.append(None)
-
+        
         results = calculate_scores(spectrum_found_0_ms_all, spectrum_found_1_ms_all, similarity_ms2)
+        sim_array = results.to_array()
+        
+        spectrum_found_0_ms_all =[add_fingerprint(s) for s in spectrum_found_0_ms_all]
+        spectrum_found_1_ms_all= [add_fingerprint(s) for s in spectrum_found_1_ms_all]
 
+        print(sim_array)
         for i,(s0,s1,m) in enumerate(zip(spectrum_found_0_ms_all, spectrum_found_1_ms_all,molecules_filtered)):
             
-            try:
-                results_tuple = results.scores_by_query(s1, name='MS2DeepScore') 
-                score = results_tuple[i][1]
+            #try:
+            #    results_tuple = results.scores_by_query([s1], name='MS2DeepScore') 
+            #    score = results_tuple[i][1]
                 if compute_tanimoto:
                         tanimoto_measure = FingerprintSimilarity(
                             similarity_measure="jaccard"
                         )
+                       
                         tani = tanimoto_measure.pair(
-                            spectrum_found_0_ms, spectrum_found_1_ms
+                            s0, s1
                         )
                 else:
                         tani = m.similarity
                 tanimotos.append(tani)
+                score = sim_array[i,i]
                 scores_ms2d.append(score)
-            except:
-                print(i)
-                print('Problem while computing MS2')
+            #except:
+            #    print(i)
+            #    print('Problem while computing MS2')
         #for spectrum_found_0_ms, spectrum_found_1_ms in zip(spectrum_found_0_ms_all, spectrum_found_1_ms_all):
         #    # calculate scores
         #    if (spectrum_found_0_ms is not None) and (spectrum_found_1_ms is not None):
