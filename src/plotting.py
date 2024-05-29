@@ -70,6 +70,7 @@ class Plotting:
         roc_file_path="./roc_curve.png",
         label="",
         color="r",
+        linestyle='',
     ):
         """
         Compute and plot the Receiver Operating Characteristic (ROC) curve.
@@ -85,10 +86,11 @@ class Plotting:
             color=color,
             lw=2,
             label=f"{label} AUC={roc_auc:.2f}",
+            linestyle=linestyle
         )
 
-        print(f"tpr: {tpr}")
-        print(f"fpr: {fpr}")
+        #print(f"tpr: {tpr}")
+        #print(f"fpr: {fpr}")
         # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.0])
@@ -106,16 +108,19 @@ class Plotting:
         y_scores_list,
         labels,
         colors,
+        linestyles,
         title="ROC Curve",
+        figsize=(4,4)
+        
     ):
         plt.rcParams["font.size"] = 14
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=figsize)
         plt.plot([0, 1], [0, 1], linestyle="--", color="k")
-        for y_true_list, y_scores_list, l, c in zip(
-            y_true_list, y_scores_list, labels, colors
+        for y_true_list, y_scores_list, l, c , linestyle in zip(
+            y_true_list, y_scores_list, labels, colors, linestyles
         ):
             Plotting.plot_roc_curve(
-                y_true_list, y_scores_list, title=title, label=l, color=c
+                y_true_list, y_scores_list, title=title, label=l, color=c, linestyle=linestyle
             )
 
     def plot_roc_curve_comparison(
