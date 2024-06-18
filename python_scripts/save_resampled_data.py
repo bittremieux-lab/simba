@@ -1,44 +1,22 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[2]:
-
-
-get_ipython().run_line_magic('load_ext', 'autoreload')
-get_ipython().run_line_magic('autoreload', '2')
-
-
-# In[3]:
 
 
 import os
-os.chdir('/Users/sebas/projects/metabolomics')
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-
-# In[4]:
 
 
 import numpy as np
 
 
-# In[5]:
 
-
-data_folder= '/Users/sebas/projects/data/'
-
-
-# ## Load the tanimoto similarities computed for all the combinations
-
-# In[6]:
-
-
+data_folder= '/scratch/antwerpen/209/vsc20939/data/'
+# datapath of tanimoto pairs computed
 data_path =data_folder+ 'indexes_tani_train_exhaustive.npy'
 
+# datapath of model similarities computed
+matrix_similarities_path= data_folder+  'matrix_similarities.npy'
+output_path=data_folder + 'indexes_tani_train_resampled.npy'
 
-# In[7]:
 
-
+# load data
 indexes_tani_train =np.load(data_path)
 
 
@@ -81,7 +59,7 @@ import pickle
 # In[13]:
 
 
-matrix_similarities= np.load('./matrix_similarities.npy')
+matrix_similarities= np.load(matrix_similarities_path)
 
 
 # In[14]:
@@ -243,7 +221,7 @@ indexes_tani_train.shape
 # In[ ]:
 
 
-np.save('./indexes_tani_train_resampled.npy', indexes_tani_train_filtered)
+np.save(output_path, indexes_tani_train_filtered)
 
 
 # In[ ]:
