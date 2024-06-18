@@ -86,14 +86,23 @@ class LoadData:
     def is_valid_spectrum_janssen(spectrum: SpectrumExt, config):
 
         cond_library = True  # all the library is good
-        cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
-        try:
-            cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
-        except:
-            cond_pepmass = 0.0
+        if "charge" in spectrum["params"]:
+            cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
+        else:
+            cond_charge=True 
+
+        #try:
+        #    cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
+        #except:
+        #    cond_pepmass = float(spectrum["params"]["pepmass"]) > 0
+        cond_pepmass = True
 
         cond_mz_array = len(spectrum["m/z array"]) >= config.MIN_N_PEAKS
-        cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+
+        if 'ionmode' in spectrum["params"]:
+            cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+        else:
+            cond_ion_mode=True
         cond_name = spectrum["params"]["adduct"] in ["M+", "[M+H]+", "M+H"]  # adduct
         cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
         cond_inchi_smiles = (
@@ -113,6 +122,7 @@ class LoadData:
             "cond_centroid": cond_centroid,
             "cond_inchi_smiles": cond_inchi_smiles,
         }
+
         # return cond_ion_mode and cond_mz_array
 
         total_condition = (
@@ -196,7 +206,10 @@ class LoadData:
             inchi = spectrum_dict["params"]["inchi"]
             library = spectrum_dict["params"]["organism"]
         else:  # JANSSEN
-            identifier = spectrum_dict["params"]["id"]
+            if 'id' in spectrum_dict["params"]:
+                identifier = spectrum_dict["params"]["id"]
+            else:
+                identifier='none'
             inchi = ""
             library = "janssen"
 
@@ -204,7 +217,10 @@ class LoadData:
         library = library
         inchi = inchi
         smiles = spectrum_dict["params"]["smiles"]
-        ionmode = spectrum_dict["params"]["ionmode"]
+        if 'ionmode' in spectrum_dict["params"]:
+            ionmode = spectrum_dict["params"]["ionmode"]
+        else:
+            ionmode='none'
 
         # compute hash id value
         spectrum_hash_result = spectrum_hash(
@@ -225,11 +241,20 @@ class LoadData:
             classe = None
             subclass = None
 
+        try:
+            precursor_mz= float(spectrum_dict["params"]["pepmass"][0]) 
+        except:
+            precursor_mz= float(spectrum_dict["params"]['precursor_mz']) 
+
+        try:
+            charge=max(int(spectrum_dict["params"]["charge"][0]), 1)
+        except:
+            charge = 1
         spec = SpectrumExt(
             identifier=identifier,
-            precursor_mz=float(spectrum_dict["params"]["pepmass"][0]),
+            precursor_mz=precursor_mz,
             # Re-assign charge 0 to 1.
-            precursor_charge=max(int(spectrum_dict["params"]["charge"][0]), 1),
+            precursor_charge=charge,
             mz=np.array(spectrum_dict["m/z array"]),
             intensity=np.array(spectrum_dict["intensity array"]),
             retention_time=np.nan,
