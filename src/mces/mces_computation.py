@@ -8,6 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 import itertools
 import os
+import subprocess
 
 class MCES:
     @staticmethod
@@ -53,21 +54,54 @@ class MCES:
             spectrums_unique=spectrums_unique,
             df_smiles=df_smiles,
             indexes_tani_unique=molecule_pairs_unique.indexes_tani,
-        ), df_results_mces
+        )
 
-    @staticmethod
-    def create_input_df(all_spectrums):
-        indexes = [i for i in range(0,len(all_spectrums))]
-        list_indexes_0=[]
-        list_indexes_1=[]
-        list_smiles_0=[]
-        list_smiles_1=[]
-        for it in itertools.combinations(indexes, 2):
-            list_indexes_0.append(it[0])
-            list_indexes_1.append(it[1])
-            list_smiles_0.append(all_spectrums[it[0]].params['smiles'])
-            list_smiles_1.append(all_spectrums[it[1]].params['smiles'])
+    #@staticmethod
+    #def create_input_df(all_spectrums):
+    #    def generate_combinations(all_spectrums):
+    #        indexes = range(len(all_spectrums))
+    #        for it in itertools.combinations(indexes, 2):
+    #            yield {
+    #                'indexes_0': it[0],
+    #                'indexes_1': it[1],
+    #                'smiles_0': all_spectrums[it[0]].params['smiles'],
+    #                'smiles_1': all_spectrums[it[1]].params['smiles']
+    #            }
         
+    #    combinations_gen = generate_combinations(all_spectrums)
+    #    input_df = pd.DataFrame(combinations_gen)
+        
+    #    return input_df
+
+    #def create_input_df(all_spectrums):
+    #    size= len(all_spectrums)*len(all_spectrums)
+
+    #    print(f'Total size of df: {size}')
+
+    #    for i in range(0, len(all_spectrums)):
+    #        for j in range(0, len(all_spectrums)):
+                
+    #@staticmethod
+    def create_input_df(all_spectrums):
+
+        print(f'Number of unique spectra:{len(all_spectrums)}')
+        indexes = [i for i in range(0,len(all_spectrums))]
+        
+
+        combinations= list(itertools.combinations(indexes, 2))
+        list_indexes_0=[0]*len(combinations)
+        list_indexes_1=[0]*len(combinations)
+        list_smiles_0=[None]*len(combinations)
+        list_smiles_1=[None]*len(combinations)
+
+        print(f'Number of combinations:{len(combinations)}')
+        for i,it in tqdm(enumerate(combinations)):
+            list_indexes_0[i]=it[0]
+            list_indexes_1[i]=it[1]
+            list_smiles_0[i]=(all_spectrums[it[0]].params['smiles'])
+            list_smiles_1[i]=(all_spectrums[it[1]].params['smiles'])
+        
+        print('Now create a df')
         input_df=pd.DataFrame()
         input_df['indexes_0']=list_indexes_0
         input_df['indexes_1']=list_indexes_1
@@ -115,8 +149,10 @@ class MCES:
         df[['smiles_0', 'smiles_1']].to_csv('./input.csv', header=False)
 
         # compute mces
-        command = 'myopic_mces  ./input.csv ./output.csv'
-        os.system(command)
+        #command = 'myopic_mces  ./input.csv ./output.csv'
+        command = ['myopic_mces', './input.csv', './output.csv']
+        x = subprocess.run(command,capture_output=True)
+
 
         # read results
         results= pd.read_csv('./output.csv', header=None)

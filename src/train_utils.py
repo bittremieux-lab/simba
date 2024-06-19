@@ -488,7 +488,7 @@ class TrainUtils:
         else:
             number_bins_effective = number_bins
 
-        for p in range(number_bins_effective):
+        for p in range(int(number_bins_effective)):
             low = p * (1 / number_bins)
 
             if bin_sim_1:
