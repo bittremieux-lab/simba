@@ -166,7 +166,7 @@ class MCES:
             #print('saving intermediate results')
             indexes_np[index:index+size,0]= [c[0] for c in combinations_subset]
             indexes_np[index:index+size,1]= [c[1] for c in combinations_subset]
-            indexes_np[index:index+size,2]= df['mces'].values
+            indexes_np[index:index+size,2]= df['mces_normalized'].values
 
         #print('Remove similarities not computed')
         #indexes_np = indexes_np[indexes_np[:,2]<=1]
