@@ -81,35 +81,28 @@ class MCES:
     #    for i in range(0, len(all_spectrums)):
     #        for j in range(0, len(all_spectrums)):
                 
-    #@staticmethod
-    def create_input_df(all_spectrums):
+    @staticmethod
+    def create_combinations(all_spectrums):
 
         print(f'Number of unique spectra:{len(all_spectrums)}')
         indexes = [i for i in range(0,len(all_spectrums))]
-        
-
         combinations= list(itertools.combinations(indexes, 2))
-        list_indexes_0=[0]*len(combinations)
-        list_indexes_1=[0]*len(combinations)
-        list_smiles_0=[None]*len(combinations)
-        list_smiles_1=[None]*len(combinations)
-
-        print(f'Number of combinations:{len(combinations)}')
-        for i,it in tqdm(enumerate(combinations)):
-            list_indexes_0[i]=it[0]
-            list_indexes_1[i]=it[1]
-            list_smiles_0[i]=(all_spectrums[it[0]].params['smiles'])
-            list_smiles_1[i]=(all_spectrums[it[1]].params['smiles'])
-        
-        print('Now create a df')
-        input_df=pd.DataFrame()
-        input_df['indexes_0']=list_indexes_0
-        input_df['indexes_1']=list_indexes_1
-        input_df['smiles_0']=list_smiles_0
-        input_df['smiles_1']=list_smiles_1
-
-        return input_df
+        return combinations
     
+    @staticmethod
+    def create_df(all_spectrums, combinations):
+        df=pd.DataFrame()
+        df['smiles_0']= [all_spectrums[c[0]].params['smiles'] for c in combinations]
+        df['smiles_1']= [all_spectrums[c[1]].params['smiles'] for c in combinations]
+        return df
+    
+    @staticmethod
+    def normalize_mces(mces, max_mces=6):
+        # normalize mces. the higher the mces the lower the similarity
+        mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
+        return mces_normalized.apply(lambda x:(1-x/max_mces))
+    
+
     @staticmethod
     def compute_all_mces_results_exhaustive(
         all_spectrums,
@@ -127,48 +120,42 @@ class MCES:
 
         print("Starting computation of molecule pairs")
         print(datetime.now())
-        # asume the spectra is already ordered previously
-        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
 
-        # indexes=[]
-        first_row=0
-        max_row=int(len(all_spectrums))
-        M= max_row-first_row
-        N= len(all_spectrums)
-
-        exhaustive_combinations = M*N
-       
 
         print(f"Number of workers: {num_workers}")
 
         ## CREATE temp df
-        df = MCES.create_input_df(all_spectrums)
+        combinations = MCES.create_combinations(all_spectrums)
+         # get indexes_np array
+        indexes_np = np.zeros(((len(combinations)), 3),  dtype=np.float16)
+        size= 1000
 
-        print(f'Number of combinations: {df.shape[0]}')
-        print(df)
-        df[['smiles_0', 'smiles_1']].to_csv('./input.csv', header=False)
+        # iterate through the combinations to generate the pairs
+        for index in range(0, len(combinations),size):
+            combinations_subset= combinations[index:index+size]
+        
+            df = MCES.create_input_df(all_spectrums, combinations_subset)
+            df[['smiles_0', 'smiles_1']].to_csv('./input.csv', header=False)
 
-        # compute mces
-        #command = 'myopic_mces  ./input.csv ./output.csv'
-        command = ['myopic_mces', './input.csv', './output.csv']
-        x = subprocess.run(command,capture_output=True)
+            # compute mces
+            #command = 'myopic_mces  ./input.csv ./output.csv'
+            command = ['myopic_mces', './input.csv', './output.csv']
+            x = subprocess.run(command,capture_output=True)
 
 
-        # read results
-        results= pd.read_csv('./output.csv', header=None)
-        os.system('rm ./input.csv')
-        os.system('rm ./output.csv')
-        df['mces'] = results[2] # the column 2 is the mces result
+            # read results
+            results= pd.read_csv('./output.csv', header=None)
+            os.system('rm ./input.csv')
+            os.system('rm ./output.csv')
+            df['mces'] = results[2] # the column 2 is the mces result
 
-        # normalize mces. the higher the mces the lower the similarity
-        df['mces_normalized'] = df['mces'].apply(lambda x:x if x<=6 else 6)
-        df['mces_normalized'] = df['mces_normalized'].apply(lambda x:(1-x/6))
+            # normalize mces. the higher the mces the lower the similarity
+            df['mces_normalized'] = MCES.normalize_mces(df['mces'])
+ 
 
-        # get indexes_np array
-        indexes_np = np.zeros(((df.shape[0]), 3),  dtype=np.float16)
-        indexes_np[:,0]= df['indexes_0']
-        indexes_np[:,1]= df['indexes_1']
-        indexes_np[:,2]= df['mces_normalized']
+            indexes_np[index:index+size,0]= [c[0] for c in combinations_subset]
+            indexes_np[index:index+size,1]= [c[1] for c in combinations_subset]
+            indexes_np[index:index+size,2]= df['mces'].values
 
         #print('Remove similarities not computed')
         #indexes_np = indexes_np[indexes_np[:,2]<=1]
