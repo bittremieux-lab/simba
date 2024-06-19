@@ -90,7 +90,7 @@ class MCES:
         return combinations
     
     @staticmethod
-    def create_df(all_spectrums, combinations):
+    def create_input_df(all_spectrums, combinations):
         df=pd.DataFrame()
         df['smiles_0']= [all_spectrums[c[0]].params['smiles'] for c in combinations]
         df['smiles_1']= [all_spectrums[c[1]].params['smiles'] for c in combinations]
@@ -125,25 +125,36 @@ class MCES:
         print(f"Number of workers: {num_workers}")
 
         ## CREATE temp df
+        print('Creating combinations')
         combinations = MCES.create_combinations(all_spectrums)
          # get indexes_np array
-        indexes_np = np.zeros(((len(combinations)), 3),  dtype=np.float16)
-        size= 1000
 
+        print('Initilizaing big array')
+        indexes_np = np.zeros(((len(combinations)), 3),  dtype=np.float16)
+        size= 10000
+
+        print(f'Total number of combinations {len(combinations)}')
         # iterate through the combinations to generate the pairs
-        for index in range(0, len(combinations),size):
+        for index in tqdm(range(0, len(combinations),size)):
+
             combinations_subset= combinations[index:index+size]
-        
+
+            #print('Creating df for computation')
             df = MCES.create_input_df(all_spectrums, combinations_subset)
+
+            #print('Saving df ...')
             df[['smiles_0', 'smiles_1']].to_csv('./input.csv', header=False)
 
             # compute mces
             #command = 'myopic_mces  ./input.csv ./output.csv'
+            #print('Running myopic ...')
             command = ['myopic_mces', './input.csv', './output.csv']
             x = subprocess.run(command,capture_output=True)
+            #print('Finished myopic')
 
 
             # read results
+            #print('reading csv')
             results= pd.read_csv('./output.csv', header=None)
             os.system('rm ./input.csv')
             os.system('rm ./output.csv')
@@ -152,7 +163,7 @@ class MCES:
             # normalize mces. the higher the mces the lower the similarity
             df['mces_normalized'] = MCES.normalize_mces(df['mces'])
  
-
+            #print('saving intermediate results')
             indexes_np[index:index+size,0]= [c[0] for c in combinations_subset]
             indexes_np[index:index+size,1]= [c[1] for c in combinations_subset]
             indexes_np[index:index+size,2]= df['mces'].values
