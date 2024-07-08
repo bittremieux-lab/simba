@@ -9,6 +9,10 @@ from tqdm import tqdm
 import itertools
 import os
 import subprocess
+import random 
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
+import multiprocessing
 
 class MCES:
     @staticmethod
@@ -30,13 +34,13 @@ class MCES:
         compute tanimoto results using unique spectrums
         """
 
-        print("Computing tanimoto results based on unique smiles")
+        print("Computing MCES results based on unique smiles")
 
         function_tanimoto=MCES.compute_all_mces_results_exhaustive 
 
         spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
 
-        molecule_pairs_unique, df_results_mces = function_tanimoto(
+        molecule_pairs_unique = function_tanimoto(
             spectrums_unique,
             max_combinations=max_combinations,
             limit_low_tanimoto=limit_low_tanimoto,
@@ -56,30 +60,7 @@ class MCES:
             indexes_tani_unique=molecule_pairs_unique.indexes_tani,
         )
 
-    #@staticmethod
-    #def create_input_df(all_spectrums):
-    #    def generate_combinations(all_spectrums):
-    #        indexes = range(len(all_spectrums))
-    #        for it in itertools.combinations(indexes, 2):
-    #            yield {
-    #                'indexes_0': it[0],
-    #                'indexes_1': it[1],
-    #                'smiles_0': all_spectrums[it[0]].params['smiles'],
-    #                'smiles_1': all_spectrums[it[1]].params['smiles']
-    #            }
-        
-    #    combinations_gen = generate_combinations(all_spectrums)
-    #    input_df = pd.DataFrame(combinations_gen)
-        
-    #    return input_df
 
-    #def create_input_df(all_spectrums):
-    #    size= len(all_spectrums)*len(all_spectrums)
-
-    #    print(f'Total size of df: {size}')
-
-    #    for i in range(0, len(all_spectrums)):
-    #        for j in range(0, len(all_spectrums)):
                 
     @staticmethod
     def create_combinations(all_spectrums):
@@ -90,20 +71,75 @@ class MCES:
         return combinations
     
     @staticmethod
-    def create_input_df(all_spectrums, combinations):
+    def create_input_df(smiles, indexes_0, indexes_1):
         df=pd.DataFrame()
-        df['smiles_0']= [all_spectrums[c[0]].params['smiles'] for c in combinations]
-        df['smiles_1']= [all_spectrums[c[1]].params['smiles'] for c in combinations]
+        print(f'Length of spectrums: {len(smiles)}')
+
+        df['smiles_0']= [smiles[int(r)]  for r in indexes_0]
+        df['smiles_1']= [smiles[int(r)]  for r in indexes_1]
+
         return df
     
     @staticmethod
-    def normalize_mces(mces, max_mces=6):
+    def normalize_mces(mces, max_mces=5):
         # normalize mces. the higher the mces the lower the similarity
         mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
-        return mces_normalized.apply(lambda x:(1-x/max_mces))
+        return mces_normalized.apply(lambda x:(1-(x/max_mces)))
     
+    def compute_mces_myopic(smiles, sampled_index, size_batch, id):
 
-    @staticmethod
+        indexes_np = np.zeros((int(size_batch), 3),)
+        indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
+        indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
+        
+        #indexes_np[:,0]=sampled_index*np.ones((size_batch,))
+        #indexes_np[:,1]= np.arange(0,len(all_spectrums))
+
+        print('Creating df for computation')
+        #print('ground truth')
+        #print(random_first_index[index:index+size_batch])
+        df = MCES.create_input_df(smiles, indexes_np[:,0], 
+                                                indexes_np[:,1])
+
+        print('Saving df ...')
+        df[['smiles_0', 'smiles_1']].to_csv(f'./input_{str(id)}.csv', header=False)
+
+        # compute mces
+        #command = 'myopic_mces  ./input.csv ./output.csv'
+        print('Running myopic ...')
+        command = ['myopic_mces']
+        #command = ['myopic_mces', f'./input_{str(id)}.csv', f'./output_{str(id)}.csv']
+
+        # Add the argument --num_jobs 15
+        #command.extend(['--num_jobs', '32'])
+        command.extend([ f'./input_{str(id)}.csv'])
+        command.extend([f'./output_{str(id)}.csv'])
+        command.extend(['--num_jobs', '1'])
+
+        # Define threshold
+        command.extend(['--threshold', '5'])
+
+        command.extend(['--solver_onethreaded'])
+        command.extend(['--solver_no_msg'])
+
+        #x = subprocess.run(command,capture_output=True)
+        subprocess.run(command)
+        print('Finished myopic')
+
+        # read results
+        print('reading csv')
+        results= pd.read_csv(f'./output_{str(id)}.csv', header=None)
+        os.system(f'rm ./input_{str(id)}.csv')
+        os.system(f'rm ./output_{str(id)}.csv')
+        df['mces'] = results[2] # the column 2 is the mces result
+
+        # normalize mces. the higher the mces the lower the similarity
+        df['mces_normalized'] = MCES.normalize_mces(df['mces'])
+
+        #print('saving intermediate results')
+        indexes_np[:,2]= df['mces_normalized'].values
+        return indexes_np 
+
     def compute_all_mces_results_exhaustive(
         all_spectrums,
         max_combinations=1000000,
@@ -123,61 +159,143 @@ class MCES:
 
 
         print(f"Number of workers: {num_workers}")
+        size_batch = 10000
+        number_sampled_spectrums = np.floor(max_combinations/size_batch)
+        random_samples = np.random.randint(0,len(all_spectrums), int(number_sampled_spectrums))
 
-        ## CREATE temp df
-        print('Creating combinations')
-        combinations = MCES.create_combinations(all_spectrums)
-         # get indexes_np array
+        # Use ProcessPoolExecutor for parallel processing
+        smiles=[s.params['smiles'] for s in all_spectrums]
 
-        print('Initilizaing big array')
-        indexes_np = np.zeros(((len(combinations)), 3),  dtype=np.float16)
-        size= 10000
+        # Create a multiprocessing pool
+        pool = multiprocessing.Pool(processes=num_workers)
+        # Generate arrays in parallel
+        results = [pool.apply_async(MCES.compute_mces_myopic, args=(smiles, 
+                                sampled_index, 
+                                size_batch, 
+                                identifier)) for identifier, sampled_index in enumerate(random_samples)]
+        
+        # Close the pool and wait for all processes to finish
+        pool.close()
+        pool.join()
+    
+        # Get results from async objects
+        indexes_np = np.concatenate([result.get() for result in results], axis=0)
 
-        print(f'Total number of combinations {len(combinations)}')
-        # iterate through the combinations to generate the pairs
-        for index in tqdm(range(0, len(combinations),size)):
 
-            combinations_subset= combinations[index:index+size]
+        #with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        #    # Submit tasks to the executor
+        #    manager = multiprocessing.Manager()
+        #    smiles = manager.list(smiles)  # Create a managed list
+        #    futures = [executor.submit(MCES.compute_mces_myopic, 
+        #                        smiles, 
+        #                        sampled_index, 
+        #                        size_batch, 
+        #                        identifier) for identifier, sampled_index in enumerate(random_samples)]
 
-            #print('Creating df for computation')
-            df = MCES.create_input_df(all_spectrums, combinations_subset)
+        #    # Collect results as they complete
+        #    results = []
+        #    for future in as_completed(futures):
+        #        results.append(future.result())
 
-            #print('Saving df ...')
+        # Concatenate the results along the first axis
+        #indexes_np = np.concatenate(results, axis=0)
+        print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
+
+
+        print('Example of pairs retreived:')
+        print(indexes_np[0:1000])
+        # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
+        molecular_pair_set = MolecularPairsSet(
+            spectrums=all_spectrums, indexes_tani=indexes_np
+        )
+
+        print(datetime.now())
+        return molecular_pair_set
+
+
+    @staticmethod
+    def compute_all_mces_results_exhaustive_single_thread(
+        all_spectrums,
+        max_combinations=1000000,
+        limit_low_tanimoto=True,
+        max_low_pairs=0.5,
+        use_tqdm=True,
+        max_mass_diff=None,  # maximum number of elements in which we stop adding new items
+        min_mass_diff=0,
+        num_workers=15,
+        MIN_SIM=0.8,
+        MAX_SIM=1,
+        high_tanimoto_range=0.5,
+    ):
+
+        print("Starting computation of molecule pairs")
+        print(datetime.now())
+
+
+        print(f"Number of workers: {num_workers}")
+
+        print('Initializing big array')
+        size_batch = len(all_spectrums)
+        number_sampled_spectrums = np.floor(max_combinations/size_batch)
+        indexes_np = np.zeros((int(number_sampled_spectrums*size_batch), 3),)
+        random_samples = np.random.randint(0,len(all_spectrums), int(number_sampled_spectrums))
+
+        #for index in tqdm(range(0,max_combinations, size_batch)):
+        for i, sampled_index in tqdm(enumerate(random_samples)):
+        #for index in tqdm(range(0, size_combinations,size_batch)):
+            # compute the consecutive pairs
+            indexes_np[i:i+size_batch,0]=sampled_index*np.ones((size_batch,))
+            indexes_np[i:i+size_batch,1]= np.arange(0,len(all_spectrums))
+
+            print(f'{sampled_index}')
+            print('Creating df for computation')
+
+            #print('ground truth')
+            #print(random_first_index[index:index+size_batch])
+            df = MCES.create_input_df(all_spectrums, indexes_np[:,0][i:i+size_batch], 
+                                                    indexes_np[:,1][i:i+size_batch])
+
+            print('Saving df ...')
             df[['smiles_0', 'smiles_1']].to_csv('./input.csv', header=False)
 
             # compute mces
             #command = 'myopic_mces  ./input.csv ./output.csv'
-            #print('Running myopic ...')
+            print('Running myopic ...')
             command = ['myopic_mces', './input.csv', './output.csv']
-            x = subprocess.run(command,capture_output=True)
-            #print('Finished myopic')
 
+            # Add the argument --num_jobs 15
+            #command.extend(['--num_jobs', '32'])
+            command.extend(['--num_jobs', '32'])
+
+            # Define threshold
+            command.extend(['--threshold', '5'])
+
+            #command.extend(['--solver_onethreaded'])
+            command.extend(['--solver_no_msg'])
+
+            #x = subprocess.run(command,capture_output=True)
+            subprocess.run(command)
+            print('Finished myopic')
 
             # read results
-            #print('reading csv')
+            print('reading csv')
             results= pd.read_csv('./output.csv', header=None)
-            os.system('rm ./input.csv')
-            os.system('rm ./output.csv')
+            #os.system('rm ./input.csv')
+            #os.system('rm ./output.csv')
             df['mces'] = results[2] # the column 2 is the mces result
 
             # normalize mces. the higher the mces the lower the similarity
             df['mces_normalized'] = MCES.normalize_mces(df['mces'])
  
             #print('saving intermediate results')
-            indexes_np[index:index+size,0]= [c[0] for c in combinations_subset]
-            indexes_np[index:index+size,1]= [c[1] for c in combinations_subset]
-            indexes_np[index:index+size,2]= df['mces_normalized'].values
+            indexes_np[i:i+size_batch,2]= df['mces_normalized'].values
 
-        #print('Remove similarities not computed')
-        #indexes_np = indexes_np[indexes_np[:,2]<=1]
-        # 
-        # avoid duplicates:
-        #print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
-        #indexes_np = np.unique(indexes_np, axis=0)
-
-        #remove reordered 
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
+
+
+        print('Example of pairs retreived:')
+        print(indexes_np[0:1000])
         # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
         molecular_pair_set = MolecularPairsSet(
             spectrums=all_spectrums, indexes_tani=indexes_np

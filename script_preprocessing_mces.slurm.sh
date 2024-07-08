@@ -1,6 +1,7 @@
 #!/bin/bash
-#SBATCH -t 72:00:00
+#SBATCH -t 14:00:00
 #SBATCH -p zen2
+#SBATCH --ntasks=1 --cpus-per-task=60
 
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers

@@ -2,6 +2,9 @@ class Config:
     # default configuration
     # Spectra and spectrum pairs to include with the following settings.
     def __init__(self):
+
+        #PREPROCESSING
+        self.PREPROCESSING_NUM_WORKERS=60
         self.CHARGES = 0, 1
         self.MIN_N_PEAKS = 6
         self.FRAGMENT_MZ_TOLERANCE = 0.1

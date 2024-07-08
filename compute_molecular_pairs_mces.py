@@ -42,10 +42,12 @@ print(f"output_file:{output_pairs_file}")
 # params
 max_number_spectra_neurips = 1000000000
 max_number_spectra_nist = 10000000000
-#train_molecules = 100 * (10**6)
-train_molecules = 50 * (10**6)
-val_molecules = 10**6
-test_molecules = 10**6
+#train_molecules = 1 * (10**6)
+#val_molecules = 10**5
+#test_molecules = 10**5
+train_molecules =  800*(10**6)
+val_molecules = 80*(10**6)
+test_molecules = 80*(10**6)
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar
@@ -137,9 +139,9 @@ else:
     all_spectrums = all_spectrums_neurips + all_spectrums_nist
 
     # get random spectrums
-    sample_size=int(len(all_spectrums)/10)
-    random_indexes = random.sample(range(len(all_spectrums)), sample_size)
-    all_spectrums = [all_spectrums[i] for i in random_indexes]
+    #sample_size=int(len(all_spectrums)/10)
+    #random_indexes = random.sample(range(len(all_spectrums)), sample_size)
+    #all_spectrums = [all_spectrums[i] for i in random_indexes]
 
     print(f"Total of all spectra: {len(all_spectrums)}")
     # divide data
@@ -161,7 +163,7 @@ else:
             molecule_pairs_test=None,
         )
 
-
+start_time=datetime.now()
 print(f"Current time: {datetime.now()}")
 molecule_pairs_train = MCES.compute_all_mces_results_unique(
     all_spectrums_train,
@@ -170,9 +172,18 @@ molecule_pairs_train = MCES.compute_all_mces_results_unique(
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
     high_tanimoto_range=high_tanimoto_range,
+    num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
 )
+end_time=datetime.now()
+
 print(f"Current time: {datetime.now()}")
+# Convert timedelta to minutes
+# Calculate the difference
+time_difference = end_time - start_time
+minutes_difference = time_difference.total_seconds() / 60
+print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
+
 molecule_pairs_val = MCES.compute_all_mces_results_unique(
     all_spectrums_val,
     max_combinations=val_molecules,
@@ -180,6 +191,7 @@ molecule_pairs_val = MCES.compute_all_mces_results_unique(
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
     high_tanimoto_range=high_tanimoto_range,
+    num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
 )
 print(f"Current time: {datetime.now()}")
@@ -190,12 +202,13 @@ molecule_pairs_test = MCES.compute_all_mces_results_unique(
     max_mass_diff=config.MAX_MASS_DIFF,
     min_mass_diff=config.MIN_MASS_DIFF,
     high_tanimoto_range=high_tanimoto_range,
+    num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
 )
 
 ## add molecules with similarity=1
-#molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
-#molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
+molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
 
 # Dump the dictionary to a file using pickle
 
@@ -229,4 +242,13 @@ if write_data_flag:
         uniformed_molecule_pairs_test=uniformed_molecule_pairs_test,
     )
 
+
 print(f"Current time: {datetime.now()}")
+
+# Calculate the difference
+time_difference = end_time - start_time
+
+# Convert timedelta to minutes
+minutes_difference = time_difference.total_seconds() / 60
+
+print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")

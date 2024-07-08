@@ -400,7 +400,7 @@ class TrainUtils:
         N= len(all_spectrums)
 
         exhaustive_combinations = M*N
-        indexes_np = np.zeros(((exhaustive_combinations), 3),  dtype=np.float16)
+        indexes_np = np.zeros(((exhaustive_combinations), 3))
         #indexes_np = MoleculePairsOpt.adjust_data_format(np.array(indexes_np))
 
         counter_indexes = 0
