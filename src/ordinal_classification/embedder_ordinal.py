@@ -24,7 +24,7 @@ import torch
 from src.config import Config
 
 from src.transformers.embedder import Embedder
-
+from src.ordinal_classification.ordinal_classification import OrdinalClassification
 
 class EmbedderOrdinal(Embedder):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
@@ -94,13 +94,17 @@ class EmbedderOrdinal(Embedder):
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
 
+
         emb = emb0 + emb1
+        emb = self.linear(emb)
+        emb = self.dropout(emb)
+        emb = self.relu(emb)
         emb = self.classifier(emb)
 
-        if self.gumbel_softmax:
-            emb = self.gumbel_softmax(emb)
-        else:
-            emb = F.softmax(emb, dim=-1)
+        #if self.gumbel_softmax:
+        #    emb = self.gumbel_softmax(emb)
+        #else:
+        #    emb = F.softmax(emb, dim=-1)
         return emb
 
 
@@ -108,16 +112,20 @@ class EmbedderOrdinal(Embedder):
         """A training/validation/inference step."""
         logits = self(batch)
 
+        # the sim data is received in the range 0-1
         target = torch.tensor(batch["similarity"]).to(self.device)
         target = target.view(-1).long()  # Ensure targets are in the right shape and type for classification
 
         
-        #loss = self.loss_fn(logits, target)
+        loss = self.loss_fn(logits, target)
         #loss = self.cumulative_logits_loss(logits, target)
-        loss= self.ordinal_cross_entropy(logits, target)
+        #loss= self.ordinal_cross_entropy(logits, target)
 
         #vector = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0, 5.0]).to(self.device)
+        #print('example:')
         #print(logits[0])
+        #print(target[0])
+        #print(loss)
         #print(vector[0])
         ## Step 2: Compute the dot product for each row
         #dot_products = logits * vector
@@ -127,6 +135,31 @@ class EmbedderOrdinal(Embedder):
         
         return loss
     
+    def step_mse(self, batch, batch_idx, threshold=0.5):
+        """A training/validation/inference step."""
+        logits = self(batch)
+        logits = self.gumbel_softmax(logits)
+        target = torch.tensor(batch["similarity"]).to(self.device)
+        target = target.view(-1).float()  # Ensure targets are in the right shape and type for regression
+
+        
+        # Compute the probabilities from logits using softmax
+        #probabilities = torch.nn.functional.softmax(logits, dim=1)
+
+        # Compute the expected value (continuous) from probabilities
+        expected_value = torch.sum(logits * torch.arange(logits.size(1)).to(self.device), dim=1)
+
+        
+        # Compute the MSE between the expected value and the target
+        loss = self.regression_loss(expected_value, target)
+
+        #print('example:')
+        #print(logits[0])
+        #print(target[0])
+        #print(expected_value[0])
+        #print(loss) 
+        
+        return loss
     
     
     def gumbel_softmax(self, logits, temperature=0.5, hard=True):
