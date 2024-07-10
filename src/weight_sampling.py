@@ -83,7 +83,7 @@ class WeightSampling:
         sim = molecule_pairs.indexes_tani[:, 2]
         
         # Calculate the index using vectorized operations
-        indices = np.floor(sim * (len(weights)-1)).astype(int)
+        indices = np.round(sim * (len(weights)-1)).astype(int)
         indices[indices == len(weights)] = len(weights) - 1
         
         # Map the indices to weights and normalize

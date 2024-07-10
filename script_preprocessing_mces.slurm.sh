@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -t 14:00:00
+#SBATCH -t 72:00:00
 #SBATCH -p zen2
 #SBATCH --ntasks=1 --cpus-per-task=60
 

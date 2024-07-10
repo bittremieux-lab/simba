@@ -29,6 +29,7 @@ class MCES:
         MAX_SIM=1,
         high_tanimoto_range=0.5,
         use_exhaustive=True,
+        random_sampling=True,
     ):
         """
         compute tanimoto results using unique spectrums
@@ -52,6 +53,7 @@ class MCES:
             MIN_SIM=MIN_SIM,
             MAX_SIM=MAX_SIM,
             high_tanimoto_range=high_tanimoto_range,
+            random_sampling=random_sampling,
         )
         return MoleculePairsOpt(
             spectrums_original=spectrums_original,
@@ -85,13 +87,21 @@ class MCES:
         # normalize mces. the higher the mces the lower the similarity
         mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
         return mces_normalized.apply(lambda x:(1-(x/max_mces)))
-    
-    def compute_mces_myopic(smiles, sampled_index, size_batch, id):
 
+
+    def compute_mces_myopic(smiles, sampled_index, size_batch, id, random_sampling):
+
+        # where to save results
         indexes_np = np.zeros((int(size_batch), 3),)
-        indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
-        indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
-        
+        # initialize randomness
+        if random_sampling:
+            np.random.seed(id)
+            indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
+            indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
+        else:
+            indexes_np[:,0] = sampled_index
+            indexes_np[:,1]= np.arange(0, size_batch)
+
         #indexes_np[:,0]=sampled_index*np.ones((size_batch,))
         #indexes_np[:,1]= np.arange(0,len(all_spectrums))
 
@@ -152,6 +162,7 @@ class MCES:
         MIN_SIM=0.8,
         MAX_SIM=1,
         high_tanimoto_range=0.5,
+        random_sampling=True,
     ):
 
         print("Starting computation of molecule pairs")
@@ -159,9 +170,16 @@ class MCES:
 
 
         print(f"Number of workers: {num_workers}")
-        size_batch = 10000
-        number_sampled_spectrums = np.floor(max_combinations/size_batch)
-        random_samples = np.random.randint(0,len(all_spectrums), int(number_sampled_spectrums))
+
+        if random_sampling:
+            print('Random sampling')
+            size_batch = 10000
+            number_sampled_spectrums = np.floor(max_combinations/size_batch)
+            samples = np.random.randint(0,len(all_spectrums), int(number_sampled_spectrums))
+        else:
+            print('No random sampling')
+            size_batch = len(all_spectrums)
+            samples = np.arange(0, len(all_spectrums))
 
         # Use ProcessPoolExecutor for parallel processing
         smiles=[s.params['smiles'] for s in all_spectrums]
@@ -169,10 +187,13 @@ class MCES:
         # Create a multiprocessing pool
         pool = multiprocessing.Pool(processes=num_workers)
         # Generate arrays in parallel
+
+        
         results = [pool.apply_async(MCES.compute_mces_myopic, args=(smiles, 
                                 sampled_index, 
                                 size_batch, 
-                                identifier)) for identifier, sampled_index in enumerate(random_samples)]
+                                identifier,
+                                random_sampling)) for identifier, sampled_index in enumerate(samples)]
         
         # Close the pool and wait for all processes to finish
         pool.close()

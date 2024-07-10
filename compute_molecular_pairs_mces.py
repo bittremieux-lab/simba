@@ -26,16 +26,23 @@ neurips_path = r"/scratch/antwerpen/209/vsc20939/data/MassSpecGym.mgf"
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
-output_pairs_file = "../data/mces_neurips_nist.pkl"
-output_np_indexes_train = '../data/indexes_tani_mces_train.npy'
-output_np_indexes_val = '../data/indexes_tani_mces_val.npy'
-output_np_indexes_test = '../data/indexes_tani_mces_test.npy'
+config.RANDOM_MCES_SAMPLING = False
 
-output_nist_file = "../data/all_spectrums_nist.pkl"
-output_neurips_file = "../data/all_spectrums_neurips.pkl"
-output_spectrums_file = "../data/all_spectrums_neurips_nist_20240618.pkl"
+if config.RANDOM_MCES_SAMPLING:
+    subfix=''
+else:
+    subfix='_exhaustive'
+
+output_pairs_file = f"../data/mces_neurips_nist{subfix}.pkl"
+output_np_indexes_train = f'../data/indexes_tani_mces_train_exhaustive{subfix}.npy'
+output_np_indexes_val = f'../data/indexes_tani_mces_val_exhaustive{subfix}.npy'
+output_np_indexes_test = f'../data/indexes_tani_mces_test_exhaustive{subfix}.npy'
+output_nist_file = f"../data/all_spectrums_nist.pkl"
+output_neurips_file = f"../data/all_spectrums_neurips.pkl"
+output_spectrums_file = f"../data/all_spectrums_neurips_nist_20240618.pkl"
 
 USE_ONLY_LOW_RANGE=True
+
 high_tanimoto_range = 0 if USE_ONLY_LOW_RANGE else 0.5 # to get more high similarity pairs
 
 print(f"output_file:{output_pairs_file}")
@@ -45,9 +52,9 @@ max_number_spectra_nist = 10000000000
 #train_molecules = 1 * (10**6)
 #val_molecules = 10**5
 #test_molecules = 10**5
-train_molecules =  800*(10**6)
-val_molecules = 80*(10**6)
-test_molecules = 80*(10**6)
+train_molecules =  100*(10**6)
+val_molecules = 10*(10**6)
+test_molecules = 10*(10**6)
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar
@@ -174,6 +181,7 @@ molecule_pairs_train = MCES.compute_all_mces_results_unique(
     high_tanimoto_range=high_tanimoto_range,
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
+    random_sampling=config.RANDOM_MCES_SAMPLING,
 )
 end_time=datetime.now()
 
@@ -193,6 +201,7 @@ molecule_pairs_val = MCES.compute_all_mces_results_unique(
     high_tanimoto_range=high_tanimoto_range,
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
+    random_sampling=config.RANDOM_MCES_SAMPLING,
 )
 print(f"Current time: {datetime.now()}")
 molecule_pairs_test = MCES.compute_all_mces_results_unique(
@@ -204,11 +213,14 @@ molecule_pairs_test = MCES.compute_all_mces_results_unique(
     high_tanimoto_range=high_tanimoto_range,
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
+    random_sampling=config.RANDOM_MCES_SAMPLING,
 )
 
 ## add molecules with similarity=1
-molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
-molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+if not(config.RANDOM_MCES_SAMPLING):
+    molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
+    molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+    molecule_pairs_test = TrainUtils.compute_unique_combinations(molecule_pairs_test)
 
 # Dump the dictionary to a file using pickle
 
@@ -240,6 +252,7 @@ if write_data_flag:
         molecule_pairs_val=molecule_pairs_val,
         molecule_pairs_test=molecule_pairs_test,
         uniformed_molecule_pairs_test=uniformed_molecule_pairs_test,
+        
     )
 
 

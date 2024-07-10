@@ -97,10 +97,10 @@ class EmbedderOrdinal(Embedder):
         emb = emb0 + emb1
         emb = self.classifier(emb)
 
-        if self.gumbel_softmax:
-            emb = self.gumbel_softmax(emb)
-        else:
-            emb = F.softmax(emb, dim=-1)
+        #if self.gumbel_softmax:
+        #    emb = self.gumbel_softmax(emb)
+        #else:
+        #    emb = F.softmax(emb, dim=-1)
         return emb
 
 
@@ -112,9 +112,9 @@ class EmbedderOrdinal(Embedder):
         target = target.view(-1).long()  # Ensure targets are in the right shape and type for classification
 
         
-        #loss = self.loss_fn(logits, target)
+        loss = self.loss_fn(logits, target)
         #loss = self.cumulative_logits_loss(logits, target)
-        loss= self.ordinal_cross_entropy(logits, target)
+        #loss= self.ordinal_cross_entropy(logits, target)
 
         #vector = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0, 5.0]).to(self.device)
         #print(logits[0])
