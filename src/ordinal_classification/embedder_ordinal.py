@@ -111,6 +111,7 @@ class EmbedderOrdinal(Embedder):
     def step(self, batch, batch_idx, threshold=0.5):
         """A training/validation/inference step."""
         logits = self(batch)
+        #probs = F.softmax(logits, dim=-1)
 
         # the sim data is received in the range 0-1
         target = torch.tensor(batch["similarity"]).to(self.device)
@@ -118,6 +119,14 @@ class EmbedderOrdinal(Embedder):
 
         
         loss = self.loss_fn(logits, target)
+        # Compute the expected value (continuous) from probabilities
+        #expected_value = torch.sum(probs * torch.arange(logits.size(1)).to(self.device), dim=1)
+
+        
+        # Compute the MSE between the expected value and the target
+        #loss = self.regression_loss(expected_value, target)
+
+
         #loss = self.cumulative_logits_loss(logits, target)
         #loss= self.ordinal_cross_entropy(logits, target)
 

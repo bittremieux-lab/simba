@@ -1,6 +1,6 @@
 import numpy as np
 import math
-
+from src.ordinal_classification.ordinal_classification import OrdinalClassification
 
 class WeightSampling:
     """
@@ -83,7 +83,8 @@ class WeightSampling:
         sim = molecule_pairs.indexes_tani[:, 2]
         
         # Calculate the index using vectorized operations
-        indices = np.round(sim * (len(weights)-1)).astype(int)
+        #indices = np.ceil(sim * (len(weights)-1)).astype(int)
+        indices = OrdinalClassification.custom_random(sim * (len(weights)-1)).astype(int)
         indices[indices == len(weights)] = len(weights) - 1
         
         # Map the indices to weights and normalize

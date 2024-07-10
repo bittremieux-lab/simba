@@ -102,7 +102,7 @@ class MCES:
                                                 indexes_np[:,1])
 
         print('Saving df ...')
-        df[['smiles_0', 'smiles_1']].to_csv(f'./input_{str(id)}.csv', header=False)
+        df[['smiles_0', 'smiles_1']].to_csv(f'.input_{str(id)}.csv', header=False)
 
         # compute mces
         #command = 'myopic_mces  ./input.csv ./output.csv'

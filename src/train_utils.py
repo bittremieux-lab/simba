@@ -18,6 +18,7 @@ from numba import njit
 import pandas as pd
 from src.spectrum_ext import SpectrumExt
 from src.molecule_pairs_opt import MoleculePairsOpt
+from src.ordinal_classification.ordinal_classification import OrdinalClassification
 
 
 class TrainUtils:
@@ -520,26 +521,81 @@ class TrainUtils:
         return binned_molecule_pairs, min_bin
 
     @staticmethod
+    def divide_data_into_bins_categories(
+        molecule_pairs,
+        number_bins,
+        bin_sim_1=False,  # if you want to try sim=1 as a different bin
+    ):
+        # Initialize lists to store values for each bin
+        binned_molecule_pairs = []
+
+        # Group the values into the corresponding bins, adding one for sim=1
+        if bin_sim_1:
+            number_bins_effective = number_bins + 1
+        else:
+            number_bins_effective = number_bins
+
+        # convert it to an integer
+        bin_size=1/number_bins
+        #target = np.ceil(molecule_pairs.indexes_tani[:, 2]/bin_size)
+        target= OrdinalClassification.custom_random(molecule_pairs.indexes_tani[:, 2]/bin_size)
+        for p in range(int(number_bins_effective)):
+            
+            
+            #low = p * (1 / number_bins)
+
+            #if bin_sim_1:
+            #    high = (p + 1) * (1 / number_bins)
+            #else:
+            #    if p == (number_bins_effective - 1):
+            #        high = 1 + 0.1
+            #    else:
+            #        high = (p + 1) * (1 / number_bins)
+
+            # temp_molecule_pairs = [m for m in molecule_pairs if ((m.similarity>=low) and (m.similarity<high))]
+            # check the similarity
+            # temp_indexes_tani = np.array([ row for row in molecule_pairs.indexes_tani if ((row[2]>=low) and (row[2]<high)) ])
+            temp_indexes_tani = molecule_pairs.indexes_tani[
+                (target == p)
+            ]
+
+            temp_molecule_pairs = MoleculePairsOpt(
+                spectrums_unique=molecule_pairs.spectrums,
+                indexes_tani_unique=temp_indexes_tani,
+                df_smiles=molecule_pairs.df_smiles,
+                spectrums_original=molecule_pairs.spectrums_original,
+            )
+            binned_molecule_pairs.append(temp_molecule_pairs)
+
+        # get minimum bin size
+        min_bin = min([len(b) for b in binned_molecule_pairs])
+        return binned_molecule_pairs, min_bin
+    
+    @staticmethod
     def uniformise(
         molecule_pairs,
         number_bins=3,
         return_binned_list=False,
         bin_sim_1=True,  # if you want to treat sim=1 as another bin
         seed=42,
+        ordinal_classification=False,
     ):
         """
         get a uniform distribution of labels between 0 and 1
         """
 
+       
         # get spectrums and indexes
         spectrums = molecule_pairs.spectrums
         indexes_tani = molecule_pairs.indexes_tani
 
         # initialize random seed
         random.seed(seed)
+         # choose function 
+        function =  TrainUtils.divide_data_into_bins_categories if ordinal_classification else TrainUtils.divide_data_into_bins
 
         # min_bin = TrainUtils.get_min_bin(molecule_pairs, number_bins)
-        binned_molecule_pairs, min_bin = TrainUtils.divide_data_into_bins(
+        binned_molecule_pairs, min_bin = function(
             molecule_pairs, number_bins, bin_sim_1=bin_sim_1
         )
 
@@ -578,7 +634,7 @@ class TrainUtils:
         else:
             return uniform_molecule_pairs
 
-
+    
     @staticmethod
     def get_data_from_indexes(spectrums, indexes):
         return [
