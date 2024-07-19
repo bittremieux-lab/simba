@@ -90,6 +90,7 @@ class MoleculePairsOpt(MolecularPairsSet):
             return self.df_smiles.loc[index, "indexes"][-1]
 
     def get_spectrums_from_indexes(self, pair_index):
+        # pair index refers if it is 0 or 1 in the pair
         indexes = [index for index in self.indexes_tani[:, pair_index]]
         original_indexes = [
             self.get_original_index_from_unique_index(index, pair_index)
@@ -104,3 +105,4 @@ class MoleculePairsOpt(MolecularPairsSet):
         spectrums_index_0 = self.get_spectrums_from_indexes(0)
         spectrums_index_1 = self.get_spectrums_from_indexes(1)
         return spectrums_index_0, spectrums_index_1
+

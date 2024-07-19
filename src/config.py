@@ -5,6 +5,8 @@ class Config:
 
         #PREPROCESSING
         self.PREPROCESSING_NUM_WORKERS=60
+        self.SUBSAMPLE_PREPROCESSING=False
+        self.RANDOM_MCES_SAMPLING = False
         self.CHARGES = 0, 1
         self.MIN_N_PEAKS = 6
         self.FRAGMENT_MZ_TOLERANCE = 0.1
@@ -13,7 +15,7 @@ class Config:
 
         # training
         self.N_LAYERS = 5  # transformer parameters
-        self.D_MODEL = 512  # transformer parameters
+        self.D_MODEL = 128  # transformer parameters
         self.EMBEDDING_DIM=256
         self.use_cosine_distance = True
         self.LR = 1e-4
@@ -45,3 +47,5 @@ class Config:
         self.CHECKPOINT_DIR = f"/scratch/antwerpen/209/vsc20939/data/model_checkpoints/model_checkpoints_{self.MODEL_CODE}/"
         self.pretrained_path = self.CHECKPOINT_DIR + f"best_model.ckpt"
         self.best_model_path = self.CHECKPOINT_DIR + f"best_model.ckpt"
+        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing{self.extra_info}/"
+        self.PREPROCESSING_PICKLE_FILE= f"mces_neurips_nist_exhaustive.pkl"

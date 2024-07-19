@@ -13,6 +13,9 @@ import pickle
 import numpy as np
 from src.mces.mces_computation import MCES
 import random 
+import os 
+
+
 
 # Get the current date and time
 print("Initiating molecular pair script ...")
@@ -25,21 +28,21 @@ config = parser.update_config(config)
 neurips_path = r"/scratch/antwerpen/209/vsc20939/data/MassSpecGym.mgf"
 nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
-# pickle files
-config.RANDOM_MCES_SAMPLING = False
+if not os.path.exists(config.PREPROCESSING_DIR):
+    os.makedirs(config.PREPROCESSING_DIR)
 
 if config.RANDOM_MCES_SAMPLING:
     subfix=''
 else:
     subfix='_exhaustive'
 
-output_pairs_file = f"../data/mces_neurips_nist{subfix}.pkl"
-output_np_indexes_train = f'../data/indexes_tani_mces_train_exhaustive{subfix}.npy'
-output_np_indexes_val = f'../data/indexes_tani_mces_val_exhaustive{subfix}.npy'
-output_np_indexes_test = f'../data/indexes_tani_mces_test_exhaustive{subfix}.npy'
-output_nist_file = f"../data/all_spectrums_nist.pkl"
-output_neurips_file = f"../data/all_spectrums_neurips.pkl"
-output_spectrums_file = f"../data/all_spectrums_neurips_nist_20240618.pkl"
+output_pairs_file = config.PREPROCESSING_DIR   +     config.PREPROCESSING_PICKLE_FILE
+output_np_indexes_train = config.PREPROCESSING_DIR+f"indexes_tani_mces_train{subfix}.npy"
+output_np_indexes_val = config.PREPROCESSING_DIR+f"indexes_tani_mces_val{subfix}.npy"
+output_np_indexes_test = config.PREPROCESSING_DIR+f"indexes_tani_mces_test{subfix}.npy"
+output_nist_file = config.PREPROCESSING_DIR+f"all_spectrums_nist.pkl"
+output_neurips_file = config.PREPROCESSING_DIR+f"all_spectrums_neurips.pkl"
+output_spectrums_file = config.PREPROCESSING_DIR+f"all_spectrums_neurips_nist_20240718.pkl"
 
 USE_ONLY_LOW_RANGE=True
 
@@ -61,7 +64,7 @@ use_tqdm = config.enable_progress_bar
 load_nist_spectra = True
 load_neurips_spectra = True
 load_train_val_test_data = (
-    False  # to load previously train, test, val with proper smiles
+    True  # to load previously train, test, val with proper smiles
 )
 write_data_flag = True
 
@@ -142,13 +145,15 @@ else:
     print(f"Current time: {datetime.now()}")
 
 
+
     # merge spectrums
     all_spectrums = all_spectrums_neurips + all_spectrums_nist
 
     # get random spectrums
-    #sample_size=int(len(all_spectrums)/10)
-    #random_indexes = random.sample(range(len(all_spectrums)), sample_size)
-    #all_spectrums = [all_spectrums[i] for i in random_indexes]
+    if config.SUBSAMPLE_PREPROCESSING:
+        sample_size=int(len(all_spectrums)/10)
+        random_indexes = random.sample(range(len(all_spectrums)), sample_size)
+        all_spectrums = [all_spectrums[i] for i in random_indexes]
 
     print(f"Total of all spectra: {len(all_spectrums)}")
     # divide data
@@ -170,6 +175,8 @@ else:
             molecule_pairs_test=None,
         )
 
+
+print('Training pairs ...')
 start_time=datetime.now()
 print(f"Current time: {datetime.now()}")
 molecule_pairs_train = MCES.compute_all_mces_results_unique(
@@ -182,6 +189,8 @@ molecule_pairs_train = MCES.compute_all_mces_results_unique(
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
     random_sampling=config.RANDOM_MCES_SAMPLING,
+    config=config,
+    identifier='_train',
 )
 end_time=datetime.now()
 
@@ -192,6 +201,9 @@ time_difference = end_time - start_time
 minutes_difference = time_difference.total_seconds() / 60
 print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
 
+
+
+print('Validation pairs ...')
 molecule_pairs_val = MCES.compute_all_mces_results_unique(
     all_spectrums_val,
     max_combinations=val_molecules,
@@ -202,8 +214,12 @@ molecule_pairs_val = MCES.compute_all_mces_results_unique(
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
     random_sampling=config.RANDOM_MCES_SAMPLING,
+    config=config,
+    identifier='_val',
 )
 print(f"Current time: {datetime.now()}")
+
+print('Test pairs ...')
 molecule_pairs_test = MCES.compute_all_mces_results_unique(
     all_spectrums_test,
     max_combinations=test_molecules,
@@ -214,13 +230,19 @@ molecule_pairs_test = MCES.compute_all_mces_results_unique(
     num_workers=config.PREPROCESSING_NUM_WORKERS,
     use_exhaustive=True,
     random_sampling=config.RANDOM_MCES_SAMPLING,
+    config=config,
+    identifier='_test',
 )
 
+
+
+
+
 ## add molecules with similarity=1
-if not(config.RANDOM_MCES_SAMPLING):
-    molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
-    molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
-    molecule_pairs_test = TrainUtils.compute_unique_combinations(molecule_pairs_test)
+#if (config.RANDOM_MCES_SAMPLING):
+#    molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
+#    molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+#    molecule_pairs_test = TrainUtils.compute_unique_combinations(molecule_pairs_test)
 
 # Dump the dictionary to a file using pickle
 
@@ -231,17 +253,18 @@ print(f"Current time: {datetime.now()}")
 
 
 # save np files
-np.save(arr=molecule_pairs_train.indexes_tani, file= output_np_indexes_train)
-np.save(arr=molecule_pairs_val.indexes_tani, file= output_np_indexes_val)
-np.save(arr=molecule_pairs_test.indexes_tani, file= output_np_indexes_test)
+#np.save(arr=molecule_pairs_train.indexes_tani, file= output_np_indexes_train)
+#np.save(arr=molecule_pairs_val.indexes_tani, file= output_np_indexes_val)
+#np.save(arr=molecule_pairs_test.indexes_tani, file= output_np_indexes_test)
 
 # create uniform test data
-uniformed_molecule_pairs_test, _ = TrainUtils.uniformise(
-    molecule_pairs_test,
-    number_bins=config.bins_uniformise_INFERENCE,
-    return_binned_list=True,
-    bin_sim_1=False,
-)  # do not treat sim==1 as another bin
+#uniformed_molecule_pairs_test, _ = TrainUtils.uniformise(
+#    molecule_pairs_test,
+#    number_bins=config.bins_uniformise_INFERENCE,
+#    return_binned_list=True,
+#    bin_sim_1=False,
+#)  # do not treat sim==1 as another bin
+
 if write_data_flag:
     write_data(
         output_pairs_file,
@@ -251,7 +274,7 @@ if write_data_flag:
         molecule_pairs_train=molecule_pairs_train,
         molecule_pairs_val=molecule_pairs_val,
         molecule_pairs_test=molecule_pairs_test,
-        uniformed_molecule_pairs_test=uniformed_molecule_pairs_test,
+        uniformed_molecule_pairs_test=None,
         
     )
 

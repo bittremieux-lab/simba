@@ -30,15 +30,15 @@ from src.ordinal_classification.ordinal_classification import OrdinalClassificat
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [[20, 4, 3, 2, 1, 0,],
+        penalty_matrix = [[20, 0, 0, 0, 0, 0,],
                           
-                          [4, 20, 4, 3, 2, 1,] ,
+                          [0, 20, 4, 3, 2, 1,] ,
 
-                          [3, 4, 20, 4, 3, 2,],
+                          [0, 4, 20, 4, 3, 2,],
 
-                          [2, 3, 4,20, 4, 3,],
+                          [0, 3, 4,20, 4, 3,],
 
-                          [1, 2, 3, 4, 20, 4,],
+                          [0, 2, 3, 4, 20, 4,],
 
                           [0, 1, 2, 3, 4, 20,]]
         
@@ -181,8 +181,8 @@ class EmbedderOrdinal(Embedder):
         #probs = F.softmax(logits, dim=-1)
 
         # the sim data is received in the range 0-1
-        target = torch.tensor(batch["similarity"]).to(self.device)
-        target = target.view(-1).float()  # Ensure targets are in the right shape and type for classification
+        target = torch.tensor(batch["similarity"], dtype=torch.long).to(self.device)
+        target = target.view(-1)  # Ensure targets are in the right shape and type for classification
 
         
         #loss = self.loss_fn(logits, target)

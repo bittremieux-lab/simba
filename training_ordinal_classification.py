@@ -29,61 +29,31 @@ import seaborn as sns
 from src.ordinal_classification.load_data_ordinal import LoadDataOrdinal
 from src.ordinal_classification.embedder_ordinal import EmbedderOrdinal
 from sklearn.metrics import confusion_matrix
+from src.load_mces.load_mces import LoadMCES
+from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
 
-
-
-
+# parameters
 config = Config()
-
-
-# In[274]:
-
-
+parser = Parser()
+config = parser.update_config(config)
 config.USE_GUMBEL=False
-
-
-# In[275]:
-
-
 config.N_CLASSES=6
-
-
-# In[276]:
-
-
-config.D_MODEL=128
-
-
-# In[277]:
-
-
 config.bins_uniformise_INFERENCE=config.N_CLASSES-1
-
-
-# In[278]:
-
-
 config.use_uniform_data_INFERENCE = True
 
-
-# ## Replicate standard regression training
-
-# In[279]:
-
-
 # In[281]:
+if not os.path.exists(config.CHECKPOINT_DIR):
+    os.makedirs(config.CHECKPOINT_DIR)
 
 
 # parameters
-dataset_path = config.dataset_path
+dataset_path = config.PREPROCESSING_DIR + config.PREPROCESSING_PICKLE_FILE
 epochs = config.epochs
 bins_uniformise_inference = config.bins_uniformise_INFERENCE
 enable_progress_bar = config.enable_progress_bar
 fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
 
-
-# In[282]:
 
 
 print("loading file")
@@ -98,32 +68,59 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 
 # In[283]:
+print('Loading pairs data ...')
+molecule_pairs_train.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train')
+molecule_pairs_val.indexes_tani =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val')
+
+## Add the identitiy pairs
+USE_IDENTITY_PAIRS=True
+if USE_IDENTITY_PAIRS:
+    # remove to avoid duplicates
+    molecule_pairs_train.indexes_tani = molecule_pairs_train.indexes_tani[\
+                                    molecule_pairs_train.indexes_tani[:,0]!= molecule_pairs_train.indexes_tani[:,1]]
+
+    # create identity 
+    identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),3))
+    identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
+    identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
+    identity_pairs[:,2]=1.0
+    molecule_pairs_train.indexes_tani  = np.concatenate((molecule_pairs_train.indexes_tani, identity_pairs ))
 
 
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
 print(f"Number of pairs for val: {len(molecule_pairs_val)}")
-print(f"Number of pairs for test: {len(molecule_pairs_test)}")
-print(f"Number of pairs for uniform test: {len(uniformed_molecule_pairs_test)}")
+
+## Sanity checks
+sanity_check_ids = SanityChecks.sanity_checks_ids(
+    molecule_pairs_train,
+    molecule_pairs_val,
+    molecule_pairs_test,
+    uniformed_molecule_pairs_test,
+)
+sanity_check_bms = SanityChecks.sanity_checks_bms(
+    molecule_pairs_train,
+    molecule_pairs_val,
+    molecule_pairs_test,
+    uniformed_molecule_pairs_test,
+)
 
 
-# In[284]:
+
+print(f"Sanity check ids. Passed? {sanity_check_ids}")
+print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
 
 ## CALCULATION OF WEIGHTS
-train_binned_list, _ = TrainUtils.divide_data_into_bins_categories(
+train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
     molecule_pairs_train,
     config.N_CLASSES-1,
         bin_sim_1=True, 
 )
-#train_binned_list, _ = TrainUtils.divide_data_into_bins(
-#    molecule_pairs_train,
-#    config.N_CLASSES-1,
-#    bin_sim_1=False, 
-#)
 
-
-# In[285]:
-
+# check distribution of similarities
+print("SAMPLES PER RANGE:")
+for lista in (train_binned_list):
+    print(f"samples: {len(lista)}") 
 
 train_binned_list[1].indexes_tani.shape
 
@@ -164,8 +161,6 @@ range_weights
 
 weights_tr = WeightSampling.compute_sample_weights_categories(molecule_pairs_train, weights)
 weights_val = WeightSampling.compute_sample_weights_categories(molecule_pairs_val, weights)
-#weights_tr = WeightSampling.compute_sample_weights(molecule_pairs_train, weights)
-#weights_val = WeightSampling.compute_sample_weights(molecule_pairs_val, weights)
 
 
 # In[292]:
@@ -202,239 +197,164 @@ dataset_train = LoadDataOrdinal.from_molecule_pairs_to_dataset(molecule_pairs_tr
 dataset_val = LoadDataOrdinal.from_molecule_pairs_to_dataset(molecule_pairs_val)
 
 
-#best_model_path = model_path = data_folder + 'best_model_exhaustive_sampled_128n_20240618.ckpt'
-#best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps-v9.ckpt"
-best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
+# In[297]:
+
+##  Check that the distribution is uniform
+dataset_train
 
 
-# In[ ]:
+# In[298]:
 
 
-molecule_pairs_test.indexes_tani.shape
+# delete variables that are not useful for memory savings
+#del molecule_pairs_val
+#del molecule_pairs_test
+#del uniformed_molecule_pairs_test
 
 
-# In[ ]:
+# In[299]:
 
 
-molecule_pairs_test = dataset["molecule_pairs_test"]
-print(f"Number of molecule pairs: {len(molecule_pairs_test)}")
-print("Uniformize the data")
-uniformed_molecule_pairs_test, binned_molecule_pairs = TrainUtils.uniformise(
-    molecule_pairs_test,
-    number_bins=bins_uniformise_inference,
-    return_binned_list=True,
-    bin_sim_1=True,
-    #bin_sim_1=False,
-    ordinal_classification=True,
-)  # do not treat sim==1 as another bin
 
 
-# In[ ]:
+
+train_sampler = CustomWeightedRandomSampler(
+    weights=weights_tr, num_samples=len(dataset_train), replacement=True
+)
+val_sampler = CustomWeightedRandomSampler(
+    weights=weights_val, num_samples=len(dataset_val), replacement=True
+)
 
 
-binned_molecule_pairs[4].indexes_tani.shape
+# In[300]:
 
 
-# In[ ]:
+weights_tr
 
 
-uniformed_molecule_pairs_test.indexes_tani
+# In[301]:
 
 
-# In[ ]:
+dataset['molecule_pairs_train'].indexes_tani
 
 
-# dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadDataOrdinal.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test)
-dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
+# In[302]:
 
 
-# In[ ]:
+print("Creating train data loader")
+dataloader_train = DataLoader(
+    dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler, num_workers=10
+)
 
 
-# Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
-trainer = pl.Trainer(max_epochs=2, enable_progress_bar=enable_progress_bar)
-best_model = EmbedderOrdinal.load_from_checkpoint(
-    best_model_path,
+# In[303]:
+
+
+dataloader_train
+
+
+## check that the distribution of the loader is balanced
+similarities_sampled=[]
+for i,batch in enumerate(dataloader_train):
+    sim = batch['similarity']
+    sim = np.array(sim).reshape(-1)
+    similarities_sampled = similarities_sampled + list(sim)
+    if i==100:
+        break
+
+counting, bins, patches =plt.hist(similarities_sampled, bins=6)
+
+print(f'Distribution of similarity for dataset train: {counting}')
+print(f'Ranges of similarity for dataset train: {bins}')
+# In[304]:
+
+
+def worker_init_fn(
+    worker_id,
+):  # ensure the dataloader for validation is the same for every epoch
+    seed = 42
+    torch.manual_seed(seed)
+    # Set the same seed for reproducibility in NumPy and Python's random module
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+print("Creating val data loader")
+dataloader_val = DataLoader(
+    dataset_val,
+    batch_size=config.BATCH_SIZE,
+    sampler=val_sampler,
+    worker_init_fn=worker_init_fn,
+    num_workers=10,
+)
+
+
+
+# Define the ModelCheckpoint callback
+checkpoint_callback = pl.callbacks.ModelCheckpoint(
+    dirpath=config.CHECKPOINT_DIR,
+    filename="best_model",
+    monitor="validation_loss_epoch",
+    mode="min",
+    save_top_k=1,
+)
+
+checkpoint_n_steps_callback = pl.callbacks.ModelCheckpoint(
+    dirpath=config.CHECKPOINT_DIR,
+    filename="best_model_n_steps",
+    every_n_train_steps=1000,
+    save_last=True,
+    save_top_k=1,
+)
+
+
+# checkpoint_callback = SaveBestModelCallback(file_path=config.best_model_path)
+progress_bar_callback = ProgressBar()
+
+# loss callback
+losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
+print("define model")
+
+
+# In[308]:
+
+
+config.USE_GUMBEL
+
+
+# In[309]:
+
+
+model = EmbedderOrdinal(
     d_model=int(config.D_MODEL),
     n_layers=int(config.N_LAYERS),
     n_classes=config.N_CLASSES,
-    use_gumbel=config.USE_GUMBEL,
-    use_element_wise=True,
+    weights=None,
+    lr=config.LR,
     use_cosine_distance=config.use_cosine_distance,
-    
+    use_gumbel = config.USE_GUMBEL,
 )
 
 
-# ## Postprocessing
-
 # In[ ]:
 
 
-pred_test = trainer.predict(
-    best_model,
-    dataloader_test,
+trainer = pl.Trainer(
+    max_steps=100000,
+    val_check_interval=10000,
+    #max_epochs=1,
+    callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],
+    enable_progress_bar=enable_progress_bar,
+    # val_check_interval= config.validate_after_ratio,
 )
-similarities_test = Postprocessing.get_similarities(dataloader_test)
+# trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
+trainer.fit(
+    model=model,
+    train_dataloaders=(dataloader_train),
+    val_dataloaders=dataloader_val,
+)
 
 
-# In[ ]:
-
-
-plt.hist(similarities_test)
-
-
-# In[ ]:
-
-
-print(pred_test[0][4])
-print(similarities_test[127])
-
+# ## Inference
 
 # In[ ]:
-
-
-pred_test[0][6]
-
-
-# In[ ]:
-
-
-np.argwhere(pred_test[0][0]>0.1)[0]
-
-
-# In[ ]:
-
-
-np.argwhere(pred_test[0][0]>0.9)[0].numel()
-
-
-# In[ ]:
-
-
-def which_index(p, threshold=0.5):
-    #result= np.argwhere(p>threshold)[0]
-     #
-    #if result.numel()==0:
-        #return np.argmax(p)
-    #    return np.nan
-    #else:
-    #    return result[-1]
-    return np.argmax(p)
-
-
-# In[ ]:
-
-
-# flat the results
-flat_pred_test = []
-for pred in pred_test:
-    flat_pred_test = flat_pred_test + [which_index(p) for p in pred]
-flat_pred_test=np.array( flat_pred_test)
-
-
-# In[ ]:
-
-
-#list(pred_test)
-
-
-# In[ ]:
-
-
-flat_pred_test[0]
-
-
-# ## Corr. Analysis
-
-# In[ ]:
-
-
-plt.hist(similarities_test)
-
-
-# In[ ]:
-
-
-similarities_test
-
-
-# In[ ]:
-
-
-flat_pred_test
-
-
-# In[ ]:
-
-
-similarities_test=np.array(similarities_test)
-flat_pred_test=np.array(flat_pred_test)
-
-
-# In[ ]:
-
-
-len(similarities_test)
-
-
-# In[ ]:
-
-
-similarities_test_cleaned= similarities_test[~np.isnan(flat_pred_test)]
-flat_pred_test_cleaned= flat_pred_test[~np.isnan(flat_pred_test)]
-
-
-# In[ ]:
-
-
-len(similarities_test_cleaned)
-
-
-# In[ ]:
-
-
-corr_model, p_value_model= spearmanr(similarities_test_cleaned, flat_pred_test_cleaned)
-
-
-# In[ ]:
-
-
-corr_model
-
-
-# In[ ]:
-
-
-# Compute the confusion matrix
-cm = confusion_matrix(similarities_test_cleaned, flat_pred_test_cleaned)
-# Normalize the confusion matrix by the number of true instances for each class
-cm_normalized = cm.astype('float') / cm.sum()
-# Plot the confusion matrix with percentages
-plt.figure(figsize=(10, 7))
-sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues')
-plt.xlabel('Predicted Labels')
-plt.ylabel('True Labels')
-plt.title('Confusion Matrix (Normalized to Percentages)')
-plt.show()
-
-
-# In[250]:
-
-
-plt.scatter(similarities_test, flat_pred_test, alpha=0.01)
-
-
-# ##### 
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
