@@ -30,32 +30,39 @@ class LoadMCES:
         files = LoadMCES.find_file(directory_path, prefix)
         
         # load np files
+        print('Loading the partitioned files of the pairs')
         list_arrays=[]
-        for f in files:
-            list_arrays.append(np.load(f))
+        for i,f in enumerate(files):
+            print(f'Processing batch {i}')
+            np_array= np.load(f)
+            print(f'Size without removal: {np_array.shape[0]}')
+            np_array=LoadMCES.remove_excess_low_pairs(np_array)
+            print(f'Size with removal: {np_array.shape[0]}')
+            list_arrays.append(np_array)
 
         #merge
+        print('Merging')
         merged_array= np.concatenate(list_arrays, axis=0)
-
         
         # normalize
+        print('Normalizing')
         merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
 
         # remove excess low pairs
-        merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
+        #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
 
         return merged_array
 
-    def remove_excess_low_pairs(indexes_tani, remove_percentage=0.95):
+    def remove_excess_low_pairs(indexes_tani, remove_percentage=0.99, max_mces=5):
         '''
         remove the 90% of the low pairs to reduce the data loaded
         '''
         # get the sample size for the low range pairs
         sample_size = indexes_tani.shape[0] - int(remove_percentage*indexes_tani.shape[0])
 
-        # filter by high or low similarity
-        indexes_tani_high = indexes_tani[indexes_tani[:,2]>0]
-        indexes_tani_low = indexes_tani[indexes_tani[:,2]==0]
+        # filter by high or low similarity, assuming MCES distance
+        indexes_tani_high = indexes_tani[indexes_tani[:,2]<max_mces]
+        indexes_tani_low = indexes_tani[indexes_tani[:,2]>=max_mces]
 
         # get some indexes to sample
         random_samples = np.random.randint(0,indexes_tani_low.shape[0], sample_size)

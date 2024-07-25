@@ -340,9 +340,9 @@ model = EmbedderOrdinal(
 
 
 trainer = pl.Trainer(
-    max_steps=100000,
+    #max_steps=100000,
     val_check_interval=10000,
-    #max_epochs=1,
+    max_epochs=10,
     callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],
     enable_progress_bar=enable_progress_bar,
     # val_check_interval= config.validate_after_ratio,

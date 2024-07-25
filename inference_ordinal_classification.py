@@ -28,7 +28,7 @@ from scipy.stats import spearmanr
 import seaborn as sns
 from src.ordinal_classification.load_data_ordinal import LoadDataOrdinal
 from src.ordinal_classification.embedder_ordinal import EmbedderOrdinal
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
 from src.load_mces.load_mces import LoadMCES   
 from src.performance_metrics.performance_metrics import PerformanceMetrics
 
@@ -220,25 +220,25 @@ np.argwhere(pred_test[0][0]>0.9)[0].numel()
 
 
 def which_index(p, threshold=0.5):
-    #result= np.argwhere(p>threshold)[0]
-     #
-    #if result.numel()==0:
-        #return np.argmax(p)
-    #    return np.nan
-    #else:
-    #    return result[-1]
     return np.argmax(p)
 
-
-# In[ ]:
+def which_index_confident(p, threshold=0.90):
+    # only predict confident predictions
+    highest_pred = np.argmax(p)
+    if p[highest_pred]>threshold:
+        return np.argmax(p)
+    else:
+        return np.nan
 
 
 # flat the results
 flat_pred_test = []
+confident_pred_test=[]
 for pred in pred_test:
     flat_pred_test = flat_pred_test + [which_index(p) for p in pred]
+    confident_pred_test = confident_pred_test + [which_index_confident(p) for p in pred]
 flat_pred_test=np.array( flat_pred_test)
-
+confident_pred_test=np.array(confident_pred_test)
 
 
 # get the results
@@ -288,20 +288,44 @@ print(f'Correlation of model: {corr_model}')
 # In[ ]:
 
 
-# Compute the confusion matrix
-cm = confusion_matrix(similarities_test_cleaned, flat_pred_test_cleaned)
-# Normalize the confusion matrix by the number of true instances for each class
-cm_normalized = cm.astype('float') / cm.sum()
-# Plot the confusion matrix with percentages
-plt.figure(figsize=(10, 7))
-sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues')
-plt.xlabel('Predicted Labels')
-plt.ylabel('True Labels')
-plt.title('Confusion Matrix (Normalized to Percentages)')
-plt.savefig(config.CHECKPOINT_DIR + 'cm.png')
-plt.show()
 
 
+def plot_cm(true,preds, config, file_name='cm.png'):
+    # Compute the confusion matrix
+    cm = confusion_matrix(true, preds)
+
+    # Compute the accuracy
+    accuracy = accuracy_score(true, preds)
+    print("Accuracy:", accuracy)
+    # Normalize the confusion matrix by the number of true instances for each class
+    cm_normalized = cm.astype('float') / cm.sum()
+    # Plot the confusion matrix with percentages
+    plt.figure(figsize=(10, 7))
+    labels= ['>5', '4', '3', '2' , '1', '0']
+    sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',xticklabels=labels, yticklabels=labels)
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    plt.title(f'Confusion Matrix (Normalized to Percentages), acc:{accuracy:.2f}')
+    plt.savefig(config.CHECKPOINT_DIR + file_name)
+    plt.show()
+
+plot_cm(similarities_test_cleaned, flat_pred_test_cleaned, config)
+## analyze the impact of thresholding
+
+similarities_test_cleaned_confident= similarities_test[~np.isnan(confident_pred_test)]
+flat_pred_test_cleaned_confident= confident_pred_test[~np.isnan(confident_pred_test)]
+
+confident_corr_model, confident_p_value_model= spearmanr(similarities_test_cleaned_confident, flat_pred_test_cleaned_confident)
+
+print(f'Original size of predictions:{similarities_test.shape}')
+print(f'Confident size of predictions:{similarities_test_cleaned_confident.shape}')
+# In[ ]:
+
+
+print(f'Correlation of model (confident): {confident_corr_model}')
+
+
+plot_cm(similarities_test_cleaned_confident, flat_pred_test_cleaned_confident, config, file_name='confident_cm.png')
 # In[250]:
 
 

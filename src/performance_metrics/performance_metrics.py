@@ -3,6 +3,8 @@ import numpy as  np
 from rdkit import Chem
 from rdkit.Chem import Draw
 from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
+import spectrum_utils.plot as sup
 
 class PerformanceMetrics:
 
@@ -28,7 +30,7 @@ class PerformanceMetrics:
 
 
     @staticmethod
-    def plot_molecules(molecule_pairs, similarities, predictions, target_indexes, config, samples=10, prefix='good'):
+    def plot_molecules(molecule_pairs, similarities, predictions, target_indexes, config, samples=20, prefix='good'):
         output_path = config.CHECKPOINT_DIR
 
         # randomize the plotting
@@ -53,6 +55,7 @@ class PerformanceMetrics:
                                                         similarities_target[0:samples],
                                                         predictions_target[0:samples])):
             
+
             smiles_0 = spec0.params['smiles']
             smiles_1 = spec1.params['smiles']
 
@@ -86,4 +89,11 @@ class PerformanceMetrics:
             final_img.paste(combined_img, (0, 70))
             
             # Save the image
-            final_img.save(output_path + f'{prefix}_pair_{index}.png')
+            final_img.save(output_path + f'{prefix}_pair_{index}_molecule.png')
+
+            # plot spectra
+            fig, ax = plt.subplots()
+            sup.mirror(spec0, spec1, ax=ax)
+            plot_path = output_path + f'{prefix}_pair_{index}_spectra.png'
+            plt.savefig(plot_path)
+            plt.close(fig)
