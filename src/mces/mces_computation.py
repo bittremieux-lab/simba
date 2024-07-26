@@ -13,6 +13,9 @@ import random
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 import multiprocessing
+from src.edit_distance.edit_distance import EditDistance
+from rdkit.Chem import AllChem
+from rdkit import Chem, Geometry
 
 class MCES:
     @staticmethod
@@ -32,6 +35,7 @@ class MCES:
         random_sampling=True,
         config=None,
         identifier="",
+        use_edit_distance=False,
     ):
         """
         compute tanimoto results using unique spectrums
@@ -59,6 +63,7 @@ class MCES:
             random_sampling=random_sampling,
             config=config,
             identifier=identifier,
+            use_edit_distance=use_edit_distance,
         )
         return MoleculePairsOpt(
             spectrums_original=spectrums_original,
@@ -194,6 +199,7 @@ class MCES:
         random_sampling=True,
         config=None,
         identifier = "",
+        use_edit_distance=False,
     ):
 
         print("Starting computation of molecule pairs")
@@ -216,15 +222,38 @@ class MCES:
 
         indexes_np= np.array([])
 
+        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+        print('Getting mols...')
+        mols = [Chem.MolFromSmiles(s) for s in smiles]
+        print('Getting the molecular fingerprints...')
+        fps  = [fpgen.GetFingerprint(m) for m in mols]
 
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
-                pool = multiprocessing.Pool(processes=num_workers)
-                results = [pool.apply_async(MCES.compute_mces_myopic, args=(smiles, 
+                #pool = multiprocessing.Pool(processes=num_workers)
+                pool=  multiprocessing.dummy.Pool(processes=num_workers)
+                # use classical mces or edit distance
+
+
+                if use_edit_distance:
+                    comp_function=EditDistance.compute_edit_distance
+
+                    
+                    results = [pool.apply_async(comp_function, args=(smiles, 
+                                        mols, 
+                                        fps,
                                         sampled_index, 
                                         size_batch, 
                                         identifier,
                                         random_sampling, config)) for identifier, sampled_index in enumerate(array)]
+                else:
+                    comp_function=MCES.compute_mces_myopic
+                    results = [pool.apply_async(comp_function, args=(smiles, 
+                                        sampled_index, 
+                                        size_batch, 
+                                        identifier,
+                                        random_sampling, config)) for identifier, sampled_index in enumerate(array)]
+                
                 
                 # Close the pool and wait for all processes to finish
                 pool.close()

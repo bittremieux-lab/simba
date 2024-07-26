@@ -24,7 +24,7 @@ from src.ordinal_classification.ordinal_classification import OrdinalClassificat
 class TrainUtils:
 
     @staticmethod
-    def compute_unique_combinations(molecule_pairs):
+    def compute_unique_combinations(molecule_pairs, high_sim=1):
 
         lenght_total = len(molecule_pairs.spectrums)
         indexes_np = np.zeros((lenght_total, 3))
@@ -32,7 +32,7 @@ class TrainUtils:
         for index, l in enumerate(molecule_pairs.spectrums):
             indexes_np[index, 0] = index
             indexes_np[index, 1] = index
-            indexes_np[index, 2] = 1
+            indexes_np[index, 2] = high_sim
 
         new_indexes_np = np.concatenate(
                 (molecule_pairs.indexes_tani, indexes_np), axis=0
