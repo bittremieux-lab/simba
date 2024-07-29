@@ -21,10 +21,32 @@ class LoadMCES:
                     pickle_files.append(os.path.join(root, file))
         return pickle_files 
 
+    def load_raw_data(directory_path, prefix, partitions=10):
+        '''
+        load data for inspection purposes
+        '''
+        # find all np arrays
+        files = LoadMCES.find_file(directory_path, prefix)
+        
+        # load np files
+        print('Loading the partitioned files of the pairs')
+        list_arrays=[]
 
+        for i in list(range(0, min(len(files), partitions))):
+            f= files[i]
+            print(f'Processing batch {i}')
+            np_array= np.load(f)
+            print(f'Size: {np_array.shape[0]}')
+            list_arrays.append(np_array)
+
+        #merge
+        print('Merging')
+        merged_array= np.concatenate(list_arrays, axis=0)
+        return merged_array
+    
     def merge_numpy_arrays(directory_path, prefix):
         '''
-        load np arrays containing data as well as apply normalization
+        load np arrays containing data as well as apply normalization for training
         '''
         # find all np arrays
         files = LoadMCES.find_file(directory_path, prefix)
