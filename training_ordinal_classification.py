@@ -69,8 +69,8 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-molecule_pairs_train.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train')
-molecule_pairs_val.indexes_tani =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val')
+molecule_pairs_train.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE)
+molecule_pairs_val.indexes_tani =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE)
 
 ## Add the identitiy pairs
 USE_IDENTITY_PAIRS=True

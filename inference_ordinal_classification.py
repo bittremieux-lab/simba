@@ -104,7 +104,7 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-molecule_pairs_test.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test')
+molecule_pairs_test.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', use_edit_distance=config.USE_EDIT_DISTANCE)
 print(f"Number of pairs for test: {len(molecule_pairs_test)}")
 
 

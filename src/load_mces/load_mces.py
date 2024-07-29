@@ -21,8 +21,7 @@ class LoadMCES:
                     pickle_files.append(os.path.join(root, file))
         return pickle_files 
 
-
-    def merge_numpy_arrays(directory_path, prefix):
+    def merge_numpy_arrays_mces(directory_path, prefix, remove_percentage=0.99):
         '''
         load np arrays containing data as well as apply normalization
         '''
@@ -36,7 +35,7 @@ class LoadMCES:
             print(f'Processing batch {i}')
             np_array= np.load(f)
             print(f'Size without removal: {np_array.shape[0]}')
-            np_array=LoadMCES.remove_excess_low_pairs(np_array)
+            np_array=LoadMCES.remove_excess_low_pairs(np_array, remove_percentage=remove_percentage)
             print(f'Size with removal: {np_array.shape[0]}')
             list_arrays.append(np_array)
 
@@ -52,6 +51,57 @@ class LoadMCES:
         #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
 
         return merged_array
+
+    def add_high_similarity_pairs_edit_distance(merged_array):
+        max_index_spectrum = int(np.max(merged_array[:,0]))
+        indexes_tani_high= np.zeros((max_index_spectrum,3))
+        indexes_tani_high[:,0]= np.arange(0,max_index_spectrum)
+        indexes_tani_high[:,1]= np.arange(0,max_index_spectrum)
+        indexes_tani_high[:,2]= 0
+        merged_array= np.concatenate([merged_array,indexes_tani_high])
+        return merged_array
+    def merge_numpy_arrays_edit_distance(directory_path, prefix, remove_percentage=0.90):
+        '''
+        load np arrays containing data as well as apply normalization
+        '''
+        # find all np arrays
+        files = LoadMCES.find_file(directory_path, prefix)
+        
+        # load np files
+        print('Loading the partitioned files of the pairs')
+        list_arrays=[]
+        for i,f in enumerate(files):
+            print(f'Processing batch {i}')
+            np_array= np.load(f)
+            print(f'Size without removal: {np_array.shape[0]}')
+            np_array=LoadMCES.remove_excess_low_pairs(np_array, remove_percentage=remove_percentage)
+            print(f'Size with removal: {np_array.shape[0]}')
+            list_arrays.append(np_array)
+
+        #merge
+        print('Merging')
+        merged_array= np.concatenate(list_arrays, axis=0)
+        
+        # add the high similarity pairs
+        merged_array= LoadMCES.add_high_similarity_pairs_edit_distance(merged_array)
+        # normalize
+
+        print('Normalizing')
+        merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
+
+        # remove excess low pairs
+        #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
+
+        return merged_array
+    def merge_numpy_arrays(directory_path, prefix, use_edit_distance):
+        '''
+        load np arrays containing data as well as apply normalization
+        '''
+        if use_edit_distance:
+            return LoadMCES.merge_numpy_arrays_edit_distance(directory_path, prefix,)
+        else:
+            return LoadMCES.merge_numpy_arrays_mces(directory_path, prefix,)
+
 
     def remove_excess_low_pairs(indexes_tani, remove_percentage=0.99, max_mces=5):
         '''

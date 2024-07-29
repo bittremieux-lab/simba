@@ -55,9 +55,9 @@ max_number_spectra_nist = 10000000000
 #train_molecules = 1 * (10**6)
 #val_molecules = 10**5
 #test_molecules = 10**5
-train_molecules =  100*(10**6)
-val_molecules = 10*(10**6)
-test_molecules = 10*(10**6)
+train_molecules =  1*(10**4)
+val_molecules = 1*(10**4)
+test_molecules = 1*(10**4)
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar
@@ -176,32 +176,6 @@ else:
         )
 
 
-print('Training pairs ...')
-start_time=datetime.now()
-print(f"Current time: {datetime.now()}")
-molecule_pairs_train = MCES.compute_all_mces_results_unique(
-    all_spectrums_train,
-    max_combinations=train_molecules,
-    use_tqdm=use_tqdm,
-    max_mass_diff=config.MAX_MASS_DIFF,
-    min_mass_diff=config.MIN_MASS_DIFF,
-    high_tanimoto_range=high_tanimoto_range,
-    num_workers=config.PREPROCESSING_NUM_WORKERS,
-    use_exhaustive=True,
-    random_sampling=config.RANDOM_MCES_SAMPLING,
-    config=config,
-    identifier='_train',
-)
-end_time=datetime.now()
-
-print(f"Current time: {datetime.now()}")
-# Convert timedelta to minutes
-# Calculate the difference
-time_difference = end_time - start_time
-minutes_difference = time_difference.total_seconds() / 60
-print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
-
-
 
 print('Validation pairs ...')
 molecule_pairs_val = MCES.compute_all_mces_results_unique(
@@ -216,6 +190,7 @@ molecule_pairs_val = MCES.compute_all_mces_results_unique(
     random_sampling=config.RANDOM_MCES_SAMPLING,
     config=config,
     identifier='_val',
+    use_edit_distance=config.USE_EDIT_DISTANCE,
 )
 print(f"Current time: {datetime.now()}")
 
@@ -232,7 +207,35 @@ molecule_pairs_test = MCES.compute_all_mces_results_unique(
     random_sampling=config.RANDOM_MCES_SAMPLING,
     config=config,
     identifier='_test',
+    use_edit_distance=config.USE_EDIT_DISTANCE,
 )
+
+
+print('Training pairs ...')
+start_time=datetime.now()
+print(f"Current time: {datetime.now()}")
+molecule_pairs_train = MCES.compute_all_mces_results_unique(
+    all_spectrums_train,
+    max_combinations=train_molecules,
+    use_tqdm=use_tqdm,
+    max_mass_diff=config.MAX_MASS_DIFF,
+    min_mass_diff=config.MIN_MASS_DIFF,
+    high_tanimoto_range=high_tanimoto_range,
+    num_workers=config.PREPROCESSING_NUM_WORKERS,
+    use_exhaustive=True,
+    random_sampling=config.RANDOM_MCES_SAMPLING,
+    config=config,
+    identifier='_train',
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+)
+end_time=datetime.now()
+
+print(f"Current time: {datetime.now()}")
+# Convert timedelta to minutes
+# Calculate the difference
+time_difference = end_time - start_time
+minutes_difference = time_difference.total_seconds() / 60
+print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
 
 
 
