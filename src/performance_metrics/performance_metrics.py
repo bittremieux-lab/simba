@@ -5,6 +5,8 @@ from rdkit.Chem import Draw
 from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 import spectrum_utils.plot as sup
+from src.tanimoto import Tanimoto
+from src.analog_discovery.mces import MCES
 
 class PerformanceMetrics:
 
@@ -59,6 +61,10 @@ class PerformanceMetrics:
             smiles_0 = spec0.params['smiles']
             smiles_1 = spec1.params['smiles']
 
+            # let's compute tanimoto 
+            tanimoto = Tanimoto.compute_tanimoto_from_smiles(smiles_0, smiles_1)
+            mces_similarity,_= MCES.calculate_mcs_similarity(smiles_0, smiles_1)
+
             mol_0 = Chem.MolFromSmiles(smiles_0)
             mol_1 = Chem.MolFromSmiles(smiles_1)
             
@@ -73,7 +79,7 @@ class PerformanceMetrics:
             combined_img.paste(img_1, (300, 0))
             
             # Add title to the image using PIL
-            title = f'SMILES: {smiles_0}\nSMILES: {smiles_1}\nClass truth: {sim}\nClass pred.: {pred}'
+            title = f'SMILES: {smiles_0}\nSMILES: {smiles_1}\nClass truth: {sim}  tanimoto: {tanimoto} mces sim. {mces_similarity} \nClass pred.: {pred}'
             title_img = Image.new('RGB', (600, 100), (255, 255, 255))
             draw = ImageDraw.Draw(title_img)
             font = ImageFont.load_default()

@@ -26,7 +26,7 @@ class EditDistance:
         return df
 
 
-    def compute_edit_distance(smiles, mols, fps, sampled_index, size_batch, id, random_sampling, config):
+    def compute_edit_distance(smiles,sampled_index, size_batch, id, random_sampling, config):
 
         # where to save results
         indexes_np = np.zeros((int(size_batch), 3),)
@@ -39,24 +39,7 @@ class EditDistance:
             indexes_np[:,0] = sampled_index
             indexes_np[:,1]= np.arange(0, size_batch)
 
-        #print('Creating df for computation')
-        df = EditDistance.create_input_df(smiles, indexes_np[:,0], 
-                                                indexes_np[:,1])
-
-        #filtering data
-        indexes_0= indexes_np[:,0]
-        indexes_1= indexes_np[:,1]
-        smiles_0= [smiles[int(r)]  for r in indexes_0]
-        smiles_1= [smiles[int(r)]  for r in indexes_1]
-        mols_0= [mols[int(r)]  for r in indexes_0]
-        mols_1= [mols[int(r)]  for r in indexes_1]
-        fp_0= [fps[int(r)]  for r in indexes_0]
-        fp_1= [fps[int(r)]  for r in indexes_1]
-
-
-        #df[['smiles_0', 'smiles_1']].to_csv(f'{config.PREPROCESSING_DIR}_pre_input_{str(id)}.csv', header=False)
-
-        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
 
         #df['edit_distance'] = df.apply(lambda x:EditDistance.simba_solve_pair_edit_distance(x['smiles_0'], x['smiles_1'], fpgen, ), axis=1)
         distances=[]
@@ -64,18 +47,18 @@ class EditDistance:
         fps=[]
         mols= []
 
-        for index, (s0,s1,m0, m1, f0, f1) in enumerate(zip(smiles_0, smiles_1,mols_0, mols_1, fp_0, fp_1)):
+        for index in range(0, indexes_np.shape[0]):
             #print('')
             #print(f'id: {id}, {index}, S0: {s0}, S1: {s1}')
-            dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(m0, m1, f0, f1)
+            row = indexes_np[index]
+
+            s0 = smiles[int(row[0])] 
+            s1 = smiles[int(row[1])] 
+            dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(s0,s1,fpgen)
             #print(dist)
             distances.append(dist)
-        df['edit_distance']=distances
-    
-        #df[['smiles_0', 'smiles_1','edit_distance']].to_csv(f'{config.PREPROCESSING_DIR}input_{str(id)}.csv', header=False)
-
-        #print('saving intermediate results')
-        indexes_np[:,2]= df['edit_distance'].values
+        
+        indexes_np[:,2]= distances
         return indexes_np 
 
     def get_number_of_modification_edges(mol, substructure):
@@ -129,24 +112,24 @@ class EditDistance:
 
 
 
-    def simba_solve_pair_edit_distance(mol1, mol2, fp1, fp2, low_similarity=5):
-        #mol1 = Chem.MolFromSmiles(smiles1)
+    def simba_solve_pair_edit_distance(s0, s1, fpgen, low_similarity=5):
+        mol1 = Chem.MolFromSmiles(s0)
 
         
-        #mol2 = Chem.MolFromSmiles(smiles2)
+        mol2 = Chem.MolFromSmiles(s1)
 
         
 
         
         #try:
-        #fps = [fpgen.GetFingerprint(x) for x in [mol1, mol2]]
+        fps = [fpgen.GetFingerprint(x) for x in [mol1, mol2]]
 
         #except:
         #    print('')
         #    print(f'1: {mol1}')
         #    print(f'2: {mol1}')
         #    raise ValueError('None values')
-        tanimoto = DataStructs.TanimotoSimilarity(fp1,fp2)
+        tanimoto = DataStructs.TanimotoSimilarity(fps[0],fps[1])
         if tanimoto < 0.2:
             #print("The Tanimoto similarity is too low.")
             distance = np.nan
