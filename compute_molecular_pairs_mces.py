@@ -55,9 +55,9 @@ max_number_spectra_nist = 10000000000
 #train_molecules = 1 * (10**6)
 #val_molecules = 10**5
 #test_molecules = 10**5
-train_molecules =  1*(10**4)
-val_molecules = 1*(10**4)
-test_molecules = 1*(10**4)
+train_molecules =  1*(10**9)
+val_molecules = 10*(10**6)
+test_molecules = 10*(10**6)
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar

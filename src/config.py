@@ -7,7 +7,7 @@ class Config:
         self.PREPROCESSING_NUM_WORKERS=60
         self.USE_EDIT_DISTANCE=True
         self.SUBSAMPLE_PREPROCESSING=False
-        self.RANDOM_MCES_SAMPLING = False
+        self.RANDOM_MCES_SAMPLING = True
         self.CHARGES = 0, 1
         self.MIN_N_PEAKS = 6
         self.FRAGMENT_MZ_TOLERANCE = 0.1
@@ -40,13 +40,14 @@ class Config:
         self.use_uniform_data_INFERENCE = True
         self.bins_uniformise_INFERENCE = 10
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
-        self.extra_info = "_edit_distance_loaded"
+        self.extra_info = "_edit_distance_loaded_full"
         self.derived_variables()
+        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_loaded_full/"
+        self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 
     def derived_variables(self):
         self.MODEL_CODE = f"{self.D_MODEL}_units_{self.N_LAYERS}_layers_{self.epochs}_epochs_{self.LR}_lr_{self.BATCH_SIZE}_bs{self.extra_info}"
         self.CHECKPOINT_DIR = f"/scratch/antwerpen/209/vsc20939/data/model_checkpoints/model_checkpoints_{self.MODEL_CODE}/"
         self.pretrained_path = self.CHECKPOINT_DIR + f"best_model.ckpt"
         self.best_model_path = self.CHECKPOINT_DIR + f"best_model.ckpt"
-        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_loaded/"
-        self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
+        

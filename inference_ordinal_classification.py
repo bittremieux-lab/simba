@@ -111,7 +111,8 @@ print(f"Number of pairs for test: {len(molecule_pairs_test)}")
 
 #best_model_path = model_path = data_folder + 'best_model_exhaustive_sampled_128n_20240618.ckpt'
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps-v9.ckpt"
-best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
+#best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
+best_model_path = config.CHECKPOINT_DIR + f"best_model.ckpt"
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps.ckpt"
 
 # In[ ]:
@@ -298,14 +299,14 @@ def plot_cm(true,preds, config, file_name='cm.png'):
     accuracy = accuracy_score(true, preds)
     print("Accuracy:", accuracy)
     # Normalize the confusion matrix by the number of true instances for each class
-    cm_normalized = cm.astype('float') / cm.sum()
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)
     # Plot the confusion matrix with percentages
     plt.figure(figsize=(10, 7))
     labels= ['>5', '4', '3', '2' , '1', '0']
     sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',xticklabels=labels, yticklabels=labels)
     plt.xlabel('Predicted Labels')
     plt.ylabel('True Labels')
-    plt.title(f'Confusion Matrix (Normalized to Percentages), acc:{accuracy:.2f}')
+    plt.title(f'Confusion Matrix (Normalized to Percentages), acc:{accuracy:.2f}, samples: {preds.shape[0]}')
     plt.savefig(config.CHECKPOINT_DIR + file_name)
     plt.show()
 

@@ -107,7 +107,7 @@ class DetSimilarity:
             spectrum_copy.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
             .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
             .set_mz_range(min_mz=10, max_mz=1400)
-            .scale_intensity(scale_intensity)
+            #.scale_intensity(scale_intensity)
         )
 
     @staticmethod

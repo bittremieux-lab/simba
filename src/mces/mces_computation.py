@@ -222,11 +222,11 @@ class MCES:
 
         indexes_np= np.array([])
 
-        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
         print('Getting mols...')
-        mols = [Chem.MolFromSmiles(s) for s in smiles]
+        #mols = [Chem.MolFromSmiles(s) for s in smiles]
         print('Getting the molecular fingerprints...')
-        fps  = [fpgen.GetFingerprint(m) for m in mols]
+        #fps  = [fpgen.GetFingerprint(m) for m in mols]
 
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
@@ -234,21 +234,9 @@ class MCES:
                 pool=  multiprocessing.dummy.Pool(processes=num_workers)
                 # use classical mces or edit distance
 
-
-                if use_edit_distance:
-                    comp_function=EditDistance.compute_edit_distance
-
-                    
-                    results = [pool.apply_async(comp_function, args=(smiles, 
-                                        mols, 
-                                        fps,
-                                        sampled_index, 
-                                        size_batch, 
-                                        identifier,
-                                        random_sampling, config)) for identifier, sampled_index in enumerate(array)]
-                else:
-                    comp_function=MCES.compute_mces_myopic
-                    results = [pool.apply_async(comp_function, args=(smiles, 
+                comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
+                                
+                results = [pool.apply_async(comp_function, args=(smiles, 
                                         sampled_index, 
                                         size_batch, 
                                         identifier,
