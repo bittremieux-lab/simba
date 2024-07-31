@@ -111,7 +111,8 @@ print(f"Number of pairs for test: {len(molecule_pairs_test)}")
 
 #best_model_path = model_path = data_folder + 'best_model_exhaustive_sampled_128n_20240618.ckpt'
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps-v9.ckpt"
-best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
+#best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
+best_model_path = config.CHECKPOINT_DIR + f"best_model.ckpt"
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps.ckpt"
 
 # In[ ]:
