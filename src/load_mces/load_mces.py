@@ -144,11 +144,6 @@ class LoadMCES:
             print(f'Processing batch {i}')
             np_array= np.load(f)
 
-            # select only the first 4 rows: index0, index1 and similarity1 and similarity 2
-            np_array_loaded = np_array[:,0:4]
-            np_array= np.zeros((np_array.shape[0], 4))
-            np_array[:,0:3]= np_array_loaded
-
             print(f'Size without removal: {np_array.shape[0]}')
 
             np_array=LoadMCES.remove_excess_low_pairs(np_array, remove_percentage=remove_percentage)

@@ -129,7 +129,7 @@ class LoadEditDistanceData:
 
     def generate_np(df_rs_filtered):
         print('Writing edit distance and tanimoto')
-        indexes_tani_np = np.zeros((df_rs_filtered.shape[0],3 ))
+        indexes_tani_np = np.zeros((df_rs_filtered.shape[0],4))
         indexes_tani_np[:,0]=df_rs_filtered['indexes_tani_0']
         indexes_tani_np[:,1]=df_rs_filtered['indexes_tani_1']
         indexes_tani_np[:,2]=df_rs_filtered['edit_distance']
@@ -160,32 +160,33 @@ class LoadEditDistanceData:
 
 
         for index,l in tqdm(enumerate(list_files)):
-                print(f'Processing file: {l}')
-                # decompress the gz file
-                csv_file = l.split('.gz')[-2]+'.csv'
-                print('Decompressing ...')
-                LoadEditDistanceData.decompress_gz(input_gz_file=l, 
-                                                   output_file= csv_file)
-                
-                print('Loading file')
-                df= LoadEditDistanceData.load_file(csv_file)
-                
-                # loop through train, val and test
-                for k in dict_save:
-                    print(f'Filtering: {k}')
-                    specs =dataset[k].spectrums
-                
+                #if index>=29:
+                    print(f'Processing file: {l}')
+                    # decompress the gz file
+                    csv_file = l.split('.gz')[-2]+'.csv'
+                    print('Decompressing ...')
+                    LoadEditDistanceData.decompress_gz(input_gz_file=l, 
+                                                    output_file= csv_file)
                     
+                    print('Loading file')
+                    df= LoadEditDistanceData.load_file(csv_file)
                     
-                    df_filtered = LoadEditDistanceData.get_matched_rows(df,specs=specs)
-                    np_array= LoadEditDistanceData.generate_np(df_filtered)
+                    # loop through train, val and test
+                    for k in dict_save:
+                        print(f'Filtering: {k}')
+                        specs =dataset[k].spectrums
+                    
+                        
+                        
+                        df_filtered = LoadEditDistanceData.get_matched_rows(df,specs=specs)
+                        np_array= LoadEditDistanceData.generate_np(df_filtered)
 
-                    #file
-                    file_name= output_folder+ f'indexes_tani_incremental_{dict_save[k]}_{str(index)}.npy'
-                    np.save(file_name, np_array)
+                        #file
+                        file_name= output_folder+ f'indexes_tani_incremental_{dict_save[k]}_{str(index)}.npy'
+                        np.save(file_name, np_array)
 
-                # delete decompred file
-                LoadEditDistanceData.delete_file(csv_file)
+                    # delete decompred file
+                    LoadEditDistanceData.delete_file(csv_file)
 
     def delete_file(file_path):
         os.system(f'rm {file_path}')
