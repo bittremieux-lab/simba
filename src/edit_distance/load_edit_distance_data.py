@@ -128,10 +128,12 @@ class LoadEditDistanceData:
     
 
     def generate_np(df_rs_filtered):
+        print('Writing edit distance and tanimoto')
         indexes_tani_np = np.zeros((df_rs_filtered.shape[0],3 ))
         indexes_tani_np[:,0]=df_rs_filtered['indexes_tani_0']
         indexes_tani_np[:,1]=df_rs_filtered['indexes_tani_1']
         indexes_tani_np[:,2]=df_rs_filtered['edit_distance']
+        indexes_tani_np[:,3]=df_rs_filtered['tanimoto']
         return indexes_tani_np
     
 
