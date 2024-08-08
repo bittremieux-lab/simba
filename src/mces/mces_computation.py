@@ -169,7 +169,7 @@ class MCES:
         indexes_np[:,2]= df['mces_normalized'].values
         return indexes_np 
 
-    def get_samples(all_spectrums,random_sampling,max_combinations,size_batch_no_random=10000):
+    def get_samples(all_spectrums,random_sampling,max_combinations,size_batch_no_random=100):
         '''
         get sample indexes if we do random or deterministic sampling
         '''
@@ -222,27 +222,42 @@ class MCES:
 
         indexes_np= np.array([])
 
-        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
-        print('Getting mols...')
+
+        #if use_edit_distance:
+        #print('Getting mols...')
         #mols = [Chem.MolFromSmiles(s) for s in smiles]
-        print('Getting the molecular fingerprints...')
+        #print('Getting the molecular fingerprints...')
+        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
         #fps  = [fpgen.GetFingerprint(m) for m in mols]
 
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
-                #pool = multiprocessing.Pool(processes=num_workers)
-                pool=  multiprocessing.dummy.Pool(processes=num_workers)
+                pool = multiprocessing.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
+                #pool=  multiprocessing.dummy.Pool(processes=num_workers)  ## USE MULTIPLE THREADS - SHARED MEMORY
                 # use classical mces or edit distance
 
                 comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
                                 
-                results = [pool.apply_async(comp_function, args=(smiles, 
-                                        sampled_index, 
-                                        size_batch, 
-                                        identifier,
-                                        random_sampling, config)) for identifier, sampled_index in enumerate(array)]
-                
-                
+                if use_edit_distance:
+                    results = [pool.apply_async(comp_function, args=(smiles,
+                                            sampled_index, 
+                                            size_batch, 
+                                            (index_array*len(split_arrays[0]))+sub_index,
+                                            random_sampling, config)) for sub_index, sampled_index in enumerate(array)]
+                    
+                    #args_list = [(smiles, fps, sampled_index, size_batch, identifier, random_sampling, config) 
+                    #for identifier, sampled_index in enumerate(array)]
+
+                    # Use pool.starmap_async to apply the function with multiple arguments in parallel
+                    #results = pool.starmap_async(comp_function, args_list).get()
+                else:
+                    results = [pool.apply_async(comp_function, args=(smiles, 
+                                            sampled_index, 
+                                            size_batch, 
+                                            (index_array*len(split_arrays[0]))+sub_index,
+                                            random_sampling, config)) for identifier, sampled_index in enumerate(array)]
+                    
+                    
                 # Close the pool and wait for all processes to finish
                 pool.close()
                 pool.join()
