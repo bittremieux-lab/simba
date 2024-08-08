@@ -26,26 +26,24 @@ class EditDistance:
         return df
 
 
-    def compute_edit_distance(smiles,sampled_index, size_batch, id, random_sampling, config):
-
+    def compute_edit_distance(smiles, sampled_index, size_batch, identifier, random_sampling, config):
+        
+        print(f'id')
         # where to save results
         indexes_np = np.zeros((int(size_batch), 3),)
         # initialize randomness
         if random_sampling:
-            np.random.seed(id)
+            np.random.seed(identifier)
             indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
             indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
         else:
             indexes_np[:,0] = sampled_index
             indexes_np[:,1]= np.arange(0, size_batch)
 
-        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
 
         #df['edit_distance'] = df.apply(lambda x:EditDistance.simba_solve_pair_edit_distance(x['smiles_0'], x['smiles_1'], fpgen, ), axis=1)
         distances=[]
-
-        fps=[]
-        mols= []
 
         for index in range(0, indexes_np.shape[0]):
             #print('')
@@ -54,7 +52,7 @@ class EditDistance:
 
             s0 = smiles[int(row[0])] 
             s1 = smiles[int(row[1])] 
-            dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(s0,s1,fpgen)
+            dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(s0,s1)
             #print(dist)
             distances.append(dist)
         
@@ -112,30 +110,37 @@ class EditDistance:
 
 
 
-    def simba_solve_pair_edit_distance(s0, s1, fpgen, low_similarity=5):
-        mol1 = Chem.MolFromSmiles(s0)
-
-        
-        mol2 = Chem.MolFromSmiles(s1)
-
+    def simba_solve_pair_edit_distance(s0, s1,  low_similarity=5):
         
 
+        
+        
         
         #try:
-        fps = [fpgen.GetFingerprint(x) for x in [mol1, mol2]]
+        mol0 = Chem.MolFromSmiles(s0)
+        mol1 = Chem.MolFromSmiles(s1)
 
-        #except:
-        #    print('')
-        #    print(f'1: {mol1}')
-        #    print(f'2: {mol1}')
-        #    raise ValueError('None values')
-        tanimoto = DataStructs.TanimotoSimilarity(fps[0],fps[1])
-        if tanimoto < 0.2:
-            #print("The Tanimoto similarity is too low.")
-            distance = np.nan
+        if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
+            #raise ValueError("The molecules are too large.")
+            return np.nan, 0
         else:
-            distance = EditDistance.simba_get_edit_distance(mol1, mol2)
-        return distance, tanimoto
+            fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+            fps = [fpgen.GetFingerprint(x) for x in [mol0, mol1]]
+
+            #except:
+            #    print('')
+            #    print(f'1: {mol1}')
+            #    print(f'2: {mol1}')
+            #    raise ValueError('None values')
+            tanimoto = DataStructs.TanimotoSimilarity(fps[0],fps[1])
+            #tanimoto = DataStructs.TanimotoSimilarity(fp0,fp1)
+            if tanimoto < 0.2:
+                #print("The Tanimoto similarity is too low.")
+                #distance = np.nan
+                distance = 666 # very high number to remark that they are very different
+            else:
+                distance = EditDistance.simba_get_edit_distance(mol0, mol1)
+            return distance, tanimoto
 
 
     def get_data(data, index, batch_count):

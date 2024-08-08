@@ -70,9 +70,10 @@ class LoadMCES:
         print('Normalizing')
         merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
 
+        print('Remove redundant pairs')
+        merged_array = np.unique(merged_array, axis=0)
         # remove excess low pairs
         #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
-
         return merged_array
 
     def add_high_similarity_pairs_edit_distance(merged_array):
