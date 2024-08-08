@@ -9,7 +9,7 @@ class MoleculePairsOpt(MolecularPairsSet):
     """
 
     def __init__(
-        self, spectrums_original, spectrums_unique, df_smiles, indexes_tani_unique
+        self, spectrums_original, spectrums_unique, df_smiles, indexes_tani_unique, tanimotos=None
     ):
         """
         it receives a set of spectrums, and a tuple with indexes i,j, tani tuple
@@ -22,6 +22,7 @@ class MoleculePairsOpt(MolecularPairsSet):
         #    np.array(indexes_tani_unique)
         #)
         self.indexes_tani = indexes_tani_unique
+        self.tanimotos=tanimotos
 
     def __add__(self, other):
         # only to be used when the spectrums are the same

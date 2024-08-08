@@ -1,4 +1,4 @@
-from src.transformers.CustomDatasetUnique import CustomDatasetUnique
+from src.transformers.CustomDatasetMultitasking import CustomDatasetMultitasking
 import numpy as np
 from src.preprocessor import Preprocessor
 from tqdm import tqdm
@@ -6,7 +6,7 @@ from src.molecule_pairs_opt import MoleculePairsOpt
 import copy
 from src.ordinal_classification.ordinal_classification import OrdinalClassification
 
-class LoadDataOrdinal:
+class LoadDataMultitasking:
     """
     using unique identifiers
     """
@@ -17,7 +17,6 @@ class LoadDataOrdinal:
         max_num_peaks=100,
         training=False,  # shuffle the spectrum 0 and 1 for data augmentation
         N_classes=6,
-        tanimotos=None,
     ):
         """
         preprocess the spectra and convert it for being used in Pytorch
@@ -30,6 +29,7 @@ class LoadDataOrdinal:
             spectrums_unique=molecule_pairs_input.spectrums,
             df_smiles=molecule_pairs_input.df_smiles,
             indexes_tani_unique=molecule_pairs_input.indexes_tani,
+            tanimotos=molecule_pairs_input.tanimotos,
         )
 
         ## Preprocess the data
@@ -76,15 +76,17 @@ class LoadDataOrdinal:
         similarity = OrdinalClassification.from_float_to_class(molecule_pairs_input.indexes_tani[:, 2].reshape(-1, 1), N_classes=N_classes)
         #similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
 
+        similarity2= molecule_pairs.tanimotos.reshape(-1,1)
         print("Creating dictionaries")
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.indexes_tani[:, 0].reshape(-1, 1),
             "index_unique_1": molecule_pairs_input.indexes_tani[:, 1].reshape(-1, 1),
             "similarity": similarity,
+            "similarity2" : similarity2,
             # "fingerprint": fingerprints,
         }
 
-        return CustomDatasetUnique(
+        return CustomDatasetMultitasking(
             dictionary_data,
             training=training,
             mz=mz,
