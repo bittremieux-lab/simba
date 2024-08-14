@@ -10,7 +10,7 @@ class WeightSampling:
     @staticmethod
     def compute_weights(binned_list):
         freq = np.array([len(r) for r in binned_list])
-
+       
         # remove 1 from using the last bin for sim=1
         #index_half = int((len(binned_list)) / 2)
 
@@ -19,8 +19,13 @@ class WeightSampling:
         # freq_low_range= sum_freq_low_range/(len(freq[0:index_half]))
 
         #freq[0:index_half] = freq_low_range
-
-        weights = np.sum(freq) / freq
+        weights=np.zeros(len(binned_list))
+        for index,f in enumerate(freq):
+            if f != 0:
+                weights[index] = np.sum(freq)/f
+            else:
+                weights[index]=0
+        
 
         # deprecated
         # for the ranges that are lower than 0.5, put half the weight on the highest range
@@ -63,19 +68,38 @@ class WeightSampling:
     #    return weights_sample
 
     @staticmethod
-    def compute_sample_weights(molecule_pairs, weights):
+    def compute_sample_weights(molecule_pairs, weights, use_molecule_pair_object=True, targets=None, bining_sim1=False):
         # get similarities
-        sim = molecule_pairs.indexes_tani[:, 2]
+        if use_molecule_pair_object:
+            sim = molecule_pairs.indexes_tani[:, 2]
+        else:
+            sim = targets
         
         # Calculate the index using vectorized operations
-        indices = np.floor(sim * (len(weights))).astype(int)
-        indices[indices == len(weights)] = len(weights) - 1
+        if bining_sim1:
+            effective_range= len(weights) - 1
+        else:
+            effective_range = len(weights)
+
+        #print(f'sim: {sim}')
+        #print(f'effective range: {effective_range}')
+        indices = np.floor(sim * (effective_range)).astype(int)
+
+        if not(bining_sim1):
+            indices[indices == effective_range] = len(weights) - 1
         
         # Map the indices to weights and normalize
+
+        #print(f'Weights: {weights}')
+        #print(f'indices: {indices}')
+        #print(f'{weights.shape}')
+        #print(f'{indices.shape}')
         weights_sample = weights[indices]
         weights_sample /= weights_sample.sum()
         
         return weights_sample
+
+    
     
     @staticmethod
     def compute_sample_weights_categories(molecule_pairs, weights):

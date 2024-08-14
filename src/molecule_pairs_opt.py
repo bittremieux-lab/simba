@@ -33,11 +33,16 @@ class MoleculePairsOpt(MolecularPairsSet):
             new_indexes_tani = np.concatenate(
                 (self.indexes_tani, other.indexes_tani), axis=0
             )
+            if (self.tanimotos is not None) and (other.tanimotos is not None):
+                tanimotos= np.concatenate( (self.tanimotos, other.tanimotos), axis=0)
+            else:
+                tanimotos=None
             return MoleculePairsOpt(
                 spectrums_unique=self.spectrums,
                 spectrums_original=self.spectrums_original,
                 indexes_tani_unique=new_indexes_tani,
                 df_smiles=self.df_smiles,
+                tanimotos=tanimotos,
             )
         else:
             print("ERROR: Attempting to add 2 set of spectrums with different content")

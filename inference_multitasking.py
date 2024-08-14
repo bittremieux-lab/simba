@@ -26,8 +26,8 @@ from src.sanity_checks import SanityChecks
 from src.transformers.postprocessing import Postprocessing
 from scipy.stats import spearmanr
 import seaborn as sns
-from src.ordinal_classification.load_data_ordinal import LoadDataOrdinal
-from src.ordinal_classification.embedder_ordinal import EmbedderOrdinal
+from src.ordinal_classification.load_data_multitasking import LoadDataMultitasking
+from src.ordinal_classification.embedder_multitask import EmbedderMultitask
 from sklearn.metrics import confusion_matrix, accuracy_score
 from src.load_mces.load_mces import LoadMCES   
 from src.performance_metrics.performance_metrics import PerformanceMetrics
@@ -165,7 +165,7 @@ uniformed_molecule_pairs_test.indexes_tani
 
 
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadDataOrdinal.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test)
+dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
@@ -174,7 +174,7 @@ dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle
 
 # Testinbest_model = Embedder.load_from_checkpoint(checkpoint_callback.best_model_path, d_model=64, n_layers=2)
 trainer = pl.Trainer(max_epochs=2, enable_progress_bar=enable_progress_bar)
-best_model = EmbedderOrdinal.load_from_checkpoint(
+best_model = EmbedderMultitask.load_from_checkpoint(
     best_model_path,
     d_model=int(config.D_MODEL),
     n_layers=int(config.N_LAYERS),
@@ -195,38 +195,9 @@ pred_test = trainer.predict(
     best_model,
     dataloader_test,
 )
-similarities_test = Postprocessing.get_similarities(dataloader_test)
 
+similarities_test1, similarities_test2 = Postprocessing.get_similarities_multitasking(dataloader_test)
 
-# In[ ]:
-
-
-plt.hist(similarities_test)
-
-
-# In[ ]:
-
-
-print(pred_test[0][4])
-print(similarities_test[127])
-
-
-# In[ ]:
-
-
-pred_test[0][6]
-
-
-# In[ ]:
-
-
-np.argwhere(pred_test[0][0]>0.1)[0]
-
-
-# In[ ]:
-
-
-np.argwhere(pred_test[0][0]>0.9)[0].numel()
 
 
 # In[ ]:
@@ -243,59 +214,80 @@ def which_index_confident(p, threshold=0.90):
     else:
         return np.nan
 
-
+#print(len(pred_test))
+#print(pred_test[0])
+#print(pred_test[0].shape)
+#print(f'Shape of pred_test: {len(pred_test)}')
 # flat the results
-flat_pred_test = []
-confident_pred_test=[]
-for pred in pred_test:
-    flat_pred_test = flat_pred_test + [which_index(p) for p in pred]
-    confident_pred_test = confident_pred_test + [which_index_confident(p) for p in pred]
-flat_pred_test=np.array( flat_pred_test)
-confident_pred_test=np.array(confident_pred_test)
+flat_pred_test1 = []
+confident_pred_test1=[]
+
+flat_pred_test2 = []
+confident_pred_test2=[]
+for pred in pred_test: # in the batch dimension
+    #get the results of each similarity
+    pred1= pred[0]
+    pred2= pred[1]
+
+    #similarity1
+    flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
+    confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
+
+    #similarity2
+    flat_pred_test2 = flat_pred_test2 + [p for p in pred2]
+
+
+# convert to numpy
+flat_pred_test1=np.array( flat_pred_test1)
+confident_pred_test1=np.array(confident_pred_test1)
+flat_pred_test2=np.array( flat_pred_test2)
 
 
 # get the results
-similarities_test=np.array(similarities_test)
-flat_pred_test=np.array(flat_pred_test)
+similarities_test1=np.array(similarities_test1)
+flat_pred_test1=np.array(flat_pred_test1)
+
+similarities_test2=np.array(similarities_test2)
+flat_pred_test2=np.array(flat_pred_test2)
 
 # analyze errors and good predictions
-good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test, flat_pred_test)
-bad_indexes = PerformanceMetrics.get_bad_predictions(similarities_test, flat_pred_test)
+good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1, flat_pred_test1)
+bad_indexes = PerformanceMetrics.get_bad_predictions(similarities_test1, flat_pred_test1)
 
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test, flat_pred_test, good_indexes, config, prefix='good')
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test, flat_pred_test, bad_indexes, config, prefix='bad')
+PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, flat_pred_test1, good_indexes, config, prefix='good')
+PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, flat_pred_test1, bad_indexes, config, prefix='bad')
 
-
-
-# In[ ]:
-
-
-len(similarities_test)
 
 
 # In[ ]:
 
 
-similarities_test_cleaned= similarities_test[~np.isnan(flat_pred_test)]
-flat_pred_test_cleaned= flat_pred_test[~np.isnan(flat_pred_test)]
+len(similarities_test1)
 
 
 # In[ ]:
 
 
-len(similarities_test_cleaned)
+similarities_test_cleaned1= similarities_test1[~np.isnan(flat_pred_test1)]
+flat_pred_test_cleaned1= flat_pred_test1[~np.isnan(flat_pred_test1)]
 
 
 # In[ ]:
 
 
-corr_model, p_value_model= spearmanr(similarities_test_cleaned, flat_pred_test_cleaned)
+len(similarities_test_cleaned1)
 
 
 # In[ ]:
 
 
-print(f'Correlation of model: {corr_model}')
+corr_model1, p_value_model1= spearmanr(similarities_test_cleaned1, flat_pred_test_cleaned1)
+
+
+# In[ ]:
+
+
+print(f'Correlation of edit distance model: {corr_model1}')
 
 
 # In[ ]:
@@ -322,39 +314,43 @@ def plot_cm(true,preds, config, file_name='cm.png'):
     plt.savefig(config.CHECKPOINT_DIR + file_name)
     plt.show()
 
-plot_cm(similarities_test_cleaned, flat_pred_test_cleaned, config)
+plot_cm(similarities_test_cleaned1, flat_pred_test_cleaned1, config)
 ## analyze the impact of thresholding
 
-similarities_test_cleaned_confident= similarities_test[~np.isnan(confident_pred_test)]
-flat_pred_test_cleaned_confident= confident_pred_test[~np.isnan(confident_pred_test)]
+similarities_test_cleaned_confident1= similarities_test1[~np.isnan(confident_pred_test1)]
+flat_pred_test_cleaned_confident1= confident_pred_test1[~np.isnan(confident_pred_test1)]
 
-confident_corr_model, confident_p_value_model= spearmanr(similarities_test_cleaned_confident, flat_pred_test_cleaned_confident)
+confident_corr_model1, confident_p_value_model1= spearmanr(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1)
 
-print(f'Original size of predictions:{similarities_test.shape}')
-print(f'Confident size of predictions:{similarities_test_cleaned_confident.shape}')
+print(f'Original size of predictions:{similarities_test1.shape}')
+print(f'Confident size of predictions:{similarities_test_cleaned_confident1.shape}')
 # In[ ]:
 
 
-print(f'Correlation of model (confident): {confident_corr_model}')
+print(f'Correlation of model (confident): {confident_corr_model1}')
 
 
-plot_cm(similarities_test_cleaned_confident, flat_pred_test_cleaned_confident, config, file_name='confident_cm.png')
+plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1, config, file_name='confident_cm.png')
 # In[250]:
 
 
-plt.scatter(similarities_test, flat_pred_test, alpha=0.01)
+plt.scatter(similarities_test1, flat_pred_test1, alpha=0.01)
 
 
-# ##### 
+sns.set_theme(style="ticks")
+plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
+# Set x and y labels
+plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
+plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
+
 
 # In[ ]:
 
 
-
+corr_model2, p_value_model2= spearmanr(similarities_test2, flat_pred_test2)
 
 
 # In[ ]:
 
 
-
-
+print(f'Correlation of tanimoto model: {corr_model2}')

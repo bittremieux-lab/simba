@@ -25,7 +25,7 @@ from src.config import Config
 
 from src.transformers.embedder import Embedder
 from src.ordinal_classification.ordinal_classification import OrdinalClassification
-
+from src.weight_sampling import WeightSampling
 
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
@@ -108,8 +108,8 @@ class EmbedderMultitask(Embedder):
         use_element_wise=True,
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
         # Number of classes for classification
-        
-    ):
+        weights_sim2=None, #weights of second similarity
+):
         """Initialize the CCSPredictor"""
         super().__init__(
         d_model=d_model,
@@ -118,7 +118,8 @@ class EmbedderMultitask(Embedder):
         weights=weights,
         lr=lr,
         use_element_wise=use_element_wise,
-        use_cosine_distance=use_cosine_distance,)  # element wise instead of concat for mixing info between embeddings)
+        use_cosine_distance=use_cosine_distance,
+)  # element wise instead of concat for mixing info between embeddings)
         self.weights = weights
 
         # Add a linear layer for projection
@@ -130,6 +131,8 @@ class EmbedderMultitask(Embedder):
 
         self.dropout = nn.Dropout(p=dropout)
         self.use_gumbel=use_gumbel
+        self.weights_sim2=weights_sim2
+
 
     def forward(self, batch):
         """The inference pass"""
@@ -183,8 +186,6 @@ class EmbedderMultitask(Embedder):
         logits1= logits_list[0]
         logits2= logits_list[1]
 
-        #probs = F.softmax(logits, dim=-1)
-
         # the sim data is received in the range 0-1
         target1 = torch.tensor(batch["similarity"], dtype=torch.long).to(self.device)
         target1 = target1.view(-1)  # Ensure targets are in the right shape and type for classification
@@ -193,30 +194,20 @@ class EmbedderMultitask(Embedder):
         target2 = target2.view(-1)  # Ensure targets are in the right shape and type for classification
         
         #loss = self.loss_fn(logits, target)
-        loss =self.customised_ce(logits1, target1) + self.regression_loss(logits2.float(), target2.view(-1, 1).float()).float()
-        # Compute the expected value (continuous) from probabilities
-        #expected_value = torch.sum(probs * torch.arange(logits.size(1)).to(self.device), dim=1)
+        loss1 =self.customised_ce(logits1, target1) 
+        loss2 = self.regression_loss(logits2.float(), target2.view(-1, 1).float()).float()
 
-        
-        # Compute the MSE between the expected value and the target
-        #loss = self.regression_loss(expected_value, target)
+        #weighting the loss function
+        weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
+                                                            weights=self.weights_sim2, 
+                                                            use_molecule_pair_object=False,
+                                                            bining_sim1=False,
+                                                            targets=target2.cpu().numpy())
+        weight_mask = torch.tensor(weight_mask).to(self.device)
+        loss2= (weight_mask * loss2).mean()
 
+        loss = loss1 + loss2
 
-        #loss = self.cumulative_logits_loss(logits, target)
-        #loss= self.ordinal_cross_entropy(logits, target)
-
-        #vector = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0, 5.0]).to(self.device)
-        #print('example:')
-        #print(logits[0])
-        #print(target[0])
-        #print(loss)
-        #print(vector[0])
-        ## Step 2: Compute the dot product for each row
-        #dot_products = logits * vector
-        #dot_products= dot_products.sum(dim=-1)
-        #print(dot_products[0])
-        #loss = self.regression_loss(dot_products, target)
-        
         return loss
     
     def step_mse(self, batch, batch_idx, threshold=0.5):

@@ -131,6 +131,24 @@ train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
         bin_sim_1=True, 
 )
 
+import copy
+# create a new copy of the pairs, to get the weights of the second similarity 
+molecule_pairs_train_similarity2= copy.deepcopy(molecule_pairs_train)
+molecule_pairs_train_similarity2.indexes_tani[:,2]= molecule_pairs_train_similarity2.tanimotos
+
+#print(f'Example of tanimotos processed: {molecule_pairs_train_similarity2.indexes_tani[:,2]}')
+#train_binned_list2, ranges = TrainUtils.divide_data_into_bins(
+#    molecule_pairs_train_similarity2,
+#    config.N_CLASSES-1,
+#        bin_sim_1=False, 
+#)
+
+# weights of similarity 2
+#weights2, range_weights2 = WeightSampling.compute_weights(train_binned_list2)
+#print(f'Train binned list of second similarity: {[len(t) for t in train_binned_list2]}')
+#print(f'Weights of second similarity:{weights2}')
+#print(f'Ranges of second similarity:{range_weights2}')
+
 # check distribution of similarities
 print("SAMPLES PER RANGE:")
 for lista in (train_binned_list):
@@ -155,6 +173,9 @@ plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2
 
 
 weights, range_weights = WeightSampling.compute_weights_categories(train_binned_list)
+
+
+
 #weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
 
@@ -269,19 +290,31 @@ dataloader_train
 
 ## check that the distribution of the loader is balanced
 similarities_sampled=[]
+similarities_sampled2= []
 for i,batch in enumerate(dataloader_train):
-    sim = batch['similarity']
-    sim = np.array(sim).reshape(-1)
-    similarities_sampled = similarities_sampled + list(sim)
+    #sim = batch['similarity']
+    #sim = np.array(sim).reshape(-1)
+    similarities_sampled = similarities_sampled + list(batch['similarity'].reshape(-1))
+
+    similarities_sampled2 = similarities_sampled2 + list(batch['similarity2'].reshape(-1))
     if i==100:
         break
 
 counting, bins, patches =plt.hist(similarities_sampled, bins=6)
 
-print(f'Distribution of similarity for dataset train: {counting}')
-print(f'Ranges of similarity for dataset train: {bins}')
+print(f'SIMILARITY 1: Distribution of similarity for dataset train: {counting}')
+print(f'SIMILARITY 1: Ranges of similarity for dataset train: {bins}')
 # In[304]:
 
+counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), number_bins=5, bin_sim_1=False)
+
+print(f'SIMILARITY 2: Distribution of similarity for dataset train: {counting2}')
+print(f'SIMILARITY 2: Ranges of similarity for dataset train: {bins2}')
+
+weights2 = np.array([np.sum(counting2)/c if c != 0 else 0 for c in counting2]) 
+weights2= weights2/np.sum(weights2)
+
+print(f'WEIGHTS CALCULATED FOR SECOND SIMILARITY: {weights2}')
 
 def worker_init_fn(
     worker_id,
@@ -347,6 +380,7 @@ model = EmbedderMultitask(
     lr=config.LR,
     use_cosine_distance=config.use_cosine_distance,
     use_gumbel = config.USE_GUMBEL,
+    weights_sim2=np.array(weights2),
 )
 
 
