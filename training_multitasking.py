@@ -98,12 +98,12 @@ print(f'shape of similarity1: {molecule_pairs_train.indexes_tani.shape}')
 
 molecule_pairs_train.tanimotos = indexes_tani_multitasking_train[:,3]
 molecule_pairs_val.tanimotos = indexes_tani_multitasking_val[:,3]
+
+
 print(f'shape of similarity2: {molecule_pairs_train.tanimotos.shape}')
-
-
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
 print(f"Number of pairs for val: {len(molecule_pairs_val)}")
-
+print(f'Example of data loaded for tanimotos: {molecule_pairs_train.tanimotos}')
 ## Sanity checks
 sanity_check_ids = SanityChecks.sanity_checks_ids(
     molecule_pairs_train,

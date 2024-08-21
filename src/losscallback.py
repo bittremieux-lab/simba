@@ -34,7 +34,8 @@ class LossCallback(Callback):
         print(self.val_loss)
 
         # Create subplots
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 8))
+        #fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 8))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
         # Plot train loss on the first subplot
         ax1.plot(self.train_loss, label="train", marker="o", color="b")
@@ -44,20 +45,20 @@ class LossCallback(Callback):
         ax1.legend()
         ax1.grid()
 
-        ax2.plot(self.val_loss[1:], label="val epoch", marker="o", color="r")
+        #ax2.plot(self.val_loss[1:], label="val epoch", marker="o", color="r")
+        #ax2.set_title("Val Loss")
+        #ax2.set_xlabel("Number of Epochs")
+        #ax2.set_ylabel("Loss")
+        #ax2.legend()
+        #ax2.grid()
+
+
+        ax2.plot(self.val_loss_step[1:], label="val step", marker="o", color="r")
         ax2.set_title("Val Loss")
-        ax2.set_xlabel("Number of Epochs")
+        ax2.set_xlabel("Number of Steps")
         ax2.set_ylabel("Loss")
         ax2.legend()
         ax2.grid()
-
-
-        ax3.plot(self.val_loss_step[1:], label="val step", marker="o", color="r")
-        ax3.set_title("Val Loss")
-        ax3.set_xlabel("Number of Steps")
-        ax3.set_ylabel("Loss")
-        ax3.legend()
-        ax3.grid()
 
         # Adjust layout to prevent overlapping
         plt.tight_layout()

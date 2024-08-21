@@ -77,6 +77,8 @@ class LoadDataMultitasking:
         #similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
 
         similarity2= molecule_pairs.tanimotos.reshape(-1,1)
+
+
         print("Creating dictionaries")
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.indexes_tani[:, 0].reshape(-1, 1),

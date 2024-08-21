@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import spectrum_utils.plot as sup
 from src.tanimoto import Tanimoto
 from src.analog_discovery.mces import MCES
+import os 
 
 class PerformanceMetrics:
 
@@ -34,6 +35,10 @@ class PerformanceMetrics:
     @staticmethod
     def plot_molecules(molecule_pairs, similarities, predictions, target_indexes, config, samples=20, prefix='good'):
         output_path = config.CHECKPOINT_DIR
+
+        # create folders for the images if they dont exist
+        if not(os.path.exists(output_path + prefix)):
+            os.mkdir(output_path + prefix)
 
         # randomize the plotting
         target_indexes = target_indexes[np.random.randint(0, target_indexes.shape[0],target_indexes.shape[0] )]
@@ -95,11 +100,11 @@ class PerformanceMetrics:
             final_img.paste(combined_img, (0, 70))
             
             # Save the image
-            final_img.save(output_path + f'{prefix}_pair_{index}_molecule.png')
+            final_img.save(output_path + prefix + '/' + f'{prefix}_pair_{index}_molecule.png')
 
             # plot spectra
             fig, ax = plt.subplots()
             sup.mirror(spec0, spec1, ax=ax)
-            plot_path = output_path + f'{prefix}_pair_{index}_spectra.png'
+            plot_path = output_path   + prefix + '/' + f'{prefix}_pair_{index}_spectra.png'
             plt.savefig(plot_path)
             plt.close(fig)

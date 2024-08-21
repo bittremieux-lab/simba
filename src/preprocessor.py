@@ -4,7 +4,7 @@ from scipy.signal import find_peaks
 from src.config import Config
 from src.spectrum_ext import SpectrumExt
 from src.preprocessing_utils import PreprocessingUtils
-
+import copy
 
 class Preprocessor:
 
@@ -104,3 +104,13 @@ class Preprocessor:
         for i, spectrum in enumerate(spectrums):
             all_binned_spectrums[i] = spectrum.spectrum_vector
         return all_binned_spectrums
+
+
+    def return_valid_spectra_n_peaks(self,spectra_original, min_peaks):
+        '''
+        return valid spectra based on the minimum number of peaks
+        '''
+        input_spectra= [copy.deepcopy(s) for s in spectra_original]
+        preprocessed_spectra= self.preprocess_all_spectrums(input_spectra)
+        valid_indexes = [i for i,s in enumerate(preprocessed_spectra) if len(s.mz)>min_peaks]
+        return [spectra_original[i]for i in valid_indexes]

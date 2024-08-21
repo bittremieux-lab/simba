@@ -42,7 +42,7 @@ output_np_indexes_val = config.PREPROCESSING_DIR+f"indexes_tani_mces_val{subfix}
 output_np_indexes_test = config.PREPROCESSING_DIR+f"indexes_tani_mces_test{subfix}.npy"
 output_nist_file = config.PREPROCESSING_DIR+f"all_spectrums_nist.pkl"
 output_neurips_file = config.PREPROCESSING_DIR+f"all_spectrums_neurips.pkl"
-output_spectrums_file = config.PREPROCESSING_DIR+f"all_spectrums_neurips_nist_20240718.pkl"
+output_spectrums_file = config.PREPROCESSING_DIR+f"all_spectrums_neurips_nist_20240814.pkl"
 
 USE_ONLY_LOW_RANGE=True
 
@@ -55,16 +55,16 @@ max_number_spectra_nist = 10000000000
 #train_molecules = 1 * (10**6)
 #val_molecules = 10**5
 #test_molecules = 10**5
-train_molecules =  1*(10**9)
-val_molecules = 10*(10**6)
-test_molecules = 10*(10**6)
+train_molecules =  1*(10**4)
+val_molecules = 1*(10**4)
+test_molecules = 1*(10**4)
 
 block_size_nist = 30000
 use_tqdm = config.enable_progress_bar
 load_nist_spectra = True
 load_neurips_spectra = True
 load_train_val_test_data = (
-    True  # to load previously train, test, val with proper smiles
+    False  # to load previously train, test, val with proper smiles
 )
 write_data_flag = True
 
@@ -148,6 +148,10 @@ else:
 
     # merge spectrums
     all_spectrums = all_spectrums_neurips + all_spectrums_nist
+    
+    # apply filtering by number of peaks
+    pp= Preprocessor()
+    all_spectrums = pp.return_valid_spectra_n_peaks(all_spectrums, min_peaks=config.MIN_N_PEAKS )
 
     # get random spectrums
     if config.SUBSAMPLE_PREPROCESSING:

@@ -68,7 +68,9 @@ class WeightSampling:
     #    return weights_sample
 
     @staticmethod
-    def compute_sample_weights(molecule_pairs, weights, use_molecule_pair_object=True, targets=None, bining_sim1=False):
+    def compute_sample_weights(molecule_pairs, weights, use_molecule_pair_object=True, targets=None, 
+                        bining_sim1=False,
+                        normalize=True):
         # get similarities
         if use_molecule_pair_object:
             sim = molecule_pairs.indexes_tani[:, 2]
@@ -95,7 +97,8 @@ class WeightSampling:
         #print(f'{weights.shape}')
         #print(f'{indices.shape}')
         weights_sample = weights[indices]
-        weights_sample /= weights_sample.sum()
+        if normalize:
+            weights_sample /= weights_sample.sum()
         
         return weights_sample
 

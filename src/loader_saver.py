@@ -64,6 +64,7 @@ class LoaderSaver:
                 config=config,
             )
             self.save_pickle(self.pickle_gnps_path, spectrums)
+
         return spectrums
 
     def load_and_save_nist(

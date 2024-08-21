@@ -110,6 +110,7 @@ indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSIN
 
 molecule_pairs_test.indexes_tani = indexes_tani_multitasking_test[:,0:3]
 
+
 print(f'shape of similarity1: {molecule_pairs_test.indexes_tani.shape}')
 
 # add tanimotos
@@ -149,6 +150,9 @@ uniformed_molecule_pairs_test, binned_molecule_pairs = TrainUtils.uniformise(
 )  # do not treat sim==1 as another bin
 
 
+
+
+
 # In[ ]:
 
 
@@ -167,6 +171,7 @@ uniformed_molecule_pairs_test.indexes_tani
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
 dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
+
 
 
 # In[ ]:
@@ -337,6 +342,49 @@ plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1,
 plt.scatter(similarities_test1, flat_pred_test1, alpha=0.01)
 
 
+
+####### SECOND SIMILARITY ######
+
+counts, bins= TrainUtils.count_ranges(similarities_test2, number_bins=5, bin_sim_1=False)
+
+min_bin=min([c for c in counts if c>0])
+
+@staticmethod
+def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bin_sim_1=False, min_bin=0):
+    #count the instances in the  bins from 0 to 1
+    # Group the values into the corresponding bins, adding one for sim=1
+    output_elements1=np.array([])
+    output_elements2=np.array([])
+
+
+    if bin_sim_1:
+        number_bins_effective = number_bins + 1
+    else:
+        number_bins_effective = number_bins
+
+    for p in range(int(number_bins_effective)):
+        low = p * (1 / number_bins)
+
+        if bin_sim_1:
+            high = (p + 1) * (1 / number_bins)
+        else:
+            if p == (number_bins_effective - 1):
+                high = 1 + 0.1
+            else:
+                high = (p + 1) * (1 / number_bins)
+
+        list_elements1_temp = list_elements1[(list_elements1>=low) & (list_elements1<high)] 
+        list_elements2_temp = list_elements2[(list_elements1>=low) & (list_elements1<high)] 
+        if len(list_elements1_temp)>0:
+            output_elements1 = np.concatenate((output_elements1,list_elements1_temp[0:min_bin]))
+            output_elements2 = np.concatenate((output_elements2,list_elements2_temp[0:min_bin]))
+
+    return output_elements1, output_elements2
+
+similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_test2, flat_pred_test2, number_bins=5, bin_sim_1=False, min_bin=min_bin)
+
+print(similarities_test2)
+print(similarities_test2.shape)
 sns.set_theme(style="ticks")
 plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
 # Set x and y labels

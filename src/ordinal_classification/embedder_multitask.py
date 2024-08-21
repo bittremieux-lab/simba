@@ -179,7 +179,9 @@ class EmbedderMultitask(Embedder):
         return emb, emb_cosine
 
 
-    def step(self, batch, batch_idx, threshold=0.5):
+    def step(self, batch, batch_idx, threshold=0.5, 
+                weight_loss2=200, #loss2 (regresion) is 100 times less than loss1 (classification)
+                ):
         """A training/validation/inference step."""
         logits_list = self(batch)
 
@@ -190,23 +192,52 @@ class EmbedderMultitask(Embedder):
         target1 = torch.tensor(batch["similarity"], dtype=torch.long).to(self.device)
         target1 = target1.view(-1)  # Ensure targets are in the right shape and type for classification
 
-        target2 = torch.tensor(batch["similarity2"], dtype=torch.long).to(self.device)
+        #print(f'batch["similarity2"] right before conversion to target2: {batch["similarity2"]}')
+        target2 = torch.tensor(batch["similarity2"], dtype=torch.float32).to(self.device)
         target2 = target2.view(-1)  # Ensure targets are in the right shape and type for classification
         
         #loss = self.loss_fn(logits, target)
         loss1 =self.customised_ce(logits1, target1) 
-        loss2 = self.regression_loss(logits2.float(), target2.view(-1, 1).float()).float()
+        #loss2 = self.regression_loss(logits2.float(), target2.view(-1, 1).float()).float()
+        
+        
+        # Calculate the squared difference for loss2
+        squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
+
+        
 
         #weighting the loss function
         weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
                                                             weights=self.weights_sim2, 
                                                             use_molecule_pair_object=False,
                                                             bining_sim1=False,
-                                                            targets=target2.cpu().numpy())
-        weight_mask = torch.tensor(weight_mask).to(self.device)
-        loss2= (weight_mask * loss2).mean()
+                                                            targets=target2.cpu().numpy(),
+                                                            normalize=False,)
 
-        loss = loss1 + loss2
+
+        weight_mask = torch.tensor(weight_mask).to(self.device)
+        #print(f'target2 {target2}')
+        #print(f'self.weights_sim2: {self.weights_sim2}')
+        #print(f'weight mask: {weight_mask}')
+        # Apply the weights to the squared differences
+        loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
+        #loss2 = squared_diff * weight_mask.float().mean()
+
+        loss = loss1 + (weight_loss2*loss2)
+
+        #print(f'loss1:{loss1}')
+        #print(f'loss2: {loss2}')
+        #print(f'loss: {loss}')
+        #loss = (weight_loss2*loss2)
+
+        #print(f'loss 1 shape: {loss1.shape}')
+        #print(f'logits2 size: {logits2.shape}')
+        #print(f'target2 size: {target2.shape}')
+        #print(f'squared_diff size: {squared_diff.shape}')
+        #print(f'loss2 size: {loss2.shape}')
+        #print(f'loss size: {loss.shape}')
+        #print(f'weight_mask size: {weight_mask.shape}')
+
 
         return loss
     

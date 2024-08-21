@@ -6,4 +6,4 @@
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
 
-srun python compute_molecular_pairs_mces.py --enable_progress_bar=0.0 --PREPROCESSING_DIR=/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_compute/
+srun python compute_molecular_pairs_mces.py --enable_progress_bar=0.0
