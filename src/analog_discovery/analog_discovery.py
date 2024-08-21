@@ -13,6 +13,24 @@ class AnalogDiscovery:
         spectrums_retrieved, tanimoto_retrieved, max_sim = AnalogDiscovery.get_best_tanimoto_from_k_ranking(spectrums_reference, spectrums_query, spectrums_k_retrieved, max_k_sim)
         return np.array(spectrums_retrieved), np.array(tanimoto_retrieved), np.array(max_sim)
     
+
+
+    def get_k_candidates(similarities, spectrums_reference, spectrums_query,k=100):
+        arg_max_k10 = np.argsort(-similarities, axis=1)[:,0:k]
+        sim_k_retrieved = np.take_along_axis(similarities, arg_max_k10, axis=1)
+
+        
+        spectrums_k_retrieved = [[spectrums_reference[ind] for ind in ind_group] for ind_group in arg_max_k10]
+        smiles_k_retrieved = [[s.smiles for s in s_group] for s_group in spectrums_k_retrieved]
+        smiles_janssen = [s.smiles for s in spectrums_query]
+
+        # get all k tanimotos
+        tanimoto_k_retrieved = [[Tanimoto.compute_tanimoto_from_smiles(s0,s1) for s1 in s1_group] for s0, s1_group in zip(smiles_janssen, smiles_k_retrieved)]
+        return spectrums_k_retrieved, tanimoto_k_retrieved, sim_k_retrieved
+
+
+    
+    
     def get_analog_spectrums_su(similarities, spectrums_reference, spectrums_query, k=10):
         '''
         finding analogs using spectrum utils

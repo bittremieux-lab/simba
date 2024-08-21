@@ -1,29 +1,44 @@
 
 from src.transformers.embedder import Embedder
-from src.ordinal_classification import EmbedderMultitask
+from src.ordinal_classification.embedder_multitask import EmbedderMultitask
 import torch.nn as nn
 import lightning.pytorch as pl
 import numpy as np 
 import torch
+from src.config import Config
+
 class Encoder(pl.LightningModule):
 
-    def __init__(self, model_path, D_MODEL, N_LAYERS, multitasking=False):
+    def __init__(self, model_path, D_MODEL, N_LAYERS, multitasking=False, config=None):
         super().__init__()
         self.multitasking=multitasking
+        self.config=config
         self.model= self.load_twin_network(model_path,D_MODEL, N_LAYERS).spectrum_encoder
         self.relu = nn.ReLU()
+        
 
     def load_twin_network(self, model_path, D_MODEL, N_LAYERS, LR=0.001, use_cosine_distance=True):
-        embedder_class = EmbedderMultitask if self.multitasking else Embedder
-        return embedder_class.load_from_checkpoint(
-        model_path,
-        d_model=int(D_MODEL),
-        n_layers=int(N_LAYERS),
-        weights=None,
-        lr=LR,
-        use_cosine_distance=use_cosine_distance,
-
-    )
+        if self.multitasking:
+            return EmbedderMultitask.load_from_checkpoint(
+            model_path,
+            d_model=int(D_MODEL),
+            n_layers=int(N_LAYERS),
+            weights=None,
+            n_classes=self.config.EDIT_DISTANCE_N_CLASSES,
+            use_gumbel=self.config.EDIT_DISTANCE_USE_GUMBEL,
+            lr=LR,
+            use_cosine_distance=use_cosine_distance,
+        )
+    
+        else:
+            return Embedder.load_from_checkpoint(
+            model_path,
+            d_model=int(D_MODEL),
+            n_layers=int(N_LAYERS),
+            weights=None,
+            lr=LR,
+            use_cosine_distance=use_cosine_distance,
+        )
     
     def forward(self, batch):
         """The inference pass"""

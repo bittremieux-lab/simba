@@ -2,7 +2,10 @@ class Config:
     # default configuration
     # Spectra and spectrum pairs to include with the following settings.
     def __init__(self):
-
+        
+        # EDIT DISTANCE
+        self.EDIT_DISTANCE_N_CLASSES=6
+        self.EDIT_DISTANCE_USE_GUMBEL=False
         #PREPROCESSING
         self.PREPROCESSING_NUM_WORKERS=60
         self.USE_EDIT_DISTANCE=True
@@ -41,7 +44,7 @@ class Config:
         self.use_uniform_data_INFERENCE = True
         self.bins_uniformise_INFERENCE = 10
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
-        self.extra_info = "_multitasking_weighted"
+        self.extra_info = "_multitasking_weighted_no_sim1"
         self.derived_variables()
         #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_multitasking_min_peaks/"
         self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_loaded_full/"
