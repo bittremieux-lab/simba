@@ -79,12 +79,14 @@ if USE_IDENTITY_PAIRS:
     molecule_pairs_train.indexes_tani = molecule_pairs_train.indexes_tani[\
                                     molecule_pairs_train.indexes_tani[:,0]!= molecule_pairs_train.indexes_tani[:,1]]
 
+    molecule_pairs_val.indexes_tani = molecule_pairs_val.indexes_tani[\
+                                    molecule_pairs_val.indexes_tani[:,0]!= molecule_pairs_val.indexes_tani[:,1]]
     # create identity 
-    identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),3))
-    identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
-    identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
-    identity_pairs[:,2]=1.0
-    molecule_pairs_train.indexes_tani  = np.concatenate((molecule_pairs_train.indexes_tani, identity_pairs ))
+    #identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),3))
+    #identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
+    #identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
+    #identity_pairs[:,2]=1.0
+    #molecule_pairs_train.indexes_tani  = np.concatenate((molecule_pairs_train.indexes_tani, identity_pairs ))
 
 
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
