@@ -204,8 +204,11 @@ class EmbedderMultitask(Embedder):
         # Calculate the squared difference for loss2
         squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
 
-        
-
+        #print(f'target2 before removing similarity 1: {target2}')
+        # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
+        squared_diff[target2 >= 1]=0
+        target2[target2 >= 1] = 0
+        #print(f'target2 after removing similarity 1: {target2}')
         #weighting the loss function
         weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
                                                             weights=self.weights_sim2, 
