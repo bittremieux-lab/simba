@@ -25,10 +25,11 @@ class ADMultitask:
                 lr=config.LR,
                 use_cosine_distance=config.use_cosine_distance,
             )
-    def compute_entropy(self, vector):
+    @staticmethod
+    def compute_entropy( vector):
         # Add a small value to avoid log(0)
         vector = vector + 1e-12
-        return -np.sum(vector * np.log(vector), axis=1)
+        return -np.sum(vector * np.log(vector), axis=-1)
         
     def create_input_data_from_spectrums(self,spectrum_query, spectrums_candidates):
         '''

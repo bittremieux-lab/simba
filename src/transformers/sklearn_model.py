@@ -21,13 +21,17 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
     wrapper for using shap values
     """
 
-    def __init__(self, model_path, d_model, n_layers):
-        self.model_path = model_path
-        self.d_model = d_model
-        self.n_layers = n_layers
-        self.pytorch_object = Embedder.load_from_checkpoint(
-            model_path, d_model=d_model, n_layers=n_layers
-        )
+    def __init__(self, model_path=None, d_model=None, n_layers=None, model_loaded=None):
+        if model_loaded is None:
+            self.model_path = model_path
+            self.d_model = d_model
+            self.n_layers = n_layers
+            self.pytorch_object = Embedder.load_from_checkpoint(
+                model_path, d_model=d_model, n_layers=n_layers
+            )
+        else:
+            self.pytorch_object =model_loaded 
+
         self.model = pl.Trainer(max_epochs=0, enable_progress_bar=True)
         self.size_per_key = {}  # size of each key of the data loaded
         self.dataset_test = None
@@ -66,7 +70,8 @@ class SklearnModel(BaseEstimator, ClassifierMixin):
     def predict(self, X):
 
         # Convert numpy array to PyTorch tensor
-        item = self.x_to_item(X.values, self.size_per_key)
+        #item = self.x_to_item(X.values, self.size_per_key)
+        item = self.x_to_item(X, self.size_per_key)
         dataset_test = CustomDatasetUnique(item)
         dataloader_test = DataLoader(dataset_test, batch_size=64, shuffle=False)
 
