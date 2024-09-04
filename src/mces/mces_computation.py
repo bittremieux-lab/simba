@@ -145,7 +145,7 @@ class MCES:
         command.extend(['--num_jobs', '1'])
 
         # Define threshold
-        command.extend(['--threshold', '5'])
+        command.extend(['--threshold', str(config.THRESHOLD_MCES)])
 
         command.extend(['--solver_onethreaded'])
         command.extend(['--solver_no_msg'])
@@ -255,7 +255,8 @@ class MCES:
                                             sampled_index, 
                                             size_batch, 
                                             (index_array*len(split_arrays[0]))+sub_index,
-                                            random_sampling, config)) for identifier, sampled_index in enumerate(array)]
+                                            random_sampling, config,
+                                            )) for sub_index, sampled_index in enumerate(array)]
                     
                     
                 # Close the pool and wait for all processes to finish

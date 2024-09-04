@@ -15,8 +15,7 @@ from numba import njit
 
 class Tanimoto:
 
-    # @functools.lru_cache
-    @staticmethod
+    @functools.lru_cache
     def compute_tanimoto(fp1, fp2, nbits=2048, use_inchi=False):
         if (fp1 is not None) and (fp2 is not None):
             similarity = DataStructs.TanimotoSimilarity(fp1, fp2)
@@ -39,6 +38,7 @@ class Tanimoto:
         return fp
 
     @staticmethod
+    #@functools.lru_cache
     def compute_tanimoto_from_smiles(smiles0, smiles1):
         fp0=Tanimoto.compute_fingerprint(smiles0)
         fp1=Tanimoto.compute_fingerprint(smiles1)
