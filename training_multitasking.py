@@ -28,6 +28,7 @@ from scipy.stats import spearmanr
 import seaborn as sns
 from src.ordinal_classification.load_data_multitasking import LoadDataMultitasking
 from src.ordinal_classification.embedder_multitask import EmbedderMultitask
+from src.transformers.embedder import Embedder
 from sklearn.metrics import confusion_matrix
 from src.load_mces.load_mces import LoadMCES
 from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
@@ -78,16 +79,26 @@ USE_IDENTITY_PAIRS=True
 if USE_IDENTITY_PAIRS:
     # remove to avoid duplicates
     indexes_tani_multitasking_train = indexes_tani_multitasking_train[\
-                                   indexes_tani_multitasking_train[:,0]!= indexes_tani_multitasking_train[:,1]]
+                                    indexes_tani_multitasking_train[:,0]!=indexes_tani_multitasking_train[:,1]]
+
+    indexes_tani_multitasking_val = indexes_tani_multitasking_val[\
+                                    indexes_tani_multitasking_val[:,0]!= indexes_tani_multitasking_val[:,1]]
+    # create identity 
+    identity_pairs_train = np.zeros((len(molecule_pairs_train.spectrums),4))
+    identity_pairs_train[:,0]=np.arange(0,identity_pairs_train.shape[0])
+    identity_pairs_train[:,1]=np.arange(0,identity_pairs_train.shape[0])
+    identity_pairs_train[:,2]=1.0
+    identity_pairs_train[:,3]=1.0
 
     # create identity 
-    identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),4))
-    identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
-    identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
-    identity_pairs[:,2]=1.0
-    identity_pairs[:,3]=1.0
-    indexes_tani_multitasking_train  = np.concatenate((indexes_tani_multitasking_train, identity_pairs ))
+    identity_pairs_val = np.zeros((len(molecule_pairs_val.spectrums),4))
+    identity_pairs_val[:,0]=np.arange(0,identity_pairs_val.shape[0])
+    identity_pairs_val[:,1]=np.arange(0,identity_pairs_val.shape[0])
+    identity_pairs_val[:,2]=1.0
+    identity_pairs_val[:,3]=1.0
 
+    indexes_tani_multitasking_train  = np.concatenate((indexes_tani_multitasking_train, identity_pairs_train ))
+    indexes_tani_multitasking_val  = np.concatenate((indexes_tani_multitasking_val, identity_pairs_val ))
 
 
 molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,0:3]
@@ -298,6 +309,10 @@ for i,batch in enumerate(dataloader_train):
 
     similarities_sampled2 = similarities_sampled2 + list(batch['similarity2'].reshape(-1))
     if i==100:
+
+        # for second similarity remove the sim=1 since it is the same task as the edit distance ==0
+        similarities_sampled2= np.array(similarities_sampled2)
+        similarities_sampled2=similarities_sampled2[similarities_sampled2<1]
         break
 
 counting, bins, patches =plt.hist(similarities_sampled, bins=6)
@@ -383,7 +398,20 @@ model = EmbedderMultitask(
     weights_sim2=np.array(weights2),
 )
 
-
+# Create a model:
+if config.load_pretrained:
+    model_pretrained= Embedder.load_from_checkpoint(
+        config.pretrained_path,
+        d_model=int(config.D_MODEL),
+        n_layers=int(config.N_LAYERS),
+        weights=None,
+        lr=config.LR,
+        use_cosine_distance=config.use_cosine_distance,
+    )
+    model.spectrum_encoder = model_pretrained.spectrum_encoder
+    print("Loaded pretrained model")
+else:
+    print("Not loaded pretrained model")
 # In[ ]:
 
 

@@ -385,12 +385,6 @@ similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_te
 
 print(similarities_test2)
 print(similarities_test2.shape)
-sns.set_theme(style="ticks")
-plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
-# Set x and y labels
-plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
-plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
-
 
 # In[ ]:
 
@@ -402,3 +396,13 @@ corr_model2, p_value_model2= spearmanr(similarities_test2, flat_pred_test2)
 
 
 print(f'Correlation of tanimoto model: {corr_model2}')
+
+sns.set_theme(style="ticks")
+plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
+# Set x and y labels
+plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
+plot.fig.suptitle(f"Spearman Correlation:{corr_model2}", fontsize=16)
+plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
+
+
+

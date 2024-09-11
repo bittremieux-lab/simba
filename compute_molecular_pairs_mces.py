@@ -64,7 +64,7 @@ use_tqdm = config.enable_progress_bar
 load_nist_spectra = True
 load_neurips_spectra = True
 load_train_val_test_data = (
-    False  # to load previously train, test, val with proper smiles
+    True  # to load previously train, test, val with proper smiles
 )
 write_data_flag = True
 
@@ -99,6 +99,9 @@ if load_train_val_test_data:
     all_spectrums_train = dataset_augmented["all_spectrums_train"]
     all_spectrums_val = dataset_augmented["all_spectrums_val"]
     all_spectrums_test = dataset_augmented["all_spectrums_test"]
+    loaded_molecule_pairs_train= dataset_augmented["molecule_pairs_train"]
+    loaded_molecule_pairs_val= dataset_augmented["molecule_pairs_val"]
+    loaded_molecule_pairs_test= dataset_augmented["molecule_pairs_test"]
 else:
     # load spectrums
     # use neurips
@@ -179,31 +182,10 @@ else:
             molecule_pairs_test=None,
         )
 
-print('Training pairs ...')
-start_time=datetime.now()
-print(f"Current time: {datetime.now()}")
-molecule_pairs_train = MCES.compute_all_mces_results_unique(
-    all_spectrums_train,
-    max_combinations=train_molecules,
-    use_tqdm=use_tqdm,
-    max_mass_diff=config.MAX_MASS_DIFF,
-    min_mass_diff=config.MIN_MASS_DIFF,
-    high_tanimoto_range=high_tanimoto_range,
-    num_workers=config.PREPROCESSING_NUM_WORKERS,
-    use_exhaustive=True,
-    random_sampling=config.RANDOM_MCES_SAMPLING,
-    config=config,
-    identifier='_train',
-    use_edit_distance=config.USE_EDIT_DISTANCE,
-)
-end_time=datetime.now()
-
-print(f"Current time: {datetime.now()}")
-# Convert timedelta to minutes
-# Calculate the difference
-time_difference = end_time - start_time
-minutes_difference = time_difference.total_seconds() / 60
-print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
+    # not loaded data
+    loaded_molecule_pairs_train=None
+    loaded_molecule_pairs_val= None
+    loaded_molecule_pairs_test= None
 
 print('Validation pairs ...')
 molecule_pairs_val = MCES.compute_all_mces_results_unique(
@@ -219,6 +201,7 @@ molecule_pairs_val = MCES.compute_all_mces_results_unique(
     config=config,
     identifier='_val',
     use_edit_distance=config.USE_EDIT_DISTANCE,
+    loaded_molecule_pairs= loaded_molecule_pairs_val,
 )
 print(f"Current time: {datetime.now()}")
 
@@ -236,11 +219,37 @@ molecule_pairs_test = MCES.compute_all_mces_results_unique(
     config=config,
     identifier='_test',
     use_edit_distance=config.USE_EDIT_DISTANCE,
+    loaded_molecule_pairs= loaded_molecule_pairs_test,
 )
 
 
 
+print('Training pairs ...')
+start_time=datetime.now()
+print(f"Current time: {datetime.now()}")
+molecule_pairs_train = MCES.compute_all_mces_results_unique(
+    all_spectrums_train,
+    max_combinations=train_molecules,
+    use_tqdm=use_tqdm,
+    max_mass_diff=config.MAX_MASS_DIFF,
+    min_mass_diff=config.MIN_MASS_DIFF,
+    high_tanimoto_range=high_tanimoto_range,
+    num_workers=config.PREPROCESSING_NUM_WORKERS,
+    use_exhaustive=True,
+    random_sampling=config.RANDOM_MCES_SAMPLING,
+    config=config,
+    identifier='_train',
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+    loaded_molecule_pairs= loaded_molecule_pairs_train,
+)
+end_time=datetime.now()
 
+print(f"Current time: {datetime.now()}")
+# Convert timedelta to minutes
+# Calculate the difference
+time_difference = end_time - start_time
+minutes_difference = time_difference.total_seconds() / 60
+print(f"Time difference in minutes for training pairs: {minutes_difference:.2f} minutes")
 
 
 

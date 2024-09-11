@@ -16,6 +16,7 @@ import multiprocessing
 from src.edit_distance.edit_distance import EditDistance
 from rdkit.Chem import AllChem
 from rdkit import Chem, Geometry
+from src.load_mces.load_mces import LoadMCES
 
 class MCES:
     @staticmethod
@@ -36,6 +37,7 @@ class MCES:
         config=None,
         identifier="",
         use_edit_distance=False,
+        loaded_molecule_pairs=None
     ):
         """
         compute tanimoto results using unique spectrums
@@ -43,28 +45,35 @@ class MCES:
 
         print("Computing MCES results based on unique smiles")
 
-        function_tanimoto=MCES.compute_all_mces_results_exhaustive 
+        if loaded_molecule_pairs is None:
+            function_tanimoto=MCES.compute_all_mces_results_exhaustive 
 
-        spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
+            spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
 
 
-        molecule_pairs_unique = function_tanimoto(
-            spectrums_unique,
-            max_combinations=max_combinations,
-            limit_low_tanimoto=limit_low_tanimoto,
-            max_low_pairs=max_low_pairs,
-            use_tqdm=use_tqdm,
-            max_mass_diff=max_mass_diff,  # maximum number of elements in which we stop adding new items
-            min_mass_diff=min_mass_diff,
-            num_workers=num_workers,
-            MIN_SIM=MIN_SIM,
-            MAX_SIM=MAX_SIM,
-            high_tanimoto_range=high_tanimoto_range,
-            random_sampling=random_sampling,
-            config=config,
-            identifier=identifier,
-            use_edit_distance=use_edit_distance,
-        )
+            molecule_pairs_unique = function_tanimoto(
+                spectrums_unique,
+                max_combinations=max_combinations,
+                limit_low_tanimoto=limit_low_tanimoto,
+                max_low_pairs=max_low_pairs,
+                use_tqdm=use_tqdm,
+                max_mass_diff=max_mass_diff,  # maximum number of elements in which we stop adding new items
+                min_mass_diff=min_mass_diff,
+                num_workers=num_workers,
+                MIN_SIM=MIN_SIM,
+                MAX_SIM=MAX_SIM,
+                high_tanimoto_range=high_tanimoto_range,
+                random_sampling=random_sampling,
+                config=config,
+                identifier=identifier,
+                use_edit_distance=use_edit_distance,
+            )
+        else:
+            molecule_pairs_unique= loaded_molecule_pairs
+            df_smiles= molecule_pairs_unique.df_smiles
+            spectrums_unique=molecule_pairs_unique.spectrums    
+            spectrums_original=molecule_pairs_unique.spectrums_original,
+
         return MoleculePairsOpt(
             spectrums_original=spectrums_original,
             spectrums_unique=spectrums_unique,
@@ -85,8 +94,9 @@ class MCES:
     @staticmethod
     def create_input_df(smiles, indexes_0, indexes_1):
         df=pd.DataFrame()
-        print(f'Length of spectrums: {len(smiles)}')
-
+        print(f'Length of smiles array: {len(smiles)}')
+        print(f'Max value of indexes_0:{max(indexes_0)}')
+        print(f'Max value of indexes_0:{max(indexes_1)}')
         df['smiles_0']= [smiles[int(r)]  for r in indexes_0]
         df['smiles_1']= [smiles[int(r)]  for r in indexes_1]
 
@@ -107,18 +117,28 @@ class MCES:
         print(f'Example of normalized mces: {mces_normalized}')
         return mces_normalized
 
-    def compute_mces_myopic(smiles, sampled_index, size_batch, id, random_sampling, config):
+    def compute_mces_myopic(smiles, sampled_index, size_batch, id, random_sampling, 
+                config,
+                split_group='train',# if it is train, val or test
+                to_compute_indexes_np=None,  # the indexes to be computed
+                ):
 
         # where to save results
-        indexes_np = np.zeros((int(size_batch), 3),)
+        
         # initialize randomness
-        if random_sampling:
-            np.random.seed(id)
-            indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
-            indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
+        if config.COMPUTE_SPECIFIC_PAIRS:
+            size_batch_effective = to_compute_indexes_np.shape[0]
+            indexes_np = np.zeros((int(size_batch_effective), 3),)
+            indexes_np[:,0:2]=to_compute_indexes_np[:,0:2]
         else:
-            indexes_np[:,0] = sampled_index
-            indexes_np[:,1]= np.arange(0, size_batch)
+            indexes_np = np.zeros((int(size_batch), 3),)
+            if random_sampling:
+                np.random.seed(id)
+                indexes_np[:,0] = np.random.randint(0,len(smiles), int(size_batch))
+                indexes_np[:,1] = np.random.randint(0,len(smiles), int(size_batch))
+            else:
+                indexes_np[:,0] = sampled_index
+                indexes_np[:,1]= np.arange(0, size_batch)
 
         #indexes_np[:,0]=sampled_index*np.ones((size_batch,))
         #indexes_np[:,1]= np.arange(0,len(all_spectrums))
@@ -213,50 +233,66 @@ class MCES:
         # Use ProcessPoolExecutor for parallel processing
         smiles=[s.params['smiles'] for s in all_spectrums]
 
-        # Calculate the number of chunks needed
+       
         N= num_workers*10
-        num_chunks = int(np.ceil(len(samples) / N))
-
-        # Split the array into chunks of size N using np.array_split
-        split_arrays = np.array_split(samples, num_chunks)
-
         indexes_np= np.array([])
 
+        if config.COMPUTE_SPECIFIC_PAIRS: ## specifically for mces
+                directory_path=config.PREPROCESSING_DIR 
+                prefix= config.FORMAT_FILE_SPECIFIC_PAIRS  +  identifier
+                indexes_np_loaded = LoadMCES.load_raw_data(directory_path, prefix)
+                #indexes_np_loaded = LoadMCES.remove_excess_low_pairs(indexes_np_loaded, remove_percentage=0.99, max_mces=config.THRESHOLD_MCES)
 
-        #if use_edit_distance:
-        #print('Getting mols...')
-        #mols = [Chem.MolFromSmiles(s) for s in smiles]
-        #print('Getting the molecular fingerprints...')
-        #fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
-        #fps  = [fpgen.GetFingerprint(m) for m in mols]
+                print(f'Size of the pairs loaded for computing specific pairs: {indexes_np_loaded.shape[0]}')
+                #num_chunks = int(np.ceil((indexes_np_loaded.shape[0]) / 10))
+                split_arrays = np.array_split(indexes_np_loaded, 10)
 
+
+                print(f'Number of split arrays {len(split_arrays)}')
+                print(f'Size of each array {split_arrays[0].shape[0]}')
+                print(f'Size of each sub-array {np.array_split(split_arrays[0], num_workers)[0].shape[0]}')
+        else:
+                 # Calculate the number of chunks needed
+                num_chunks = int(np.ceil(len(samples) / N))
+                # Split the array into chunks of size N using np.array_split
+                split_arrays = np.array_split(samples, num_chunks)
+                
+        comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
+                
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
                 pool = multiprocessing.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
-                #pool=  multiprocessing.dummy.Pool(processes=num_workers)  ## USE MULTIPLE THREADS - SHARED MEMORY
-                # use classical mces or edit distance
-
-                comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
                                 
-                if use_edit_distance:
-                    results = [pool.apply_async(comp_function, args=(smiles,
-                                            sampled_index, 
-                                            size_batch, 
-                                            (index_array*len(split_arrays[0]))+sub_index,
-                                            random_sampling, config)) for sub_index, sampled_index in enumerate(array)]
-                    
-                    #args_list = [(smiles, fps, sampled_index, size_batch, identifier, random_sampling, config) 
-                    #for identifier, sampled_index in enumerate(array)]
 
-                    # Use pool.starmap_async to apply the function with multiple arguments in parallel
-                    #results = pool.starmap_async(comp_function, args_list).get()
-                else:
-                    results = [pool.apply_async(comp_function, args=(smiles, 
-                                            sampled_index, 
+                print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
+                if config.COMPUTE_SPECIFIC_PAIRS: 
+                        print(f'Size of each array {array.shape[0]}')
+                        sub_arrays = np.array_split(array, num_workers)
+                        print(f'Size of each sub-array {sub_arrays[0].shape[0]}')
+                
+                        results = [pool.apply_async(comp_function, args=(smiles, 
+                                            None, 
                                             size_batch, 
-                                            (index_array*len(split_arrays[0]))+sub_index,
-                                            random_sampling, config,
-                                            )) for sub_index, sampled_index in enumerate(array)]
+                                            (index_array*split_arrays[0].shape[0])+sub_index,
+                                            None, 
+                                            config,
+                                            identifier,
+                                            sampled_array
+                                            )) for sub_index, sampled_array in enumerate(sub_arrays)]
+                else:
+                    if use_edit_distance:
+                        results = [pool.apply_async(comp_function, args=(smiles,
+                                                sampled_index, 
+                                                size_batch, 
+                                                (index_array*len(split_arrays[0]))+sub_index,
+                                                random_sampling, config)) for sub_index, sampled_index in enumerate(array)]
+                    else:
+                        results = [pool.apply_async(comp_function, args=(smiles, 
+                                                sampled_index, 
+                                                size_batch, 
+                                                (index_array*len(split_arrays[0]))+sub_index,
+                                                random_sampling, config,
+                                                )) for sub_index, sampled_index in enumerate(array)]
                     
                     
                 # Close the pool and wait for all processes to finish

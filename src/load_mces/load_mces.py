@@ -1,7 +1,7 @@
 
 import os
 import numpy as np
-from src.mces.mces_computation import MCES
+
 class LoadMCES:
 
     def find_file(directory_path, prefix):
@@ -21,7 +21,7 @@ class LoadMCES:
                     pickle_files.append(os.path.join(root, file))
         return pickle_files 
 
-    def load_raw_data(directory_path, prefix, partitions=10):
+    def load_raw_data(directory_path, prefix, partitions=10000000):
         '''
         load data for inspection purposes
         '''
@@ -44,7 +44,7 @@ class LoadMCES:
         merged_array= np.concatenate(list_arrays, axis=0)
         return merged_array
     
-    def merge_numpy_arrays(directory_path, prefix):
+    def merge_numpy_arrays_mces(directory_path, prefix):
         '''
         load np arrays containing data as well as apply normalization for training
         '''
@@ -72,7 +72,7 @@ class LoadMCES:
         
         # normalize
         print('Normalizing')
-        merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
+        merged_array[:,2]= LoadMCES.normalize_mces(merged_array[:,2])
 
         print('Remove redundant pairs')
         merged_array = np.unique(merged_array, axis=0)
@@ -123,7 +123,7 @@ class LoadMCES:
         # normalize
 
         print('Normalizing')
-        merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
+        merged_array[:,2]= LoadMCES.normalize_mces(merged_array[:,2])
 
         # remove excess low pairs
         #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
@@ -159,7 +159,7 @@ class LoadMCES:
         # normalize
 
         print('Normalizing')
-        merged_array[:,2]= MCES.normalize_mces(merged_array[:,2])
+        merged_array[:,2]= LoadMCES.normalize_mces(merged_array[:,2],)
 
         # remove excess low pairs
         #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
@@ -190,9 +190,34 @@ class LoadMCES:
         indexes_tani_high = indexes_tani[indexes_tani[:,2]<max_mces]
         indexes_tani_low = indexes_tani[indexes_tani[:,2]>=max_mces]
 
-        # get some indexes to sample
         random_samples = np.random.randint(0,indexes_tani_low.shape[0], sample_size)
         
         # index
         indexes_tani_low = indexes_tani_low[random_samples]
         return np.concatenate((indexes_tani_low, indexes_tani_high), axis=0)
+
+    @staticmethod
+    def normalize_mces(mces, max_mces=5):
+        # asuming series
+        # normalize mces. the higher the mces the lower the similarity
+        #mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
+        #return mces_normalized.apply(lambda x:(1-(x/max_mces)))
+
+        ## asuming numpy
+        print(f'Example of input mces: {mces}')
+        mces_normalized = mces.copy()
+        mces_normalized[mces_normalized >= max_mces] = max_mces 
+        mces_normalized = 1 - (mces_normalized/max_mces)
+        print(f'Example of normalized mces: {mces_normalized}')
+        return mces_normalized
+
+    def load_mces_20_data(directory_path, prefix, number_folders):
+        '''
+        loads the mces with threshold 20 across different folders
+        '''
+        list_arrays= []
+        for index in range(0, number_folders):
+            array= LoadMCES.load_raw_data(directory_path=directory_path + str(index),
+                                                    prefix=prefix) 
+            list_arrays.append(array)
+        return np.concatenate(list_arrays, axis=0)

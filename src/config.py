@@ -8,6 +8,8 @@ class Config:
         self.EDIT_DISTANCE_USE_GUMBEL=False
         #PREPROCESSING
         self.PREPROCESSING_NUM_WORKERS=60
+        self.COMPUTE_SPECIFIC_PAIRS=True
+        self.FORMAT_FILE_SPECIFIC_PAIRS='INPUT_SPECIFIC_PAIRS_indexes_tani_incremental' # the prefix of the file containing the indexes to be computed
         self.USE_EDIT_DISTANCE=False
         self.SUBSAMPLE_PREPROCESSING=False
         self.RANDOM_MCES_SAMPLING = False
@@ -16,7 +18,7 @@ class Config:
         self.FRAGMENT_MZ_TOLERANCE = 0.1
         self.MIN_MASS_DIFF = 0  # Da
         self.MAX_MASS_DIFF = 200  # Da
-        self.THRESHOLD_MCES=20
+        self.THRESHOLD_MCES=5
         
         # training
         self.USE_MULTITASK=True
