@@ -70,7 +70,7 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-indexes_tani_multitasking_train= LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
+indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
 indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
 
 
@@ -101,14 +101,15 @@ if USE_IDENTITY_PAIRS:
     indexes_tani_multitasking_val  = np.concatenate((indexes_tani_multitasking_val, identity_pairs_val ))
 
 
-molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,0:3]
-molecule_pairs_val.indexes_tani = indexes_tani_multitasking_val[:,0:3]
+molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
+molecule_pairs_val.indexes_tani = indexes_tani_multitasking_val[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
+
 print(f'shape of similarity1: {molecule_pairs_train.indexes_tani.shape}')
 
 # add tanimotos
 
-molecule_pairs_train.tanimotos = indexes_tani_multitasking_train[:,3]
-molecule_pairs_val.tanimotos = indexes_tani_multitasking_val[:,3]
+molecule_pairs_train.tanimotos = indexes_tani_multitasking_train[:,config.COLUMN_MCES20]
+molecule_pairs_val.tanimotos = indexes_tani_multitasking_val[:,config.COLUMN_MCES20]
 
 
 print(f'shape of similarity2: {molecule_pairs_train.tanimotos.shape}')

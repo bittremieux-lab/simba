@@ -165,7 +165,7 @@ class MCES:
         command.extend(['--num_jobs', '1'])
 
         # Define threshold
-        command.extend(['--threshold', str(config.THRESHOLD_MCES)])
+        command.extend(['--threshold', str(int(config.THRESHOLD_MCES))])
 
         command.extend(['--solver_onethreaded'])
         command.extend(['--solver_no_msg'])
@@ -261,8 +261,9 @@ class MCES:
                 
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
-                pool = multiprocessing.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
-                                
+                #pool = multiprocessing.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
+                pool = multiprocessing.dummy.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
+
 
                 print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
                 if config.COMPUTE_SPECIFIC_PAIRS: 
@@ -404,3 +405,25 @@ class MCES:
 
         print(datetime.now())
         return molecular_pair_set, df
+
+    def exp_normalize_mces20(x, scale=20, low_threshold=0.20):
+        '''
+        normalize the input np array 
+
+        values of 0 are set to 1
+        values of infinite are set to 0
+
+        if we set scale=2, the mces distance of 20 corresponds to ~0.1
+        '''
+        mces_normalized= 1/(1+(x/scale))
+
+        mces_normalized[mces_normalized<=low_threshold] = 0
+
+        return mces_normalized
+
+    def inverse_exp_normalize_mces20(mces_normalized, scale, epsilon=0.000000000001):
+    
+        #add epsilon to avoid divide by 0
+        mces_normalized_epsilon= mces_normalized +epsilon
+
+        return scale *((1/mces_normalized_epsilon)-1)

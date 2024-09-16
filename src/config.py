@@ -3,6 +3,11 @@ class Config:
     # Spectra and spectrum pairs to include with the following settings.
     def __init__(self):
         
+
+        # MULTITASKING
+        self.COLUMN_EDIT_DISTANCE=2
+        self.COLUMN_MCES20 = 3
+        
         # EDIT DISTANCE
         self.EDIT_DISTANCE_N_CLASSES=6
         self.EDIT_DISTANCE_USE_GUMBEL=False
@@ -18,8 +23,8 @@ class Config:
         self.FRAGMENT_MZ_TOLERANCE = 0.1
         self.MIN_MASS_DIFF = 0  # Da
         self.MAX_MASS_DIFF = 200  # Da
-        self.THRESHOLD_MCES=5
-        
+        self.THRESHOLD_MCES=20
+        self.NORMALIZATION_MCES_20=19 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair
         # training
         self.USE_MULTITASK=True
         self.N_LAYERS = 5  # transformer parameters
@@ -38,7 +43,7 @@ class Config:
         self.maldi_embedder_path = (
             "/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt"
         )
-        self.load_pretrained = True  # a whole SIMBA model
+        self.load_pretrained = False  # a whole SIMBA model
 
         #self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_1_million_v2_no_sim1.pkl"
         self.dataset_path=  "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_100_million_v2_no_identity.pkl"
@@ -48,11 +53,12 @@ class Config:
         self.use_uniform_data_INFERENCE = True
         self.bins_uniformise_INFERENCE = 10
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
-        self.extra_info = "_multitasking_pretraining"
+        self.extra_info = "_multitasking_mces20_ed"
         self.derived_variables()
-        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_multitasking_min_peaks/"
+        #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_multitasking_min_peaks/"
         #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_loaded_full/"
         #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20/"
+        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces20_edit_distance_merged_20240912/"
         self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 
     def derived_variables(self):
