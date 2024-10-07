@@ -13,7 +13,7 @@ import csv
 
 class LoadEditDistanceData:
     '''
-    class to load data from ming processing
+    class to load data from ming processing to be matched with our spectra
     '''
 
     def load_file(path_file, names= ['smiles_0', 'smiles_1', 'edit_distance', 'tanimoto', 'substructure','inchi_0', 'inchi_1']
@@ -142,18 +142,28 @@ class LoadEditDistanceData:
         all_files = os.listdir(directory_path)
 
         # Filter out the CSV files
-        return [os.path.join(directory_path, file) for file in all_files if file.endswith('.gz')]
+        return [os.path.join(directory_path, file) for file in all_files if file.endswith(extension)]
     
-    def foward(dataset_file, input_folder, output_folder, 
-        dict_save= {'molecule_pairs_train': 'train',
-                    'molecule_pairs_val': 'val',
-                    'molecule_pairs_test': 'test',}
-        ):
+    def decompress_data(file_name):
+        # decompress the gz file
+        csv_file = file_name.split('.gz')[-2]+'.csv'
+        print('Decompressing ...')
+        LoadEditDistanceData.decompress_gz(input_gz_file=file_name, 
+                                        output_file= csv_file)
+                    
+    def forward(dataset_file, input_folder, output_folder, 
+            dict_save={'molecule_pairs_train': 'train',
+                       'molecule_pairs_val': 'val',
+                       'molecule_pairs_test': 'test'}, 
+            compressed_data=False):
         '''
         load list of csv files containing edit distance info and save the matched pairs in np arrays
         '''
+
+        extension= '.gz' if compressed_data else '.csv'
+
         # get input files
-        list_files = LoadEditDistanceData.get_files(input_folder)
+        list_files = LoadEditDistanceData.get_files(input_folder, extension=extension)
 
         # load dataset with target spectrums
         dataset= LoadEditDistanceData.get_dataset(dataset_file)
@@ -162,12 +172,10 @@ class LoadEditDistanceData:
         for index,l in tqdm(enumerate(list_files)):
                 #if index>=29:
                     print(f'Processing file: {l}')
-                    # decompress the gz file
-                    csv_file = l.split('.gz')[-2]+'.csv'
-                    print('Decompressing ...')
-                    LoadEditDistanceData.decompress_gz(input_gz_file=l, 
-                                                    output_file= csv_file)
-                    
+                    if compressed_data:
+                        LoadEditDistanceData.decompress_data(l)
+                    else:
+                        csv_file=l #if there is no compressed data use the csv file name
                     print('Loading file')
                     df= LoadEditDistanceData.load_file(csv_file)
                     
@@ -186,7 +194,8 @@ class LoadEditDistanceData:
                         np.save(file_name, np_array)
 
                     # delete decompred file
-                    LoadEditDistanceData.delete_file(csv_file)
+                    if compressed_data: #remove decompressed data in any case
+                        LoadEditDistanceData.delete_file(csv_file)
 
     def delete_file(file_path):
         os.system(f'rm {file_path}')
