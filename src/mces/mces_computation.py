@@ -244,8 +244,10 @@ class MCES:
                 #indexes_np_loaded = LoadMCES.remove_excess_low_pairs(indexes_np_loaded, remove_percentage=0.99, max_mces=config.THRESHOLD_MCES)
 
                 print(f'Size of the pairs loaded for computing specific pairs: {indexes_np_loaded.shape[0]}')
-                #num_chunks = int(np.ceil((indexes_np_loaded.shape[0]) / 10))
-                split_arrays = np.array_split(indexes_np_loaded, 10)
+
+                size_chunks = config.PREPROCESSING_BATCH_SIZE*num_workers
+                N= int(np.ceil(indexes_np_loaded.shape[0]/size_chunks))
+                split_arrays = np.array_split(indexes_np_loaded, N)
 
 
                 print(f'Number of split arrays {len(split_arrays)}')

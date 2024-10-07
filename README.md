@@ -60,3 +60,17 @@ wget https://downloads.globus.org/globus-connect-personal/linux/stable/globuscon
 Run an interactive session:
 
 srun -p ampere_gpu --gpus=1 --pty bash
+
+
+## Loading Edit distance data precomputed at UC Riverside
+* use the notebook load_new_edit_distance_20240925 to load the  data from a csv with inchis, to csv divided with the smiles in them
+* use the notebook matching_data_in_ming_data to match the pairs loaded with the spectra we have
+* compress the output folder and send it to the vsc supercomputer in the supercomputer, split the folder into 30 nodes and run the computation of pairs
+* use the script in python_scripts called script_split_folder.py to split the files into 10 subfolders
+* run the script: script_all_matched_mces_bash.slurm.sh for computing the mces
+* after the computation of mces is finished in the split folders, the results must be merged with the edit distance, using script merge_edit_distance_mces_20_v2.py
+
+## To train a multitask model using edit distance and mces
+
+* run the script script_transformers_multitasking.sh
+* run script_inference_multitasking.sh for inference

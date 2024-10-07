@@ -5,4 +5,4 @@
 export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
 
-srun python merge_edit_distance_mces_20.py
+srun python merge_edit_distance_mces_20_v2.py

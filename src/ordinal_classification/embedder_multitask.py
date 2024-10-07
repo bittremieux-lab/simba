@@ -58,40 +58,12 @@ class CustomizedCrossEntropyLoss(nn.Module):
 
     def forward(self, logits, target):
         batch_size = logits.size(0)
-        
-        # Calculate softmax
-        #exp_logits = torch.exp(logits)
-        #softmax = exp_logits / torch.sum(exp_logits, dim=1, keepdim=True)
         softmax = F.softmax(logits, dim=-1).to(self.device)
-        # Convert target to one-hot encoded tensor
-        #one_hot_target = torch.zeros_like(softmax)
-        #one_hot_target[torch.arange(batch_size).to(torch.int64), target.to(torch.int64)] = 1
-        
-        #one_hot_target = torch.nn.functional.one_hot(target.to(torch.int64), num_classes=self.n_classes)
-        # Calculate cross entropy loss
-
         new_hot_target = self.penalty_matrix[target.to(torch.int64).to(self.device)]
         cross_entropy_loss = -torch.sum(new_hot_target * torch.log(softmax + 1e-10)) / batch_size
         
         return cross_entropy_loss
 
-    #def forward(self, y_pred, y_true):
-    #    # Ensure probabilities are not zero to avoid log(0)
-    #    #y_pred = torch.clamp(y_pred, 1e-15, 1 - 1e-15)
-        
-        # Convert the true labels to one-hot encoding
-        #print(y_true.shape)
-    #    y_true = y_true.view(-1).to(torch.int64)
-        
-        
-    #    y_true_one_hot = torch.nn.functional.one_hot(y_true, num_classes=self.n_classes)
-        
-    #    # Compute the customized cross entropy loss
-    #    #loss = -torch.sum(y_true_one_hot.to(torch.float32) * torch.log(y_pred) * self.penalty_matrix, dim=1).mean()
-    #    loss = -torch.sum(y_true_one_hot.to(torch.float32) * torch.log(y_pred) * self.penalty_matrix, dim=1).mean()
-    #    # Average the loss over all samples
-    #    return loss
-    
 
 class EmbedderMultitask(Embedder):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
@@ -165,22 +137,67 @@ class EmbedderMultitask(Embedder):
         emb1 = self.relu(emb1)
 
         # for cosine similarity, tanimoto
-        emb_cosine = self.cosine_similarity(emb0, emb1)
+        if self.use_cosine_distance:
+            emb_sim_2 = self.cosine_similarity(emb0, emb1)
+        else:
+            emb_sim_2 = emb0 + emb1
+            emb_sim_2 = self.linear(emb_sim_2)
+            emb_sim_2 = self.dropout(emb_sim_2)
+            emb_sim_2 = self.relu(emb_sim_2)
+            emb_sim_2 = self.linear_regression(emb_sim_2)
+            
         emb = emb0 + emb1
         emb = self.linear(emb)
         emb = self.dropout(emb)
         emb = self.relu(emb)
         emb= self.classifier(emb)
-
+        
         #if self.gumbel_softmax:
         #    emb = self.gumbel_softmax(emb)
         #else:
         #    emb = F.softmax(emb, dim=-1)
-        return emb, emb_cosine
+        return emb, emb_sim_2
 
+    def calculate_weight_loss2(self):
+            '''
+            weight loss for second similarity metric. normally sim 2 is smaller since it is a regression problem between 0 and 1
+            '''
+            #if self.weights_sim2 is not None:
+            #    weight_loss=200
+            #else:
+            #    weight_loss2=30
+            weight_loss2=200
+            return weight_loss2
+
+    def compute_adjacent_diffs(self, gumbel_probs_1, batch_size):
+
+            #original code:
+            #diff_penalty = torch.sum((gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]) ** 2) / batch_size
+
+            adjacent_diffs = gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]
+
+            # Compute difference for the first and second columns (to include the first column)
+            first_diff = gumbel_probs_1[:, 1] - gumbel_probs_1[:, 0]
+
+            # Compute difference for the last and second-to-last columns (to include the last column)
+            last_diff = gumbel_probs_1[:, -1] - gumbel_probs_1[:, -2]
+
+            # Square all differences (element-wise)
+            squared_adjacent_diffs = adjacent_diffs ** 2
+            squared_first_diff = first_diff ** 2
+            squared_last_diff = last_diff ** 2
+
+            # Sum the squared differences
+            diff_penalty = (
+                torch.sum(squared_adjacent_diffs)  # Sum of differences between adjacent columns
+                + torch.sum(squared_first_diff)    # Include first column difference
+                + torch.sum(squared_last_diff)     # Include last column difference
+            ) / batch_size
+
+            return diff_penalty
 
     def step(self, batch, batch_idx, threshold=0.5, 
-                weight_loss2=200, #loss2 (regresion) is 100 times less than loss1 (classification)
+                weight_loss2=None, #loss2 (regresion) is 100 times less than loss1 (classification)
                 ):
         """A training/validation/inference step."""
         logits_list = self(batch)
@@ -196,44 +213,69 @@ class EmbedderMultitask(Embedder):
         target2 = torch.tensor(batch["similarity2"], dtype=torch.float32).to(self.device)
         target2 = target2.view(-1)  # Ensure targets are in the right shape and type for classification
         
-        #loss = self.loss_fn(logits, target)
-        loss1 =self.customised_ce(logits1, target1) 
-        #loss2 = self.regression_loss(logits2.float(), target2.view(-1, 1).float()).float()
-        
-        
-        # Calculate the squared difference for loss2
-        squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
+        # Apply Gumbel softmax
+        if self.use_gumbel:
+            gumbel_probs_1 = F.gumbel_softmax(logits1, tau=5.0, hard=True)
+            #gumbel_probs_1 = F.gumbel_softmax(logits1, tau=0.0, hard=True)
 
-        #print(f'target2 before removing similarity 1: {target2}')
-        # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
-        squared_diff[target2 >= 1]=0
-        target2[target2 >= 1] = 0
-        #print(f'target2 after removing similarity 1: {target2}')
-        #weighting the loss function
-        weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
-                                                            weights=self.weights_sim2, 
-                                                            use_molecule_pair_object=False,
-                                                            bining_sim1=False,
-                                                            targets=target2.cpu().numpy(),
-                                                            normalize=False,)
+            # Compute the expected value (continuous) from probabilities
+            expected_classes = torch.arange(gumbel_probs_1.size(1)).to(self.device)
+            predicted_value = torch.sum(gumbel_probs_1 * expected_classes, dim=1)
+            # Compute the MSE loss
+            loss1 = self.regression_loss(predicted_value.float(), target1.float())
+             # Regularization term to penalize large differences between adjacent probabilities
+            batch_size=batch["similarity"].size(0)
+            #diff_penalty = torch.sum((gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]) ** 2) / batch_size
+
+            # exclude the first index because the >5 is very different than class 4
+            diff_penalty = torch.sum((gumbel_probs_1[:, 2:] - gumbel_probs_1[:, 1:-1]) ** 2) / batch_size
+
+            #modified to include the first and last index
+            # Compute differences for adjacent columns (excluding the first and last initially)
+            #adjacent_diffs = gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]
+
+            # Compute difference for the first and second columns (to include the first column)
+            #diff_penalty  =self.compute_adjacent_diffs(gumbel_probs_1, batch_size)
+            reg_weight=0.1
+            loss1 = loss1 + reg_weight * diff_penalty
+        else:
+            loss1 =self.customised_ce(logits1, target1) 
+
+        if self.weights_sim2 is not None: # if there are sample weights used 
+            # Calculate the squared difference for loss2
+            squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
+            # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
+            squared_diff[target2 >= 1]=0
+            target2[target2 >= 1] = 0
+            #weighting the loss function
+            weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
+                                                                weights=self.weights_sim2, 
+                                                                use_molecule_pair_object=False,
+                                                                bining_sim1=False,
+                                                                targets=target2.cpu().numpy(),
+                                                                normalize=False,)
 
 
-        weight_mask = torch.tensor(weight_mask).to(self.device)
-        #print(f'target2 {target2}')
-        #print(f'self.weights_sim2: {self.weights_sim2}')
-        #print(f'weight mask: {weight_mask}')
-        # Apply the weights to the squared differences
-        loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
-        #loss2 = squared_diff * weight_mask.float().mean()
+            weight_mask = torch.tensor(weight_mask).to(self.device)
+
+            loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
+        else:
+            squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
+            # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
+            squared_diff[target2 >= 1]=0
+            target2[target2 >= 1] = 0
+            loss2 = squared_diff.view(-1, 1).mean()
+
+        weight_loss2 = self.calculate_weight_loss2()
 
         loss = loss1 + (weight_loss2*loss2)
 
         #print(f'loss1:{loss1}')
         #print(f'loss2: {loss2}')
         #print(f'loss: {loss}')
-        #loss = (weight_loss2*loss2)
 
         #print(f'loss 1 shape: {loss1.shape}')
+        #print(f'loss 2 shape: {loss2.shape}')
         #print(f'logits2 size: {logits2.shape}')
         #print(f'target2 size: {target2.shape}')
         #print(f'squared_diff size: {squared_diff.shape}')

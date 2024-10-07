@@ -8,14 +8,13 @@ class Config:
         self.COLUMN_EDIT_DISTANCE=2
         self.COLUMN_MCES20 = 3
         
-        # EDIT DISTANCE
-        self.EDIT_DISTANCE_N_CLASSES=6
-        self.EDIT_DISTANCE_USE_GUMBEL=False
         #PREPROCESSING
+        self.PREPROCESSING_BATCH_SIZE=1000
         self.PREPROCESSING_NUM_WORKERS=60
+        self.PREPROCESSING_OVERWRITE=False #overwrite the output file during generation
         self.COMPUTE_SPECIFIC_PAIRS=True
         self.FORMAT_FILE_SPECIFIC_PAIRS='INPUT_SPECIFIC_PAIRS_indexes_tani_incremental' # the prefix of the file containing the indexes to be computed
-        self.USE_EDIT_DISTANCE=False
+        self.USE_EDIT_DISTANCE=False ## If using edit distance for generating data, not for training!!! 
         self.SUBSAMPLE_PREPROCESSING=False
         self.RANDOM_MCES_SAMPLING = False
         self.CHARGES = 0, 1
@@ -24,40 +23,37 @@ class Config:
         self.MIN_MASS_DIFF = 0  # Da
         self.MAX_MASS_DIFF = 200  # Da
         self.THRESHOLD_MCES=20
-        self.NORMALIZATION_MCES_20=19 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair
+
         # training
         self.USE_MULTITASK=True
+        self.EDIT_DISTANCE_N_CLASSES=6
+        self.EDIT_DISTANCE_USE_GUMBEL=False
+        self.USE_TANIMOTO =False # using Tanimoto or MCES20 for training
+        self.MCES20_MAX_VALUE=40 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair
+        self.USE_LOSS_WEIGHTS_SECOND_SIMILARITY= False # use weights for training the second similarity of multitasking
         self.N_LAYERS = 5  # transformer parameters
-        #self.D_MODEL = 128  # transformer parameters
-        self.D_MODEL = 512  # transformer parameters
-        self.EMBEDDING_DIM=256
-        self.use_cosine_distance = True
+        self.D_MODEL = 256  # transformer parameters
+        self.EMBEDDING_DIM=512
+        self.use_cosine_distance = False
         self.LR = 1e-4
-        # self.LR = 1e-3
         self.epochs = 1000
         self.BATCH_SIZE = 128
         self.enable_progress_bar = True
         self.threshold_class = 0.7  # threshold classification binary
-
         self.load_maldi_embedder = False
+        self.INFERENCE_USE_LAST_MODEL=False
         self.maldi_embedder_path = (
             "/scratch/antwerpen/209/vsc20939/data/maldi_embedder/best_model.ckpt"
         )
         self.load_pretrained = False  # a whole SIMBA model
-
-        #self.dataset_path = "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_1_million_v2_no_sim1.pkl"
         self.dataset_path=  "/scratch/antwerpen/209/vsc20939/data/merged_gnps_nist_20240319_unique_smiles_100_million_v2_no_identity.pkl"
         self.use_uniform_data_TRAINING = False
         self.bins_uniformise_TRAINING = 10
-
         self.use_uniform_data_INFERENCE = True
         self.bins_uniformise_INFERENCE = 10
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
-        self.extra_info = "_multitasking_mces20_ed"
+        self.extra_info = "_multitasking_mces20raw_gumbelhard_20241004"
         self.derived_variables()
-        #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_multitasking_min_peaks/"
-        #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_loaded_full/"
-        #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20/"
         self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces20_edit_distance_merged_20240912/"
         self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 

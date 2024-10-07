@@ -475,28 +475,36 @@ class TrainUtils:
         return molecular_pair_set  
     
     @staticmethod
-    def count_ranges(list_elements, number_bins=5, bin_sim_1=False):
+    def count_ranges(list_elements, number_bins=5, bin_sim_1=False, max_value=1):
         #count the instances in the  bins from 0 to 1
         # Group the values into the corresponding bins, adding one for sim=1
         counts=[]
         bins=[]
+
+        # normalize the elements of list_elements based on max_value
+        list_elements_norm = list_elements/max_value
+
         if bin_sim_1:
             number_bins_effective = number_bins + 1
         else:
             number_bins_effective = number_bins
 
         for p in range(int(number_bins_effective)):
-            low = p * (1 / number_bins)
+
+            if p==0:
+                low=-np.inf 
+            else:
+                low = p * (1 / number_bins)
 
             if bin_sim_1:
                 high = (p + 1) * (1 / number_bins)
             else:
                 if p == (number_bins_effective - 1):
-                    high = 1 + 0.1
+                    high = np.inf
                 else:
                     high = (p + 1) * (1 / number_bins)
 
-            list_elements_temp = list_elements[(list_elements>=low) & (list_elements<high)] 
+            list_elements_temp = list_elements_norm[(list_elements_norm>=low) & (list_elements_norm<high)] 
             counts.append(len(list_elements_temp))
             bins.append(low)
         return counts, bins

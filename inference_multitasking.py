@@ -40,16 +40,6 @@ config = parser.update_config(config)
 # In[274]:
 
 
-# In[274]:
-
-config.USE_GUMBEL=False
-
-
-# In[275]:
-
-
-config.N_CLASSES=6
-
 
 # In[276]:
 
@@ -57,7 +47,7 @@ config.N_CLASSES=6
 # In[277]:
 
 
-config.bins_uniformise_INFERENCE=config.N_CLASSES-1
+config.bins_uniformise_INFERENCE=config.EDIT_DISTANCE_N_CLASSES-1
 
 
 # In[278]:
@@ -125,7 +115,11 @@ print(f"Number of pairs for test: {len(molecule_pairs_test)}")
 #best_model_path = model_path = data_folder + 'best_model_exhaustive_sampled_128n_20240618.ckpt'
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps-v9.ckpt"
 #best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
-best_model_path = config.CHECKPOINT_DIR + f"best_model.ckpt"
+
+if not(config.INFERENCE_USE_LAST_MODEL) and (os.path.exists(config.CHECKPOINT_DIR + f"best_model.ckpt")):     
+    best_model_path = config.CHECKPOINT_DIR + f"best_model.ckpt"
+else:
+    best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps.ckpt"
 
 # In[ ]:
@@ -183,8 +177,8 @@ best_model = EmbedderMultitask.load_from_checkpoint(
     best_model_path,
     d_model=int(config.D_MODEL),
     n_layers=int(config.N_LAYERS),
-    n_classes=config.N_CLASSES,
-    use_gumbel=config.USE_GUMBEL,
+    n_classes=config.EDIT_DISTANCE_N_CLASSES,
+    use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
     use_element_wise=True,
     use_cosine_distance=config.use_cosine_distance,
     
@@ -239,12 +233,13 @@ for pred in pred_test: # in the batch dimension
     confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
 
     #similarity2
-    flat_pred_test2 = flat_pred_test2 + [p for p in pred2]
+    flat_pred_test2 = flat_pred_test2 + [p[0] for p in pred2]
 
 
 # convert to numpy
 flat_pred_test1=np.array( flat_pred_test1)
 confident_pred_test1=np.array(confident_pred_test1)
+
 flat_pred_test2=np.array( flat_pred_test2)
 
 
@@ -345,14 +340,25 @@ plt.scatter(similarities_test1, flat_pred_test1, alpha=0.01)
 
 ####### SECOND SIMILARITY ######
 
-counts, bins= TrainUtils.count_ranges(similarities_test2, number_bins=5, bin_sim_1=False)
+counts, bins= TrainUtils.count_ranges(similarities_test2, number_bins=5, bin_sim_1=False, max_value=1)
+
+
+print('BEFORE BINING:')
+print(f'Max value of similarities 2: {max(similarities_test2)}')
+print(f'Min value of similarities 2: {min(similarities_test2)}')
+print(f'Number of samples per bin for similarity 2: {counts}')
+print(f'Bins for similarity 2: {bins}')
 
 min_bin=min([c for c in counts if c>0])
+print(f'Min bin for similarity 2: {min_bin}')
 
 @staticmethod
-def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bin_sim_1=False, min_bin=0):
+def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bin_sim_1=False, min_bin=0, max_value=0):
     #count the instances in the  bins from 0 to 1
     # Group the values into the corresponding bins, adding one for sim=1
+
+    list_elements1=list_elements1/max_value
+    list_elements2=list_elements2/max_value
     output_elements1=np.array([])
     output_elements2=np.array([])
 
@@ -363,13 +369,14 @@ def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bi
         number_bins_effective = number_bins
 
     for p in range(int(number_bins_effective)):
-        low = p * (1 / number_bins)
+        if p==0: # cover all the possible values equal or lower than 0
+            low = -np.inf
 
         if bin_sim_1:
             high = (p + 1) * (1 / number_bins)
         else:
             if p == (number_bins_effective - 1):
-                high = 1 + 0.1
+                high = np.inf
             else:
                 high = (p + 1) * (1 / number_bins)
 
@@ -381,11 +388,26 @@ def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bi
 
     return output_elements1, output_elements2
 
-similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_test2, flat_pred_test2, number_bins=5, bin_sim_1=False, min_bin=min_bin)
+similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_test2, flat_pred_test2, number_bins=5, bin_sim_1=False, min_bin=min_bin, 
+max_value=1)
+
+print('')
+print('AFTER BINING:')
+print(f'Max value of similarities 2: {max(similarities_test2)}')
+print(f'Min value of similarities 2: {min(similarities_test2)}')
+print(f'Number of samples per bin for similarity 2: {counts}')
+print(f'Bins for similarity 2: {bins}')
+
+min_bin=min([c for c in counts if c>0])
+print(f'Min bin for similarity 2: {min_bin}')
+print('ground truth similarity 2')
 
 print(similarities_test2)
 print(similarities_test2.shape)
 
+print('pred similarity 2')
+print(flat_pred_test2)
+print(flat_pred_test2.shape)
 # In[ ]:
 
 
@@ -394,13 +416,15 @@ corr_model2, p_value_model2= spearmanr(similarities_test2, flat_pred_test2)
 
 # In[ ]:
 
-
+if not(config.USE_TANIMOTO): #if using mces20, apply de-normalization to obtain scalar value sof MCES20
+    similarities_test2= config.MCES20_MAX_VALUE*(1-similarities_test2)
+    flat_pred_test2= config.MCES20_MAX_VALUE*(1-flat_pred_test2)
+    
 print(f'Correlation of tanimoto model: {corr_model2}')
-
 sns.set_theme(style="ticks")
 plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
 # Set x and y labels
-plot.set_axis_labels("Tanimoto similarity", "Model prediction", fontsize=12)
+plot.set_axis_labels("Ground truth Similarity", "Prediction", fontsize=12)
 plot.fig.suptitle(f"Spearman Correlation:{corr_model2}", fontsize=16)
 plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
 

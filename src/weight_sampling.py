@@ -87,6 +87,9 @@ class WeightSampling:
         #print(f'effective range: {effective_range}')
         indices = np.floor(sim * (effective_range)).astype(int)
 
+        # make sure the indexes are not below 0
+        indices[indices<0]=0
+        
         if not(bining_sim1):
             indices[indices == effective_range] = len(weights) - 1
         

@@ -32,14 +32,13 @@ from src.transformers.embedder import Embedder
 from sklearn.metrics import confusion_matrix
 from src.load_mces.load_mces import LoadMCES
 from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
+from src.plotting import Plotting
 
 # parameters
 config = Config()
 parser = Parser()
 config = parser.update_config(config)
-config.USE_GUMBEL=False
-config.N_CLASSES=6
-config.bins_uniformise_INFERENCE=config.N_CLASSES-1
+config.bins_uniformise_INFERENCE=config.EDIT_DISTANCE_N_CLASSES-1
 config.use_uniform_data_INFERENCE = True
 
 # In[281]:
@@ -74,33 +73,7 @@ indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSI
 indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
 
 
-## Add the identitiy pairs
-USE_IDENTITY_PAIRS=True
-if USE_IDENTITY_PAIRS:
-    # remove to avoid duplicates
-    indexes_tani_multitasking_train = indexes_tani_multitasking_train[\
-                                    indexes_tani_multitasking_train[:,0]!=indexes_tani_multitasking_train[:,1]]
-
-    indexes_tani_multitasking_val = indexes_tani_multitasking_val[\
-                                    indexes_tani_multitasking_val[:,0]!= indexes_tani_multitasking_val[:,1]]
-    # create identity 
-    identity_pairs_train = np.zeros((len(molecule_pairs_train.spectrums),4))
-    identity_pairs_train[:,0]=np.arange(0,identity_pairs_train.shape[0])
-    identity_pairs_train[:,1]=np.arange(0,identity_pairs_train.shape[0])
-    identity_pairs_train[:,2]=1.0
-    identity_pairs_train[:,3]=1.0
-
-    # create identity 
-    identity_pairs_val = np.zeros((len(molecule_pairs_val.spectrums),4))
-    identity_pairs_val[:,0]=np.arange(0,identity_pairs_val.shape[0])
-    identity_pairs_val[:,1]=np.arange(0,identity_pairs_val.shape[0])
-    identity_pairs_val[:,2]=1.0
-    identity_pairs_val[:,3]=1.0
-
-    indexes_tani_multitasking_train  = np.concatenate((indexes_tani_multitasking_train, identity_pairs_train ))
-    indexes_tani_multitasking_val  = np.concatenate((indexes_tani_multitasking_val, identity_pairs_val ))
-
-
+# assign features
 molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
 molecule_pairs_val.indexes_tani = indexes_tani_multitasking_val[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
 
@@ -139,7 +112,7 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 ## CALCULATION OF WEIGHTS
 train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
     molecule_pairs_train,
-    config.N_CLASSES-1,
+    config.EDIT_DISTANCE_N_CLASSES-1,
         bin_sim_1=True, 
 )
 
@@ -169,23 +142,14 @@ for lista in (train_binned_list):
 train_binned_list[1].indexes_tani.shape
 
 
-# In[286]:
-
 
 plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]>0][:,2], bins=20)
 
-
-# In[287]:
-
-
-[t.indexes_tani.shape for t in train_binned_list]
-
-
-# In[288]:
-
-
 weights, range_weights = WeightSampling.compute_weights_categories(train_binned_list)
 
+## save info about the weights of similarity 1
+Plotting.plot_weights(range_weights, weights, xlabel='weight bin similarity 1', 
+                filepath=config.CHECKPOINT_DIR+ 'weights_similarity_1.png')
 
 
 #weights, range_weights = WeightSampling.compute_weights(train_binned_list)
@@ -313,8 +277,25 @@ for i,batch in enumerate(dataloader_train):
 
         # for second similarity remove the sim=1 since it is the same task as the edit distance ==0
         similarities_sampled2= np.array(similarities_sampled2)
-        similarities_sampled2=similarities_sampled2[similarities_sampled2<1]
+        #similarities_sampled2=similarities_sampled2[similarities_sampled2<1]
         break
+
+## plot similarity distributions
+#print(f'similarities 1: {similarities_sampled}')
+plt.figure()
+plt.xlabel('similarity 1')
+plt.ylabel('freq')
+plt.hist(similarities_sampled)
+plt.savefig(config.CHECKPOINT_DIR + 'similarity_distribution_1.png')
+
+#print(f'similarities 2: {similarities_sampled2}')
+plt.figure()
+plt.hist(similarities_sampled2)
+plt.xlabel('similarity 2')
+plt.ylabel('freq')
+plt.savefig(config.CHECKPOINT_DIR +'similarity_distribution_2.png')
+
+
 
 counting, bins, patches =plt.hist(similarities_sampled, bins=6)
 
@@ -322,7 +303,11 @@ print(f'SIMILARITY 1: Distribution of similarity for dataset train: {counting}')
 print(f'SIMILARITY 1: Ranges of similarity for dataset train: {bins}')
 # In[304]:
 
-counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), number_bins=5, bin_sim_1=False)
+# count the number of samples between 
+counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), 
+                                                    number_bins=5, 
+                                                    bin_sim_1=False, 
+                                                    max_value=1)
 
 print(f'SIMILARITY 2: Distribution of similarity for dataset train: {counting2}')
 print(f'SIMILARITY 2: Ranges of similarity for dataset train: {bins2}')
@@ -330,6 +315,9 @@ print(f'SIMILARITY 2: Ranges of similarity for dataset train: {bins2}')
 weights2 = np.array([np.sum(counting2)/c if c != 0 else 0 for c in counting2]) 
 weights2= weights2/np.sum(weights2)
 
+## save info about the weights of similarity 1
+Plotting.plot_weights(bins2, weights2, xlabel='weight bin similarity 2', 
+                filepath=config.CHECKPOINT_DIR+ 'weights_similarity_2.png')
 print(f'WEIGHTS CALCULATED FOR SECOND SIMILARITY: {weights2}')
 
 def worker_init_fn(
@@ -379,24 +367,25 @@ losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
 print("define model")
 
 
-# In[308]:
-
-
-config.USE_GUMBEL
 
 
 # In[309]:
 
+## use or not use weights for the second similarity loss
+if config.USE_LOSS_WEIGHTS_SECOND_SIMILARITY:
+    weights_sim2=np.array(weights2)
+else:
+    weights_sim2=None
 
 model = EmbedderMultitask(
     d_model=int(config.D_MODEL),
     n_layers=int(config.N_LAYERS),
-    n_classes=config.N_CLASSES,
+    n_classes=config.EDIT_DISTANCE_N_CLASSES,
     weights=None,
     lr=config.LR,
     use_cosine_distance=config.use_cosine_distance,
-    use_gumbel = config.USE_GUMBEL,
-    weights_sim2=np.array(weights2),
+    use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+    weights_sim2=weights_sim2,
 )
 
 # Create a model:
@@ -408,7 +397,10 @@ if config.load_pretrained:
         weights=None,
         lr=config.LR,
         use_cosine_distance=config.use_cosine_distance,
-    )
+        use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+        weights_sim2=weights_sim2,
+)
+    
     model.spectrum_encoder = model_pretrained.spectrum_encoder
     print("Loaded pretrained model")
 else:

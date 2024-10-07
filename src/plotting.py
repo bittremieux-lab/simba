@@ -835,3 +835,11 @@ class Plotting:
             # plt.savefig("gnps_libraries_tanimoto.png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
+
+    def plot_weights(weights_range, weights_value, xlabel, filepath):
+        plt.figure()
+        plt.scatter(weights_range, weights_value)
+        plt.grid()
+        plt.xlabel(xlabel)
+        plt.ylabel('weight value')
+        plt.savefig(filepath)
