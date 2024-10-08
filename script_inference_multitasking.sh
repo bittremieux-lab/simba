@@ -7,7 +7,7 @@ export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
 source activate transformers
 
 nvidia-smi 
-srun python inference_multitasking.py --extra_info=multitasking_mces20raw_linearsep
+srun python inference_multitasking.py --extra_info=multitasking_mces20raw_withsim1
 #--enable_progress_bar=0  --EDIT_DISTANCE_USE_GUMBEL=1 #gumbel
 #--enable_progress_bar=0 --PREPROCESSING_DIR=/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/ --extra_info=_multitasking_mces20raw_newdata #new data
 #--enable_progress_bar=0  --EDIT_DISTANCE_USE_GUMBEL=1 #gumbel
