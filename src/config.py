@@ -54,7 +54,7 @@ class Config:
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
         self.extra_info = "_multitasking_mces20raw_gumbelhard_20241004"
         self.derived_variables()
-        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces20_edit_distance_merged_20240912/"
+        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
         self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 
     def derived_variables(self):

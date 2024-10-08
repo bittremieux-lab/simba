@@ -137,7 +137,7 @@ class LoadMCES:
 
         return merged_array
 
-    def merge_numpy_arrays_multitask(directory_path, prefix, remove_percentage=0.00):
+    def merge_numpy_arrays_multitask(directory_path, prefix, remove_percentage=0.00, add_high_similarity_pairs=False):
         '''
         load np arrays containing data as well as apply normalization
         '''
@@ -175,7 +175,8 @@ class LoadMCES:
                                                             max_value=config.MCES20_MAX_VALUE)
 
         # add the high similarity pairs
-        #merged_array= LoadMCES.add_high_similarity_pairs_edit_distance(merged_array)
+        if add_high_similarity_pairs:
+            merged_array= LoadMCES.add_high_similarity_pairs_edit_distance(merged_array)
         # normalize
         # remove excess low pairs
         #merged_array = LoadMCES.remove_excess_low_pairs(merged_array)
@@ -183,12 +184,12 @@ class LoadMCES:
         print(f'Number of pairs loaded: {merged_array.shape[0]}  ')
         return merged_array
 
-    def merge_numpy_arrays(directory_path, prefix, use_edit_distance, use_multitask=False):
+    def merge_numpy_arrays(directory_path, prefix, use_edit_distance, use_multitask=False, add_high_similarity_pairs=False):
         '''
         load np arrays containing data as well as apply normalization
         '''
         if use_multitask:
-            return LoadMCES.merge_numpy_arrays_multitask(directory_path, prefix,)
+            return LoadMCES.merge_numpy_arrays_multitask(directory_path, prefix,add_high_similarity_pairs=add_high_similarity_pairs)
         else:
             if use_edit_distance:
                 return LoadMCES.merge_numpy_arrays_edit_distance(directory_path, prefix,)
@@ -207,10 +208,12 @@ class LoadMCES:
         indexes_tani_high = indexes_tani[indexes_tani[:,target_column]<max_value]
         indexes_tani_low = indexes_tani[indexes_tani[:,target_column]>=max_value]
 
-        random_samples = np.random.randint(0,indexes_tani_low.shape[0], sample_size)
-        
-        # index
-        indexes_tani_low = indexes_tani_low[random_samples]
+        if remove_percentage>0:
+            random_samples = np.random.randint(0,indexes_tani_low.shape[0], sample_size)
+            
+            # index
+            indexes_tani_low = indexes_tani_low[random_samples]
+    
         return np.concatenate((indexes_tani_low, indexes_tani_high), axis=0)
 
 

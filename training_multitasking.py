@@ -69,8 +69,16 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
-indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
+indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
+                            prefix='indexes_tani_incremental_train', 
+                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+                            use_multitask=config.USE_MULTITASK,
+                            add_high_similarity_pairs=True)
+indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
+                            prefix='indexes_tani_incremental_val', 
+                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+                            use_multitask=config.USE_MULTITASK,
+                            add_high_similarity_pairs=True)
 
 
 # assign features

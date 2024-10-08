@@ -105,6 +105,8 @@ class EmbedderMultitask(Embedder):
         self.use_gumbel=use_gumbel
         self.weights_sim2=weights_sim2
 
+        self.linear1 = nn.Linear(d_model, d_model)
+        self.linear2 = nn.Linear(d_model, d_model)
 
     def forward(self, batch):
         """The inference pass"""
@@ -141,13 +143,13 @@ class EmbedderMultitask(Embedder):
             emb_sim_2 = self.cosine_similarity(emb0, emb1)
         else:
             emb_sim_2 = emb0 + emb1
-            emb_sim_2 = self.linear(emb_sim_2)
+            emb_sim_2 = self.linear2(emb_sim_2)
             emb_sim_2 = self.dropout(emb_sim_2)
             emb_sim_2 = self.relu(emb_sim_2)
             emb_sim_2 = self.linear_regression(emb_sim_2)
             
         emb = emb0 + emb1
-        emb = self.linear(emb)
+        emb = self.linear1(emb)
         emb = self.dropout(emb)
         emb = self.relu(emb)
         emb= self.classifier(emb)
@@ -245,8 +247,8 @@ class EmbedderMultitask(Embedder):
             # Calculate the squared difference for loss2
             squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
             # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
-            squared_diff[target2 >= 1]=0
-            target2[target2 >= 1] = 0
+            #squared_diff[target2 >= 1]=0
+            #target2[target2 >= 1] = 0
             #weighting the loss function
             weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
                                                                 weights=self.weights_sim2, 
@@ -262,8 +264,8 @@ class EmbedderMultitask(Embedder):
         else:
             squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
             # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
-            squared_diff[target2 >= 1]=0
-            target2[target2 >= 1] = 0
+            #squared_diff[target2 >= 1]=0
+            #target2[target2 >= 1] = 0
             loss2 = squared_diff.view(-1, 1).mean()
 
         weight_loss2 = self.calculate_weight_loss2()
