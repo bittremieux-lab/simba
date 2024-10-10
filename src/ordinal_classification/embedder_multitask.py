@@ -107,7 +107,7 @@ class EmbedderMultitask(Embedder):
 
         self.linear1 = nn.Linear(d_model, d_model)
         self.linear2 = nn.Linear(d_model, d_model)
-
+        self.linear2_cossim = nn.Linear(d_model, d_model) #extra linear transformation in case cosine similarity i sused
     def forward(self, batch):
         """The inference pass"""
 
@@ -140,7 +140,25 @@ class EmbedderMultitask(Embedder):
 
         # for cosine similarity, tanimoto
         if self.use_cosine_distance:
-            emb_sim_2 = self.cosine_similarity(emb0, emb1)
+            #emb_sim_2 = self.cosine_similarity(emb0, emb1)
+            ## apply transformation before apply cosine distance
+
+            # emb0
+            emb0_transformed = self.linear2(emb0)
+            emb0_transformed= self.dropout(emb0_transformed)
+            emb0_transformed=self.relu(emb0_transformed)
+            emb0_transformed = self.linear2_cossim(emb0_transformed)
+            emb0_transformed=self.relu(emb0_transformed)
+
+            # emb1
+            emb1_transformed = self.linear2(emb1)
+            emb1_transformed= self.dropout(emb1_transformed)
+            emb1_transformed=self.relu(emb1_transformed)
+            emb1_transformed = self.linear2_cossim(emb1_transformed)
+            emb1_transformed=self.relu(emb1_transformed)
+
+            # cos sim
+            emb_sim_2 = self.cosine_similarity(emb0_transformed, emb1_transformed)
         else:
             emb_sim_2 = emb0 + emb1
             emb_sim_2 = self.linear2(emb_sim_2)
@@ -253,7 +271,7 @@ class EmbedderMultitask(Embedder):
             weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
                                                                 weights=self.weights_sim2, 
                                                                 use_molecule_pair_object=False,
-                                                                bining_sim1=False,
+                                                                bining_sim1=True,
                                                                 targets=target2.cpu().numpy(),
                                                                 normalize=False,)
 

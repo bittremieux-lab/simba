@@ -314,7 +314,7 @@ print(f'SIMILARITY 1: Ranges of similarity for dataset train: {bins}')
 # count the number of samples between 
 counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), 
                                                     number_bins=5, 
-                                                    bin_sim_1=False, 
+                                                    bin_sim_1=True, 
                                                     max_value=1)
 
 print(f'SIMILARITY 2: Distribution of similarity for dataset train: {counting2}')
@@ -324,7 +324,8 @@ weights2 = np.array([np.sum(counting2)/c if c != 0 else 0 for c in counting2])
 weights2= weights2/np.sum(weights2)
 
 ## save info about the weights of similarity 1
-Plotting.plot_weights(bins2, weights2, xlabel='weight bin similarity 2', 
+bins2_normalized = [b if b>0 else 0 for b in bins2 ] # the first bin has -inf as the lower range
+Plotting.plot_weights(bins2_normalized, weights2, xlabel='weight bin similarity 2', 
                 filepath=config.CHECKPOINT_DIR+ 'weights_similarity_2.png')
 print(f'WEIGHTS CALCULATED FOR SECOND SIMILARITY: {weights2}')
 
@@ -407,6 +408,7 @@ if config.load_pretrained:
         use_cosine_distance=config.use_cosine_distance,
         use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
         weights_sim2=weights_sim2,
+        strict=False,
 )
     
     model.spectrum_encoder = model_pretrained.spectrum_encoder

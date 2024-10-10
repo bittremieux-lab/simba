@@ -233,7 +233,7 @@ for pred in pred_test: # in the batch dimension
     confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
 
     #similarity2
-    flat_pred_test2 = flat_pred_test2 + [p[0] for p in pred2]
+    flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
 
 
 # convert to numpy
