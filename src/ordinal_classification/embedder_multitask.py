@@ -108,7 +108,7 @@ class EmbedderMultitask(Embedder):
         self.linear1 = nn.Linear(d_model, d_model)
         self.linear2 = nn.Linear(d_model, d_model)
 
-    def forward(self, batch):
+    def forward(self, batch,return_spectrum_output=False):
         """The inference pass"""
 
         # extra data
@@ -158,7 +158,10 @@ class EmbedderMultitask(Embedder):
         #    emb = self.gumbel_softmax(emb)
         #else:
         #    emb = F.softmax(emb, dim=-1)
-        return emb, emb_sim_2
+        if return_spectrum_output:
+            return emb, emb_sim_2, emb0, emb1
+        else: 
+            return emb, emb_sim_2
 
     def calculate_weight_loss2(self):
             '''
