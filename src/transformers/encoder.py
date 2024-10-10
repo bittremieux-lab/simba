@@ -17,7 +17,7 @@ class Encoder(pl.LightningModule):
         self.relu = nn.ReLU()
         
 
-    def load_twin_network(self, model_path, D_MODEL, N_LAYERS, LR=0.001, use_cosine_distance=True):
+    def load_twin_network(self, model_path, D_MODEL, N_LAYERS,  strict=False):
         if self.multitasking:
             return EmbedderMultitask.load_from_checkpoint(
             model_path,
@@ -26,8 +26,9 @@ class Encoder(pl.LightningModule):
             weights=None,
             n_classes=self.config.EDIT_DISTANCE_N_CLASSES,
             use_gumbel=self.config.EDIT_DISTANCE_USE_GUMBEL,
-            lr=LR,
-            use_cosine_distance=use_cosine_distance,
+            lr=self.config.LR,
+            use_cosine_distance=self.config.use_cosine_distance,
+            strict=strict
         )
     
         else:
@@ -36,8 +37,9 @@ class Encoder(pl.LightningModule):
             d_model=int(D_MODEL),
             n_layers=int(N_LAYERS),
             weights=None,
-            lr=LR,
-            use_cosine_distance=use_cosine_distance,
+            lr=self.config.LR,
+            use_cosine_distance=self.config.use_cosine_distance,
+            strict=strict
         )
     
     def forward(self, batch):
