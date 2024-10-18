@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 from depthcharge.data import AnnotatedSpectrumDataset
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.transformers import (
@@ -30,17 +30,29 @@ from src.weight_sampling import WeightSampling
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [[20, 0, 0, 0, 0, 0,],
+        penalty_matrix = [[20, 4, 3, 2, 1,  0,],
                           
-                          [0, 20, 4, 3, 2, 1,] ,
+                          [4, 20, 4, 3, 2,  1,] ,
 
-                          [0, 4, 20, 4, 3, 2,],
+                          [3, 4, 20, 4, 3,  2,],
 
-                          [0, 3, 4,20, 4, 3,],
+                          [2, 3,  4, 20, 4,  3,],
 
-                          [0, 2, 3, 4, 20, 4,],
+                          [1, 2, 3, 4,  20,  4,],
 
-                          [0, 1, 2, 3, 4, 20,]]
+                          [0, 1, 2, 3,  4,  20,]]
+
+        #penalty_matrix = [[20, 0, 0, 0, 0,  0,],
+                          
+         #                 [0, 20, 5, 0, 0, 0,] ,
+
+         #                 [0, 5,  20, 5, 0, 0,],
+
+          #                [0, 0,   5,  20, 5, 0,],
+
+           #               [0, 0, 0, 5,  20,  5,],
+
+            #              [0, 0, 0, 0,  5,  20,]]
         
         #normalize:
         #penalty_matrix = penalty_matrix/(np.sum(penalty_matrix, axis=0))
@@ -54,16 +66,19 @@ class CustomizedCrossEntropyLoss(nn.Module):
         
         self.n_classes=n_classes
         self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device)/20
+        self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device)/np.max(penalty_matrix)
 
     def forward(self, logits, target):
+        #batch_size = logits.size(0)
+        #softmax = F.softmax(logits, dim=-1).to(self.device)
+        #new_hot_target = self.penalty_matrix[target.to(torch.int64).to(self.device)]
+        #cross_entropy_loss = -torch.sum(new_hot_target * torch.log(softmax + 1e-10)) / batch_size
+        #return cross_entropy_loss
         batch_size = logits.size(0)
-        softmax = F.softmax(logits, dim=-1).to(self.device)
+        log_probs = F.log_softmax(logits, dim=-1).to(self.device)
         new_hot_target = self.penalty_matrix[target.to(torch.int64).to(self.device)]
-        cross_entropy_loss = -torch.sum(new_hot_target * torch.log(softmax + 1e-10)) / batch_size
-        
+        cross_entropy_loss = -torch.sum(new_hot_target * log_probs) / batch_size
         return cross_entropy_loss
-
 
 class EmbedderMultitask(Embedder):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embed spectra."""
@@ -81,6 +96,8 @@ class EmbedderMultitask(Embedder):
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
         # Number of classes for classification
         weights_sim2=None, #weights of second similarity
+        use_edit_distance_regresion=False,
+        use_mces20_log_loss=True, 
 ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -108,6 +125,14 @@ class EmbedderMultitask(Embedder):
         self.linear1 = nn.Linear(d_model, d_model)
         self.linear2 = nn.Linear(d_model, d_model)
         self.linear2_cossim = nn.Linear(d_model, d_model) #extra linear transformation in case cosine similarity i sused
+
+        self.use_edit_distance_regresion =use_edit_distance_regresion
+
+        if self.use_edit_distance_regresion:
+            self.linear1_cossim = nn.Linear(d_model, d_model)
+
+        self.use_mces20_log_loss=use_mces20_log_loss
+
     def forward(self, batch, return_spectrum_output=False):
         """The inference pass"""
 
@@ -166,11 +191,34 @@ class EmbedderMultitask(Embedder):
             emb_sim_2 = self.relu(emb_sim_2)
             emb_sim_2 = self.linear_regression(emb_sim_2)
             
-        emb = emb0 + emb1
-        emb = self.linear1(emb)
-        emb = self.dropout(emb)
-        emb = self.relu(emb)
-        emb= self.classifier(emb)
+        if self.use_edit_distance_regresion:
+            # emb0
+            emb0_transformed_1 = self.linear1(emb0)
+            emb0_transformed_1= self.dropout(emb0_transformed_1)
+            emb0_transformed_1=self.relu(emb0_transformed_1)
+            emb0_transformed_1 = self.linear1_cossim(emb0_transformed_1)
+            emb0_transformed_1=self.relu(emb0_transformed_1)
+
+            # emb1
+            emb1_transformed_1 = self.linear1(emb1)
+            emb1_transformed_1= self.dropout(emb1_transformed_1)
+            emb1_transformed_1=self.relu(emb1_transformed_1)
+            emb1_transformed_1 = self.linear1_cossim(emb1_transformed_1)
+            emb1_transformed_1=self.relu(emb1_transformed_1)
+
+            # cos sim
+            emb = self.cosine_similarity(emb0_transformed_1, emb1_transformed_1)
+
+            #round to integers
+            emb=emb*5
+            emb = emb + emb.round().detach() - emb.detach() # trick to make round differentiable
+            emb=emb/5
+        else:
+            emb = emb0 + emb1
+            emb = self.linear1(emb)
+            emb = self.dropout(emb)
+            emb = self.relu(emb)
+            emb= self.classifier(emb)
         
         #if self.gumbel_softmax:
         #    emb = self.gumbel_softmax(emb)
@@ -189,7 +237,11 @@ class EmbedderMultitask(Embedder):
             #    weight_loss=200
             #else:
             #    weight_loss2=30
-            weight_loss2=200
+
+            if self.use_edit_distance_regresion:
+                weight_loss2=1
+            else:
+                weight_loss2=200
             return weight_loss2
 
     def compute_adjacent_diffs(self, gumbel_probs_1, batch_size):
@@ -237,36 +289,56 @@ class EmbedderMultitask(Embedder):
         target2 = target2.view(-1)  # Ensure targets are in the right shape and type for classification
         
         # Apply Gumbel softmax
-        if self.use_gumbel:
-            gumbel_probs_1 = F.gumbel_softmax(logits1, tau=5.0, hard=True)
-            #gumbel_probs_1 = F.gumbel_softmax(logits1, tau=0.0, hard=True)
+        if self.use_edit_distance_regresion:
+            # compress the range
+            target1 = target1/5
 
-            # Compute the expected value (continuous) from probabilities
-            expected_classes = torch.arange(gumbel_probs_1.size(1)).to(self.device)
-            predicted_value = torch.sum(gumbel_probs_1 * expected_classes, dim=1)
-            # Compute the MSE loss
-            loss1 = self.regression_loss(predicted_value.float(), target1.float())
-             # Regularization term to penalize large differences between adjacent probabilities
-            batch_size=batch["similarity"].size(0)
-            #diff_penalty = torch.sum((gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]) ** 2) / batch_size
-
-            # exclude the first index because the >5 is very different than class 4
-            diff_penalty = torch.sum((gumbel_probs_1[:, 2:] - gumbel_probs_1[:, 1:-1]) ** 2) / batch_size
-
-            #modified to include the first and last index
-            # Compute differences for adjacent columns (excluding the first and last initially)
-            #adjacent_diffs = gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]
-
-            # Compute difference for the first and second columns (to include the first column)
-            #diff_penalty  =self.compute_adjacent_diffs(gumbel_probs_1, batch_size)
-            reg_weight=0.1
-            loss1 = loss1 + reg_weight * diff_penalty
+            squared_diff_1 = (logits1.view(-1,1).float() - target1.view(-1, 1).float()) ** 2
+            # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
+            #squared_diff[target2 >= 1]=0
+            #target2[target2 >= 1] = 0
+            loss1 = squared_diff_1.view(-1, 1).mean()
         else:
-            loss1 =self.customised_ce(logits1, target1) 
+            if self.use_gumbel:
+                gumbel_probs_1 = F.gumbel_softmax(logits1, tau=10.0, hard=False)
+                #gumbel_probs_1 = F.gumbel_softmax(logits1, tau=0.0, hard=True)
+
+                # Compute the expected value (continuous) from probabilities
+                expected_classes = torch.arange(gumbel_probs_1.size(1)).to(self.device)
+                predicted_value = torch.sum(gumbel_probs_1 * expected_classes, dim=1)
+                # Compute the MSE loss
+                loss1 = self.regression_loss(predicted_value.float(), target1.float())
+                # Regularization term to penalize large differences between adjacent probabilities
+                batch_size=batch["similarity"].size(0)
+                #diff_penalty = torch.sum((gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]) ** 2) / batch_size
+
+                # exclude the first index because the >5 is very different than class 4
+                diff_penalty = torch.sum((gumbel_probs_1[:, 2:] - gumbel_probs_1[:, 1:-1]) ** 2) / batch_size
+
+                #modified to include the first and last index
+                # Compute differences for adjacent columns (excluding the first and last initially)
+                #adjacent_diffs = gumbel_probs_1[:, 1:] - gumbel_probs_1[:, :-1]
+
+                # Compute difference for the first and second columns (to include the first column)
+                #diff_penalty  =self.compute_adjacent_diffs(gumbel_probs_1, batch_size)
+                reg_weight=0.1
+                loss1 = loss1 + reg_weight * diff_penalty
+            else:
+                loss1 =self.customised_ce(logits1, target1) 
 
         if self.weights_sim2 is not None: # if there are sample weights used 
+
+            # apply log function if needed
+            if self.use_mces20_log_loss:
+                scaling_factor= (2*np.log(0.5))#divided by scaling factor just for normalizing the range between 0 and 1 again
+                logits2_for_loss=torch.log(logits2+1)/scaling_factor 
+                target2_for_loss= torch.log(target2+1)/scaling_factor
+            else:
+                logits2_for_loss=logits2
+                target2_for_loss = target2 
+
             # Calculate the squared difference for loss2
-            squared_diff = (logits2.view(-1,1).float() - target2.view(-1, 1).float()) ** 2
+            squared_diff = (logits2_for_loss.view(-1,1).float() - target2_for_loss.view(-1, 1).float()) ** 2
             # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
             #squared_diff[target2 >= 1]=0
             #target2[target2 >= 1] = 0
