@@ -66,21 +66,21 @@ class FcLayerAnalogDiscovery:
             ## apply transformation before apply cosine distance
 
             # emb0
-            emb0_transformed = self.linear2(emb0)
-            emb0_transformed= self.dropout(emb0_transformed)
-            emb0_transformed=self.relu(emb0_transformed)
-            emb0_transformed = self.linear2_cossim(emb0_transformed)
-            emb0_transformed=self.relu(emb0_transformed)
+            emb0_transformed = model.linear2(emb0)
+            emb0_transformed= model.dropout(emb0_transformed)
+            emb0_transformed=model.relu(emb0_transformed)
+            emb0_transformed = model.linear2_cossim(emb0_transformed)
+            emb0_transformed=model.relu(emb0_transformed)
 
             # emb1
-            emb1_transformed = self.linear2(emb1)
-            emb1_transformed= self.dropout(emb1_transformed)
-            emb1_transformed=self.relu(emb1_transformed)
-            emb1_transformed = self.linear2_cossim(emb1_transformed)
-            emb1_transformed=self.relu(emb1_transformed)
+            emb1_transformed = model.linear2(emb1)
+            emb1_transformed= model.dropout(emb1_transformed)
+            emb1_transformed=model.relu(emb1_transformed)
+            emb1_transformed = model.linear2_cossim(emb1_transformed)
+            emb1_transformed=model.relu(emb1_transformed)
 
             # cos sim
-            emb_sim_2 = self.cosine_similarity(emb0_transformed, emb1_transformed)
+            emb_sim_2 = model.cosine_similarity(emb0_transformed, emb1_transformed)
         else:
             emb_sim_2 = emb0 + emb1
             emb_sim_2 = model.linear2(emb_sim_2)
