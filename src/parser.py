@@ -23,7 +23,7 @@ class Parser:
                 or (at == "D_MODEL")
                 or (at == "epochs")
             )
-            is_string_attribute = (at == "extra_info")or (at=='dataset_path') or (at=='PREPROCESSING_DIR')
+            is_string_attribute = (at == "extra_info")or (at=='dataset_path') or (at=='PREPROCESSING_DIR') or (at=="BEST_MODEL_NAME") or (at=="PRETRAINED_MODEL_NAME")
             if is_integer_attribute:
                 self.parser.add_argument(f"--{at}", type=int, help=at, default=None)
             elif is_string_attribute:

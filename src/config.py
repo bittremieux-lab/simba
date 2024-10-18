@@ -25,6 +25,8 @@ class Config:
         self.THRESHOLD_MCES=20
 
         # training
+        self.USE_MCES20_LOG_LOSS=False ### apply log function to increase the weight of the differences in the low range
+        self.USE_EDIT_DISTANCE_REGRESSION=False
         self.USE_MULTITASK=True
         self.EDIT_DISTANCE_N_CLASSES=6
         self.EDIT_DISTANCE_USE_GUMBEL=False
@@ -34,7 +36,7 @@ class Config:
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 256  # transformer parameters
         self.EMBEDDING_DIM=512
-        self.use_cosine_distance = False
+        self.use_cosine_distance = True
         self.LR = 1e-4
         self.epochs = 1000
         self.BATCH_SIZE = 128
@@ -60,6 +62,9 @@ class Config:
     def derived_variables(self):
         self.MODEL_CODE = f"{self.D_MODEL}_units_{self.N_LAYERS}_layers_{self.epochs}_epochs_{self.LR}_lr_{self.BATCH_SIZE}_bs{self.extra_info}"
         self.CHECKPOINT_DIR = f"/scratch/antwerpen/209/vsc20939/data/model_checkpoints/model_checkpoints_{self.MODEL_CODE}/"
-        self.pretrained_path = self.CHECKPOINT_DIR + f"pretrained_model.ckpt"
-        self.best_model_path = self.CHECKPOINT_DIR + f"best_model.ckpt"
+        
+        self.BEST_MODEL_NAME=f"best_model.ckpt"
+        self.PRETRAINED_MODEL_NAME=f"pretrained_model.ckpt"
+        self.pretrained_path = self.CHECKPOINT_DIR + self.PRETRAINED_MODEL_NAME
+        self.best_model_path = self.CHECKPOINT_DIR + self.BEST_MODEL_NAME
         

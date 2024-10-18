@@ -117,7 +117,7 @@ print(f"Number of pairs for test: {len(molecule_pairs_test)}")
 #best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
 
 if not(config.INFERENCE_USE_LAST_MODEL) and (os.path.exists(config.CHECKPOINT_DIR + f"best_model.ckpt")):     
-    best_model_path = config.CHECKPOINT_DIR + f"best_model.ckpt"
+    best_model_path = config.CHECKPOINT_DIR + config.BEST_MODEL_NAME
 else:
     best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
 #best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps.ckpt"
@@ -213,6 +213,11 @@ def which_index_confident(p, threshold=0.90):
     else:
         return np.nan
 
+def which_index_regression(p, max_index=5):
+    ## the value of 0.2 must be the center of the second item
+    index=np.round(p*max_index)
+    return index
+
 #print(len(pred_test))
 #print(pred_test[0])
 #print(pred_test[0].shape)
@@ -229,8 +234,12 @@ for pred in pred_test: # in the batch dimension
     pred2= pred[1]
 
     #similarity1
-    flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
-    confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
+    if config.USE_EDIT_DISTANCE_REGRESSION:
+        flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
+        confident_pred_test1= flat_pred_test1
+    else:
+        flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
+        confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
 
     #similarity2
     flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
@@ -249,6 +258,10 @@ flat_pred_test1=np.array(flat_pred_test1)
 
 similarities_test2=np.array(similarities_test2)
 flat_pred_test2=np.array(flat_pred_test2)
+
+
+print(f'Max value of similarities 1: {max(similarities_test1)}')
+print(f'Min value of similarities 1: {min(similarities_test1)}')
 
 # analyze errors and good predictions
 good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1, flat_pred_test1)
