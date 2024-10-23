@@ -58,10 +58,9 @@ class FcLayerAnalogDiscovery:
         emb0 = model.relu(emb0)
         emb1 = model.relu(emb1)
 
-        # Ensure emb0 and emb1 are in the correct shape and format (if necessary)
-        # Compute emb_sim_2
+
+        # for cosine similarity, tanimoto
         if model.use_cosine_distance:
-            
             #emb_sim_2 = self.cosine_similarity(emb0, emb1)
             ## apply transformation before apply cosine distance
 
@@ -87,12 +86,38 @@ class FcLayerAnalogDiscovery:
             emb_sim_2 = model.dropout(emb_sim_2)
             emb_sim_2 = model.relu(emb_sim_2)
             emb_sim_2 = model.linear_regression(emb_sim_2)
+            
+        if model.use_edit_distance_regresion:
+            # emb0
+            emb0_transformed_1 = model.linear1(emb0)
+            emb0_transformed_1= model.dropout(emb0_transformed_1)
+            emb0_transformed_1=model.relu(emb0_transformed_1)
+            emb0_transformed_1 = model.linear1_cossim(emb0_transformed_1)
+            emb0_transformed_1=model.relu(emb0_transformed_1)
 
-        # Compute emb for classification
-        emb = emb0 + emb1
-        emb = model.linear1(emb)
-        emb = model.dropout(emb)
-        emb = model.relu(emb)
-        emb = model.classifier(emb)
+            # emb1
+            emb1_transformed_1 = model.linear1(emb1)
+            emb1_transformed_1= model.dropout(emb1_transformed_1)
+            emb1_transformed_1=model.relu(emb1_transformed_1)
+            emb1_transformed_1 = model.linear1_cossim(emb1_transformed_1)
+            emb1_transformed_1=model.relu(emb1_transformed_1)
 
+            # cos sim
+            emb = model.cosine_similarity(emb0_transformed_1, emb1_transformed_1)
+
+            #round to integers
+            emb=emb*5
+            emb = emb + emb.round().detach() - emb.detach() # trick to make round differentiable
+            emb=emb/5
+        else:
+            emb = emb0 + emb1
+            emb = model.linear1(emb)
+            emb = model.dropout(emb)
+            emb = model.relu(emb)
+            emb= model.classifier(emb)
+        
+        #if self.gumbel_softmax:
+        #    emb = self.gumbel_softmax(emb)
+        #else:
+        #    emb = F.softmax(emb, dim=-1)
         return emb, emb_sim_2

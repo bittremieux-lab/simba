@@ -16,17 +16,23 @@ from src.config import Config
 class Plotting:
 
     @staticmethod
-    def plot_n_pca(list_pca_data, list_labels,alpha=0.5):
-        for pca_data, label in zip(list_pca_data, list_labels):
-            Plotting.plot_pca(pca_data, label,alpha=alpha)
+    def plot_n_pca(list_pca_data, list_labels,colors, alpha=0.5):
+        # Generate a list of colors from a colormap
+        num_labels=len(list_labels)
+        #cmap = plt.cm.get_cmap('nipy_spectral', num_labels)  # You can choose other colormaps as well
+        #cmap = plt.cm.get_cmap( 'viridis',num_labels )  # You can choose other colormaps as well
+        cmap = plt.colormaps['tab20']
+
+        for pca_data, label, color in zip(list_pca_data, list_labels, colors):
+            Plotting.plot_pca(pca_data, label,alpha=alpha,color= color)
         plt.legend()
         plt.grid()
         
     @staticmethod
-    def plot_pca(pca_data, label='',alpha=0.5):
+    def plot_pca(pca_data, label='',alpha=0.5, color=None):
         # Plot PCA projection
         #plt.figure(figsize=(8, 6))
-        plt.scatter(pca_data[:, 0], pca_data[:, 1], label=label, alpha=alpha)
+        plt.scatter(pca_data[:, 0], pca_data[:, 1], label=label, alpha=alpha, color=color,)
         plt.title('PCA Projection')
         plt.xlabel('Principal Component 1')
         plt.ylabel('Principal Component 2')
@@ -70,13 +76,15 @@ class Plotting:
         roc_file_path="./roc_curve.png",
         label="",
         color="r",
-        linestyle='',
+        linestyle='-',
     ):
         """
         Compute and plot the Receiver Operating Characteristic (ROC) curve.
 
         """
         fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+
+        print(f'fpr with tpr=0.70 {fpr[tpr>=0.70]}')
         roc_auc = auc(fpr, tpr)
 
         # plt.figure(figsize=(8, 8))
@@ -86,7 +94,8 @@ class Plotting:
             color=color,
             lw=2,
             label=f"{label} AUC={roc_auc:.2f}",
-            linestyle=linestyle
+            linestyle=linestyle,
+            alpha=1,
         )
 
         #print(f"tpr: {tpr}")
@@ -96,9 +105,10 @@ class Plotting:
         plt.ylim([0.0, 1.0])
         plt.xlabel("False Positive Rate (FPR)")
         plt.ylabel("True Positive Rate (TPR)")
-        plt.grid()
+        
         plt.title(title)
         plt.legend(loc="lower right")
+        plt.grid()
         # plt.savefig(roc_file_path)
         return tpr, fpr
 
@@ -132,11 +142,13 @@ class Plotting:
         colors=["r", "b"],
         fontsize=18,
     ):  # Add fontsize parameter
-
+        
         plt.figure(figsize=(10, 10))  # Increase the figure size
 
         for y_scores, label, color in zip(y_scores_list, labels, colors):
             fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+
+            print(fpr[tpr>=0.70])
             roc_auc = auc(fpr, tpr)
 
             plt.plot(
