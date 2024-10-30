@@ -30,7 +30,7 @@ from src.weight_sampling import WeightSampling
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [[20, 4, 3, 2, 1,  0,],
+        penalty_matrix = [[20, 0, 0, 0, 0,  0,],
                           
                           [4, 20, 4, 3, 2,  1,] ,
 
@@ -41,32 +41,14 @@ class CustomizedCrossEntropyLoss(nn.Module):
                           [1, 2, 3, 4,  20,  4,],
 
                           [0, 1, 2, 3,  4,  20,]]
-
-        #penalty_matrix = [[20, 0, 0, 0, 0,  0,],
-                          
-         #                 [0, 20, 5, 0, 0, 0,] ,
-
-         #                 [0, 5,  20, 5, 0, 0,],
-
-          #                [0, 0,   5,  20, 5, 0,],
-
-           #               [0, 0, 0, 5,  20,  5,],
-
-            #              [0, 0, 0, 0,  5,  20,]]
-        
-        #normalize:
-        #penalty_matrix = penalty_matrix/(np.sum(penalty_matrix, axis=0))
-        
-        #penalty_matrix = [[0, 1, 2, 3, 4, 5,],
-        #                  [1, 0, 1, 2, 3, 4,],
-        #                  [2, 1 ,0, 1, 2, 3,],
-        #                  [3, 2, 1, 0, 1, 2,],
-        #                  [4, 3, 2, 1, 0, 1,],
-        #                  [5, 4, 3, 2, 1, 0,]]
         
         self.n_classes=n_classes
         self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        #normalize the penalty matrix
         self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device)/np.max(penalty_matrix)
+        self.penalty_matrix = self.penalty_matrix / self.penalty_matrix.sum(dim=1, keepdim=True)
+
 
     def forward(self, logits, target):
         #batch_size = logits.size(0)
@@ -190,7 +172,12 @@ class EmbedderMultitask(Embedder):
             emb_sim_2 = self.dropout(emb_sim_2)
             emb_sim_2 = self.relu(emb_sim_2)
             emb_sim_2 = self.linear_regression(emb_sim_2)
-            
+
+            # avoid  values higher than 1
+            x =self.relu(emb_sim_2-1)
+            emb_sim_2 = emb_sim_2 - x
+
+
         if self.use_edit_distance_regresion:
             # emb0
             emb0_transformed_1 = self.linear1(emb0)
@@ -270,7 +257,25 @@ class EmbedderMultitask(Embedder):
             ) / batch_size
 
             return diff_penalty
-
+    def ordinal_loss(self, logits, target):
+        # logits: (batch_size, num_classes)
+        # target: (batch_size,)
+        batch_size, num_classes = logits.size()
+        
+        # Apply sigmoid to logits to get probabilities
+        prob = torch.sigmoid(logits)  # (batch_size, num_classes)
+        
+        # Create a binary target matrix
+        # For each sample, positions less than or equal to the target class are 1, others are 0
+        target_matrix = torch.zeros((batch_size, num_classes)).to(logits.device)
+        for i in range(batch_size):
+            target_class = target[i].long()
+            target_matrix[i, :target_class + 1] = 1.0
+        
+        # Compute the binary cross-entropy loss
+        loss = F.binary_cross_entropy(prob, target_matrix, reduction='mean')
+        return loss
+        
     def step(self, batch, batch_idx, threshold=0.5, 
                 weight_loss2=None, #loss2 (regresion) is 100 times less than loss1 (classification)
                 ):
@@ -324,6 +329,7 @@ class EmbedderMultitask(Embedder):
                 reg_weight=0.1
                 loss1 = loss1 + reg_weight * diff_penalty
             else:
+                #loss1 = self.ordinal_loss(logits1, target1)
                 loss1 =self.customised_ce(logits1, target1) 
 
         if self.weights_sim2 is not None: # if there are sample weights used 

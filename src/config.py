@@ -25,7 +25,7 @@ class Config:
         self.THRESHOLD_MCES=20
 
         # training
-        self.USE_MCES20_LOG_LOSS=False ### apply log function to increase the weight of the differences in the low range
+        self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range
         self.USE_EDIT_DISTANCE_REGRESSION=False
         self.USE_MULTITASK=True
         self.EDIT_DISTANCE_N_CLASSES=6
@@ -36,7 +36,7 @@ class Config:
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 256  # transformer parameters
         self.EMBEDDING_DIM=512
-        self.use_cosine_distance = True
+        self.use_cosine_distance = False
         self.LR = 1e-4
         self.epochs = 1000
         self.BATCH_SIZE = 128
