@@ -45,7 +45,7 @@ class EmbedderClass(Embedder):
 
         self.use_cosine_library = True
 
-        print(f"Using cosine library from Pytorch?: {self.use_cosine_library}")
+        #print(f"Using cosine library from Pytorch?: {self.use_cosine_library}")
         
     def step(self, batch, batch_idx, threshold=0.5):
         """A training/validation/inference step."""

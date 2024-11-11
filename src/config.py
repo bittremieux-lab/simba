@@ -25,6 +25,7 @@ class Config:
         self.THRESHOLD_MCES=20
 
         # training
+        self.USE_MOLECULAR_FINGERPRINTS=False
         self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range
         self.USE_EDIT_DISTANCE_REGRESSION=False
         self.USE_MULTITASK=True
@@ -32,7 +33,7 @@ class Config:
         self.EDIT_DISTANCE_USE_GUMBEL=False
         self.USE_TANIMOTO =False # using Tanimoto or MCES20 for training
         self.MCES20_MAX_VALUE=40 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair
-        self.USE_LOSS_WEIGHTS_SECOND_SIMILARITY= True # use weights for training the second similarity of multitasking
+        self.USE_LOSS_WEIGHTS_SECOND_SIMILARITY= False # use weights for training the second similarity of multitasking
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 256  # transformer parameters
         self.EMBEDDING_DIM=512

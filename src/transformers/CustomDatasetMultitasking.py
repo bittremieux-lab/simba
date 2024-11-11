@@ -17,6 +17,8 @@ class CustomDatasetMultitasking(Dataset):
         precursor_mass=None,
         precursor_charge=None,
         df_smiles=None,
+        use_fingerprints=False,
+        fingerprint_0=None,
     ):
         self.data = your_dict
         self.keys = list(your_dict.keys())
@@ -28,6 +30,9 @@ class CustomDatasetMultitasking(Dataset):
         self.precursor_mass = precursor_mass
         self.precursor_charge = precursor_charge
         self.df_smiles = df_smiles  ### df with rows smiles, indexes
+        self.use_fingerprints=use_fingerprints
+        if self.use_fingerprints:
+            self.fingerprint_0=fingerprint_0 
 
     def __len__(self):
         return len(self.data[self.keys[0]])
@@ -55,6 +60,10 @@ class CustomDatasetMultitasking(Dataset):
         dictionary["precursor_charge_0"] = np.zeros((len_data, 1), dtype=np.int32)
         dictionary["precursor_mass_1"] = np.zeros((len_data, 1), dtype=np.float32)
         dictionary["precursor_charge_1"] = np.zeros((len_data, 1), dtype=np.int32)
+
+        if self.use_fingerprints:
+            print('Defining fingerprints ...')
+            dictionary["fingerprint_0"] = np.zeros((len_data, 2048), dtype=np.int32)
 
         for idx in tqdm((range(0, len_data))):
             sample_unique = {k: self.data[k][idx] for k in self.keys}
@@ -93,6 +102,9 @@ class CustomDatasetMultitasking(Dataset):
             dictionary["similarity2"][idx] = sample_unique["similarity2"].astype(
                 np.float32
             )
+
+            if self.use_fingerprints:
+                dictionary["fingerprint_0"][idx] =self.fingeprint_0[indexes_original_0].astype(np.float32)
 
         return dictionary
 
@@ -153,6 +165,10 @@ class CustomDatasetMultitasking(Dataset):
         sample["similarity"] = sample_unique["similarity"].astype(np.float32)
         sample["similarity2"] = sample_unique["similarity2"].astype(np.float32)
 
+        if self.use_fingerprints:
+            sample["fingerprint_0"] = self.fingerprint_0[int(indexes_unique_0[0])].astype(
+            np.float32
+        )
 
         # print(sample["mz_0"]).shape
         # print(sample["intensity_0"].shape)

@@ -35,8 +35,7 @@ class EmbedderMultitaskPretrain(EmbedderMultitask):
                 weight_loss2=None, #loss2 (regresion) is 100 times less than loss1 (classification)
                 ):
         """Compute the loss for pretraining."""
-        # Forward pass
-        mz_pred = self(batch)
+        
         # Mask 70% of the non-zero m/z values
         mask = (batch["mz_0"] != 0).float()  # Shape: (batch_size, seq_len)
         num_nonzero = mask.sum(dim=1, keepdim=True)
@@ -48,9 +47,19 @@ class EmbedderMultitaskPretrain(EmbedderMultitask):
             perm = torch.randperm(indices.size(0))
             selected_indices = indices[perm[:num_to_mask[i].item()]]
             predict_mask[i, selected_indices] = 1
+            
+            
+            
+        # Forward pass
+
+        y_target= batch["mz_0"] * predict_mask
+        batch["mz_0"]= batch["mz_0"] *(1-predict_mask)
+
+        mz_pred = self(batch) 
+
 
         # Compute loss only on the masked positions
-        loss = self.loss_fn(mz_pred * predict_mask, batch["mz_0"] * predict_mask)
+        loss = self.loss_fn(mz_pred * predict_mask, y_target)
         return loss
 
     def configure_optimizers(self):
