@@ -23,7 +23,7 @@ class MoleculePairsOpt(MolecularPairsSet):
         #)
         self.indexes_tani = indexes_tani_unique
         self.tanimotos=tanimotos
-
+        
     def __add__(self, other):
         # only to be used when the spectrums are the same
 

@@ -30,7 +30,7 @@ from src.weight_sampling import WeightSampling
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [[20, 0, 0, 0, 0,  0,],
+        penalty_matrix = [[20, 4, 3, 2, 1,  0,],
                           
                           [4, 20, 4, 3, 2,  1,] ,
 
@@ -80,6 +80,7 @@ class EmbedderMultitask(Embedder):
         weights_sim2=None, #weights of second similarity
         use_edit_distance_regresion=False,
         use_mces20_log_loss=True, 
+        use_fingerprints=False,
 ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -115,6 +116,12 @@ class EmbedderMultitask(Embedder):
 
         self.use_mces20_log_loss=use_mces20_log_loss
 
+        self.use_fingerprints=use_fingerprints 
+        if self.use_fingerprints:
+            print(' fingerprints  enabled! ...')
+            self.linear_fingerprint_0= nn.Linear(2048, d_model)
+            self.linear_fingerprint_1= nn.Linear(d_model, d_model)
+
     def forward(self, batch, return_spectrum_output=False):
         """The inference pass"""
 
@@ -142,8 +149,25 @@ class EmbedderMultitask(Embedder):
         emb0 = emb0[:, 0, :]
         emb1 = emb1[:, 0, :]
 
+        
+
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
+
+        ## if using fingerprints
+        if self.use_fingerprints:
+            fing_0= batch['fingerprint_0'].float()
+            fing_0 = self.linear_fingerprint_0(fing_0)
+            fing_0 = self.relu(fing_0)
+            fing_0= self.dropout(fing_0)
+            fing_0 = self.linear_fingerprint_1(fing_0)
+            fing_0 = self.relu(fing_0)
+            fing_0= self.dropout(fing_0)
+            
+            emb0 =emb0  + fing_0
+            emb0 = self.relu(emb0)
+            
+
 
         # for cosine similarity, tanimoto
         if self.use_cosine_distance:
@@ -336,9 +360,10 @@ class EmbedderMultitask(Embedder):
 
             # apply log function if needed
             if self.use_mces20_log_loss:
-                scaling_factor= (2*np.log(0.5))#divided by scaling factor just for normalizing the range between 0 and 1 again
-                logits2_for_loss=torch.log(logits2+1)/scaling_factor 
-                target2_for_loss= torch.log(target2+1)/scaling_factor
+                #scaling_factor= (2*np.log(0.5))#divided by scaling factor just for normalizing the range between 0 and 1 again
+                scaling_factor= np.log(2)
+                logits2_for_loss= torch.log(2-logits2)/scaling_factor 
+                target2_for_loss= torch.log(2-target2)/scaling_factor
             else:
                 logits2_for_loss=logits2
                 target2_for_loss = target2 

@@ -5,6 +5,7 @@ from tqdm import tqdm
 from src.molecule_pairs_opt import MoleculePairsOpt
 import copy
 from src.ordinal_classification.ordinal_classification import OrdinalClassification
+from src.tanimoto import Tanimoto
 
 class LoadDataMultitasking:
     """
@@ -17,6 +18,7 @@ class LoadDataMultitasking:
         max_num_peaks=100,
         training=False,  # shuffle the spectrum 0 and 1 for data augmentation
         N_classes=6,
+        use_fingerprints=False,
     ):
         """
         preprocess the spectra and convert it for being used in Pytorch
@@ -78,6 +80,11 @@ class LoadDataMultitasking:
 
         similarity2= molecule_pairs.tanimotos.reshape(-1,1)
 
+        if use_fingerprints:
+            print('Computing molecular fingerprints')
+            fingerprint_0= np.array([np.array(Tanimoto.compute_fingerprint(s.params['smiles'])) for s in molecule_pairs_input.spectrums])
+        else:
+            fingerprint_0= np.array([0 for m in molecule_pairs_input.spectrums])
 
         print("Creating dictionaries")
         dictionary_data = {
@@ -85,7 +92,7 @@ class LoadDataMultitasking:
             "index_unique_1": molecule_pairs_input.indexes_tani[:, 1].reshape(-1, 1),
             "similarity": similarity,
             "similarity2" : similarity2,
-            # "fingerprint": fingerprints,
+            # "fingerprint_0": fingerprint_0,
         }
 
         return CustomDatasetMultitasking(
@@ -96,4 +103,6 @@ class LoadDataMultitasking:
             precursor_mass=precursor_mass,
             precursor_charge=precursor_charge,
             df_smiles=molecule_pairs_input.df_smiles,
+            use_fingerprints=use_fingerprints,
+            fingerprint_0=fingerprint_0,
         )

@@ -233,7 +233,7 @@ class LoadMCES:
         return ed_normalized
 
     @staticmethod
-    def normalize_mces20(mcs20, max_value, remove_negative_values=True):
+    def normalize_mces20(mcs20, max_value, remove_negative_values=False):
         # asuming series
         # normalize edit distance. the higher the mces the lower the similarity
         #mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
