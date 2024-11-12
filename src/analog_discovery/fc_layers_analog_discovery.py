@@ -83,7 +83,6 @@ class FcLayerAnalogDiscovery:
         else:
             emb_sim_2 = emb0 + emb1
             emb_sim_2 = model.linear2(emb_sim_2)
-            emb_sim_2 = model.dropout(emb_sim_2)
             emb_sim_2 = model.relu(emb_sim_2)
             emb_sim_2 = model.linear_regression(emb_sim_2)
 
