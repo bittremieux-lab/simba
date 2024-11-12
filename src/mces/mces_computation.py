@@ -429,3 +429,47 @@ class MCES:
         mces_normalized_epsilon= mces_normalized +epsilon
 
         return scale *((1/mces_normalized_epsilon)-1)
+
+
+
+    def compute_mces_list_smiles(smiles_0, smiles_1, threshold_mces=20):
+        input_csv_file=f'temp/smiles_myopic_input.csv'
+        output_csv_file=f'temp/smiles_myopic_output.csv'
+
+        df= pd.DataFrame()
+
+        df['smiles_0']=smiles_0
+        df['smiles_1']=smiles_1
+
+        df[['smiles_0', 'smiles_1']].to_csv(input_csv_file, header=False)
+
+        # compute mces
+        #command = 'myopic_mces  ./input.csv ./output.csv'
+        print('Running myopic ...')
+        command = ['myopic_mces']
+        #command = ['myopic_mces', f'./input_{str(id)}.csv', f'./output_{str(id)}.csv']
+
+        # Add the argument --num_jobs 15
+        #command.extend(['--num_jobs', '32'])
+        command.extend([input_csv_file])
+        command.extend([output_csv_file])
+        command.extend(['--num_jobs', '1'])
+
+        # Define threshold
+        command.extend(['--threshold', str(int(threshold_mces))])
+
+        command.extend(['--solver_onethreaded'])
+        command.extend(['--solver_no_msg'])
+
+        #x = subprocess.run(command,capture_output=True)
+        subprocess.run(command)
+        print('Finished myopic')
+
+        # read results
+        print('reading csv')
+        results= pd.read_csv(output_csv_file, header=None)
+        os.system(f'rm {input_csv_file}')
+        os.system(f'rm {output_csv_file}')
+        df['mces'] = results[2] # the column 2 is the mces result
+
+        return df

@@ -19,7 +19,7 @@ class FcLayerAnalogDiscovery:
             use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
             lr=config.LR,
             use_cosine_distance=config.use_cosine_distance,
-            strict=True)
+            strict=False)
 
     @staticmethod
     def compute_all_combinations(model_path, emb0, emb1, config):
