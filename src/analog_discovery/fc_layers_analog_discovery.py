@@ -90,6 +90,9 @@ class FcLayerAnalogDiscovery:
             # avoid  values higher than 1
             x =model.relu(emb_sim_2-1)
             emb_sim_2 = emb_sim_2 - x
+
+
+
             
         if model.use_edit_distance_regresion:
             # emb0
