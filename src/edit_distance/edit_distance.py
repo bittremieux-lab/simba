@@ -75,6 +75,10 @@ class EditDistance:
         return modification_edges
 
 
+    def get_edit_distance_from_smiles(smiles1, smiles2)
+        mol1=Chem.MolFromSmiles(smiles1)
+        mol2=Chem.MolFromSmiles(smiles2)
+        return simba_get_edit_distance(mol1, mol2)
 
     def simba_get_edit_distance(mol1, mol2):
         """
