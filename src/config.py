@@ -23,8 +23,10 @@ class Config:
         self.MIN_MASS_DIFF = 0  # Da
         self.MAX_MASS_DIFF = 200  # Da
         self.THRESHOLD_MCES=20
-
+        self.USE_PRECURSOR_MZ_FOR_MODEL=True 
+        
         # training
+        self.ADD_HIGH_SIMILARITY_PAIRS=True
         self.USE_MOLECULAR_FINGERPRINTS=False
         self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range
         self.USE_EDIT_DISTANCE_REGRESSION=False

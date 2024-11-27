@@ -22,7 +22,7 @@ class Preprocessor:
         fragment_tol_mode="ppm",
         min_intensity=0.01,
         #max_num_peaks=100,
-        max_num_peaks=20,
+        max_num_peaks=40,
         scale_intensity="root",
     ):
         for i, spectrum in tqdm(enumerate(spectrums)):
@@ -50,7 +50,8 @@ class Preprocessor:
         fragment_tol_mass=10,
         fragment_tol_mode="ppm",
         min_intensity=0.01,
-        max_num_peaks=100,
+        #max_num_peaks=100,
+        max_num_peaks=40,
         scale_intensity="root",
     ):
 

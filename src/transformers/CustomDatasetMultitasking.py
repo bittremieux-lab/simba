@@ -11,7 +11,7 @@ class CustomDatasetMultitasking(Dataset):
         self,
         your_dict,
         training=False,
-        prob_aug=0.1,
+        prob_aug=0.2,
         mz=None,
         intensity=None,
         precursor_mass=None,
@@ -178,9 +178,9 @@ class CustomDatasetMultitasking(Dataset):
         # Convert your sample to PyTorch tensors if needed
         # e.g., use torch.tensor(sample) if sample is a numpy array
 
-        #if self.training:
-        #    if random.random() < self.prob_aug:
-        #        # augmentation
-        #        sample = Augmentation.augment(sample)
+        if self.training:
+            if random.random() < self.prob_aug:
+                # augmentation
+                sample = Augmentation.augment(sample)
 
         return sample
