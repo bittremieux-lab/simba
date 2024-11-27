@@ -181,9 +181,11 @@ best_model = EmbedderMultitask.load_from_checkpoint(
     use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
     use_element_wise=True,
     use_cosine_distance=config.use_cosine_distance,
+    use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
     
 )
 
+best_model.eval()
 
 # ## Postprocessing
 
@@ -200,22 +202,31 @@ similarities_test1, similarities_test2 = Postprocessing.get_similarities_multita
 
 
 # In[ ]:
+def softmax(x):
+        e_x = np.exp(x)  # Subtract max(x) for numerical stability
+        return e_x / e_x.sum()
 
 
 def which_index(p, threshold=0.5):
     return np.argmax(p)
 
-def which_index_confident(p, threshold=0.90):
+def which_index_confident(p, threshold=0.50):
     # only predict confident predictions
-    highest_pred = np.argmax(p)
-    if p[highest_pred]>threshold:
+    p_softmax= softmax(p)
+    highest_pred = np.argmax(p_softmax)
+    if p_softmax[highest_pred]>threshold:
         return np.argmax(p)
     else:
         return np.nan
 
 def which_index_regression(p, max_index=5):
     ## the value of 0.2 must be the center of the second item
+
     index=np.round(p*max_index)
+    # ad hoc solution
+    #index=(-(np.round(p*max_index)))
+
+    #index=np.clip(index, 0, 5)
     return index
 
 #print(len(pred_test))
@@ -224,6 +235,7 @@ def which_index_regression(p, max_index=5):
 #print(f'Shape of pred_test: {len(pred_test)}')
 # flat the results
 flat_pred_test1 = []
+raw_flat_pred_test1 = []
 confident_pred_test1=[]
 
 flat_pred_test2 = []
@@ -236,6 +248,8 @@ for pred in pred_test: # in the batch dimension
     #similarity1
     if config.USE_EDIT_DISTANCE_REGRESSION:
         flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
+        raw_flat_pred_test1 = raw_flat_pred_test1 + [p.item() for p in pred1]
+        #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.numpy())[0] for p in pred1]
         confident_pred_test1= flat_pred_test1
     else:
         flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
@@ -244,7 +258,20 @@ for pred in pred_test: # in the batch dimension
     #similarity2
     flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
 
+# In[250]:
+#raw_flat_pred_test1=np.array(raw_flat_pred_test1)
+#plt.figure()
+#error_x= np.random.randint(0,100,raw_flat_pred_test1.shape[0])/200 - 0.5
+#error_y= np.random.randint(0,100,raw_flat_pred_test1.shape[0])/200 - 0.5
+#plt.scatter(5-(np.array(similarities_test1))+error_x, 5-5*(raw_flat_pred_test1)+error_y, alpha=0.1)
+#plt.xlabel('edit distance')
+#plt.ylabel('prediction')
+#plt.grid()
+#plt.savefig(config.CHECKPOINT_DIR + f"raw_edit_distance_scatter_plot_{config.MODEL_CODE}.png")
 
+
+
+print(f'Example of edit distance prediction: {flat_pred_test1}')
 # convert to numpy
 flat_pred_test1=np.array( flat_pred_test1)
 confident_pred_test1=np.array(confident_pred_test1)
@@ -321,6 +348,9 @@ def plot_cm(true,preds, config, file_name='cm.png'):
     plt.figure(figsize=(10, 7))
     labels= ['>5', '4', '3', '2' , '1', '0']
     sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',xticklabels=labels, yticklabels=labels)
+    #Increase font size for x and y tick labels
+    plt.xticks(fontsize=12)  # Adjust as needed
+    plt.yticks(fontsize=12)  # Adjust as needed
     plt.xlabel('Predicted Labels')
     plt.ylabel('True Labels')
     plt.title(f'Confusion Matrix (Normalized to Percentages), acc:{accuracy:.2f}, samples: {preds.shape[0]}')
@@ -345,10 +375,14 @@ print(f'Correlation of model (confident): {confident_corr_model1}')
 
 plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1, config, file_name='confident_cm.png')
 # In[250]:
-
-
-plt.scatter(similarities_test1, flat_pred_test1, alpha=0.01)
-
+plt.figure()
+error_x= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
+error_y= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
+plt.scatter(5-(similarities_test1)+error_x, 5-flat_pred_test1+error_y, alpha=0.1)
+plt.xlabel('edit distance')
+plt.ylabel('prediction')
+plt.grid()
+plt.savefig(config.CHECKPOINT_DIR + f"edit_distance_scatter_plot_{config.MODEL_CODE}.png")
 
 
 ####### SECOND SIMILARITY ######
@@ -395,9 +429,13 @@ def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bi
 
         list_elements1_temp = list_elements1[(list_elements1>=low) & (list_elements1<high)] 
         list_elements2_temp = list_elements2[(list_elements1>=low) & (list_elements1<high)] 
+
+        #randomize the arrays
         if len(list_elements1_temp)>0:
-            output_elements1 = np.concatenate((output_elements1,list_elements1_temp[0:min_bin]))
-            output_elements2 = np.concatenate((output_elements2,list_elements2_temp[0:min_bin]))
+            np.random.seed(42)
+            random_indexes=np.random.randint(0,list_elements1_temp.shape[0], min_bin)
+            output_elements1 = np.concatenate((output_elements1,list_elements1_temp[random_indexes]))
+            output_elements2 = np.concatenate((output_elements2,list_elements2_temp[random_indexes]))
 
     return output_elements1, output_elements2
 
@@ -435,11 +473,22 @@ if not(config.USE_TANIMOTO): #if using mces20, apply de-normalization to obtain 
     
 print(f'Correlation of tanimoto model: {corr_model2}')
 sns.set_theme(style="ticks")
-plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
+plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1, gridsize=15))
 # Set x and y labels
 plot.set_axis_labels("Ground truth Similarity", "Prediction", fontsize=12)
 plot.fig.suptitle(f"Spearman Correlation:{corr_model2}", fontsize=16)
+# Set x-axis limits
+plot.ax_joint.set_xlim(0, 40)
+# Set x-axis limits
+plot.ax_joint.set_ylim(0, 40)
 plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
 
 
+
+## save scatter plot
+plt.scatter(similarities_test2, flat_pred_test2, alpha=0.5)
+plt.xlabel('ground truth')
+plt.ylabel('prediction')
+plt.grid()
+plt.savefig(config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png")
 
