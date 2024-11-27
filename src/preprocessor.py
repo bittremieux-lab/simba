@@ -35,6 +35,7 @@ class Preprocessor:
                 max_num_peaks=max_num_peaks,
                 scale_intensity=scale_intensity,
             )
+
         # except:
         #    print('Error preprocessing spectrum')
 
