@@ -73,12 +73,12 @@ indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSI
                             prefix='indexes_tani_incremental_train', 
                             use_edit_distance=config.USE_EDIT_DISTANCE, 
                             use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=True)
+                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
 indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
                             prefix='indexes_tani_incremental_val', 
                             use_edit_distance=config.USE_EDIT_DISTANCE, 
                             use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=True)
+                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
 
 
 # assign features
@@ -314,7 +314,7 @@ print(f'SIMILARITY 1: Ranges of similarity for dataset train: {bins}')
 # count the number of samples between 
 counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), 
                                                     number_bins=5, 
-                                                    bin_sim_1=True, 
+                                                    bin_sim_1=False, 
                                                     max_value=1)
 
 print(f'SIMILARITY 2: Distribution of similarity for dataset train: {counting2}')
@@ -395,6 +395,9 @@ model = EmbedderMultitask(
     use_cosine_distance=config.use_cosine_distance,
     use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
     weights_sim2=weights_sim2,
+    use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+    use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+    use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
 )
 
 # Create a model:

@@ -116,12 +116,29 @@ class FcLayerAnalogDiscovery:
             emb = emb + emb.round().detach() - emb.detach() # trick to make round differentiable
             emb=emb/5
         else:
-            emb = emb0 + emb1
-            emb = model.linear1(emb)
-            emb = model.dropout(emb)
-            emb = model.relu(emb)
-            emb= model.classifier(emb)
-        
+
+            if not(hasattr(model, 'linear1_2')):  ## if it does not have a linea1_2 layer
+                emb = emb0 + emb1
+                emb = model.linear1(emb)
+                emb = model.dropout(emb)
+                emb = model.relu(emb)
+                emb= model.classifier(emb)
+            else:
+                emb_0_ = model.linear1(emb0)
+                emb_0_ = model.relu(emb_0_)
+                emb_0_ = model.linear1_2(emb_0_)
+
+                emb_1_ = model.linear1(emb1)
+                emb_1_ = model.relu(emb_1_)
+                emb_1_ = model.linear1_2(emb_1_)
+
+                emb = emb_0_ + emb_1_
+                
+                #emb = self.dropout(emb)
+                emb = model.relu(emb)
+                emb= model.classifier(emb)
+
+
         #if self.gumbel_softmax:
         #    emb = self.gumbel_softmax(emb)
         #else:

@@ -49,6 +49,7 @@ class WeightSampling:
     @staticmethod
     def compute_weights_categories(binned_list):
         freq = np.array([len(r) for r in binned_list])
+        
         weights = np.sum(freq) / freq
         weights = weights / np.sum(weights)
         bin_size= 1/(len(binned_list)-1)

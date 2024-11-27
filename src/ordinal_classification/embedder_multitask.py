@@ -30,17 +30,26 @@ from src.weight_sampling import WeightSampling
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [[20, 4, 3, 2, 1,  0,],
+        #penalty_matrix = [[20, 4, 3, 2, 1,  0,],
+        #                  
+        #                  [4, 20, 4, 3, 2,  1,] ,
+        #
+        #                  [3, 4, 20, 4, 3,  2,],
+        #                  [2, 3,  4, 20, 4,  3,],
+        #                  [1, 2, 3, 4,  20,  4,],
+        #                  [0, 1, 2, 3,  4,  20,]]
+
+        penalty_matrix = [[20, 4, 0, 0, 0,  0,],
                           
-                          [4, 20, 4, 3, 2,  1,] ,
+                          [4, 20, 4, 0, 0,  0,] ,
 
-                          [3, 4, 20, 4, 3,  2,],
+                          [0, 4, 20, 4, 0,  0,],
 
-                          [2, 3,  4, 20, 4,  3,],
+                          [0, 0,  4, 20, 4,  0,],
 
-                          [1, 2, 3, 4,  20,  4,],
+                          [0, 0, 0, 4,  20,  4,],
 
-                          [0, 1, 2, 3,  4,  20,]]
+                          [0, 0, 0, 0,  4,  20,]]
         
         self.n_classes=n_classes
         self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -81,6 +90,7 @@ class EmbedderMultitask(Embedder):
         use_edit_distance_regresion=False,
         use_mces20_log_loss=True, 
         use_fingerprints=False,
+        use_precursor_mz_for_model=True,
 ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -106,6 +116,8 @@ class EmbedderMultitask(Embedder):
         self.weights_sim2=weights_sim2
 
         self.linear1 = nn.Linear(d_model, d_model)
+        self.linear1_2 = nn.Linear(d_model, d_model)
+
         self.linear2 = nn.Linear(d_model, d_model)
         self.linear2_cossim = nn.Linear(d_model, d_model) #extra linear transformation in case cosine similarity i sused
 
@@ -122,16 +134,24 @@ class EmbedderMultitask(Embedder):
             self.linear_fingerprint_0= nn.Linear(2048, d_model)
             self.linear_fingerprint_1= nn.Linear(d_model, d_model)
 
+        self.use_precursor_mz_for_model=use_precursor_mz_for_model
+
     def forward(self, batch, return_spectrum_output=False):
         """The inference pass"""
 
+        if self.use_precursor_mz_for_model:
+            mz_0=batch["precursor_mass_0"].float()
+            mz_1 =batch["precursor_mass_1"].float()
+        else:
+            mz_0=torch.zeros_like(batch["precursor_mass_0"].float())
+            mz_1=torch.zeros_like(batch["precursor_mass_1"].float())
         # extra data
         kwargs_0 = {
-            "precursor_mass": batch["precursor_mass_0"].float(),
+            "precursor_mass": mz_0,
             "precursor_charge": batch["precursor_charge_0"].float(),
         }
         kwargs_1 = {
-            "precursor_mass": batch["precursor_mass_1"].float(),
+            "precursor_mass": mz_1,
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
@@ -225,9 +245,20 @@ class EmbedderMultitask(Embedder):
             emb = emb + emb.round().detach() - emb.detach() # trick to make round differentiable
             emb=emb/5
         else:
-            emb = emb0 + emb1
-            emb = self.linear1(emb)
-            emb = self.dropout(emb)
+            #emb = emb0 + emb1
+            #emb = self.linear1(emb)
+
+            emb_0_ = self.linear1(emb0)
+            emb_0_ = self.relu(emb_0_)
+            emb_0_ = self.linear1_2(emb_0_)
+
+            emb_1_ = self.linear1(emb1)
+            emb_1_ = self.relu(emb_1_)
+            emb_1_ = self.linear1_2(emb_1_)
+
+            emb = emb_0_ + emb_1_
+            
+            #emb = self.dropout(emb)
             emb = self.relu(emb)
             emb= self.classifier(emb)
         
@@ -321,7 +352,6 @@ class EmbedderMultitask(Embedder):
         if self.use_edit_distance_regresion:
             # compress the range
             target1 = target1/5
-
             squared_diff_1 = (logits1.view(-1,1).float() - target1.view(-1, 1).float()) ** 2
             # remove the impact of sim=1 by making target2 ==0 when it is equal to 1
             #squared_diff[target2 >= 1]=0
@@ -377,7 +407,7 @@ class EmbedderMultitask(Embedder):
             weight_mask = WeightSampling.compute_sample_weights(molecule_pairs=None, 
                                                                 weights=self.weights_sim2, 
                                                                 use_molecule_pair_object=False,
-                                                                bining_sim1=True,
+                                                                bining_sim1=False,
                                                                 targets=target2.cpu().numpy(),
                                                                 normalize=False,)
 
