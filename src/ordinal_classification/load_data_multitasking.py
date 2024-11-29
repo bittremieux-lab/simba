@@ -38,7 +38,8 @@ class LoadDataMultitasking:
         pp = Preprocessor()
         print("Preprocessing all the data ...")
         molecule_pairs.spectrums_original = pp.preprocess_all_spectrums(
-            molecule_pairs.spectrums_original
+            molecule_pairs.spectrums_original,
+            training=training,
         )
 
         print("Finished preprocessing ")

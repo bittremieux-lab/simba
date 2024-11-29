@@ -5,6 +5,7 @@ from src.config import Config
 from src.spectrum_ext import SpectrumExt
 from src.preprocessing_utils import PreprocessingUtils
 import copy
+import random 
 
 class Preprocessor:
 
@@ -21,12 +22,21 @@ class Preprocessor:
         fragment_tol_mass=10,
         fragment_tol_mode="ppm",
         min_intensity=0.01,
-        #max_num_peaks=100,
-        max_num_peaks=40,
+        max_num_peaks=100,
+        #max_num_peaks=40,
         scale_intensity="root",
+        training=False,
+        
+        random_seed=42
     ):
+        random.seed(random_seed)
         for i, spectrum in tqdm(enumerate(spectrums)):
             # try:
+            if training and (random.random()<0.75):
+                min_intensity=0.00
+            else:
+                min_intensity=0.01
+
             spectrums[i] = self.preprocess_spectrum(
                 spectrum,
                 fragment_tol_mass=fragment_tol_mass,
@@ -50,8 +60,8 @@ class Preprocessor:
         fragment_tol_mass=10,
         fragment_tol_mode="ppm",
         min_intensity=0.01,
-        #max_num_peaks=100,
-        max_num_peaks=40,
+        max_num_peaks=100,
+        #max_num_peaks=40,
         scale_intensity="root",
     ):
 
