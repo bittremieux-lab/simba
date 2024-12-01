@@ -49,7 +49,6 @@ class Augmentation:
 
         if random.random()<p_augmentation:
             max_augmented_peaks= int(max(20, random.random()*max_peaks))
-
             for sufix in ['_0','_1']:
                 #put a threshold
                 intensity_column= 'intensity' + sufix
@@ -74,6 +73,8 @@ class Augmentation:
 
     @staticmethod
     def peak_augmentation_removal_noise(data_sample, max_percentage=0.01, p_augmentation=0.5):
+        
+
 
         if random.random()<p_augmentation:
             # first normalize to maximum
@@ -86,8 +87,11 @@ class Augmentation:
 
                 # remove noise peaks
                 max_amplitude= random.random()* max_percentage
-                intensity[intensity < max_amplitude] = 0
-                mz[intensity < max_amplitude] = 0
+
+
+                indexes_to_modify=intensity < max_amplitude
+                intensity[indexes_to_modify] = 0
+                mz[indexes_to_modify] = 0
 
                 # apply 
                 data_sample[intensity_column] = intensity
