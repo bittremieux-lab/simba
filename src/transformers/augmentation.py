@@ -99,9 +99,9 @@ class Augmentation:
             return data_sample
 
     @staticmethod 
-    def normalize_intensities(data_sample):
+    def normalize_intensities(data_sample, intensity_labels= ['intensity_0','intensity_1']):
         # sqrt root
-        for intensity_column in ['intensity_0','intensity_1']:
+        for intensity_column in  intensity_labels:
             intensity = data_sample[intensity_column]
             intensity = np.sqrt(intensity)
             intensity = intensity / np.sqrt(np.sum(intensity**2,  keepdims=True))

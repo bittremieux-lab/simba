@@ -21,4 +21,6 @@ class CustomDatasetEncoder(Dataset):
         # key = self.keys[idx]
         # sample = self.data[key]
         # print(idx)
-        return {k: self.data[k][idx] for k in self.keys}
+        samples= {k: self.data[k][idx] for k in self.keys}
+        samples = Augmentation.normalize_intensities(samples, intensity_labels=['intensity'])
+        return samples
