@@ -11,7 +11,8 @@ class CustomDatasetMultitasking(Dataset):
         self,
         your_dict,
         training=False,
-        prob_aug=0.2,
+        prob_aug=1.0,
+        #prob_aug=0.2,
         mz=None,
         intensity=None,
         precursor_mass=None,
@@ -183,4 +184,6 @@ class CustomDatasetMultitasking(Dataset):
                 # augmentation
                 sample = Augmentation.augment(sample)
 
+        # normalize
+        sample = Augmentation.normalize_intensities(sample)
         return sample

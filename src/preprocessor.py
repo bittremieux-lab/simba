@@ -24,7 +24,7 @@ class Preprocessor:
         min_intensity=0.01,
         max_num_peaks=100,
         #max_num_peaks=40,
-        scale_intensity="root",
+        #scale_intensity="root",
         training=False,
         
         random_seed=42
@@ -35,7 +35,8 @@ class Preprocessor:
             if training and (random.random()<0.75):
                 min_intensity=0.00
             else:
-                min_intensity=0.01
+                #min_intensity=0.01
+                min_intensity=0.00
 
             spectrums[i] = self.preprocess_spectrum(
                 spectrum,
@@ -43,7 +44,7 @@ class Preprocessor:
                 fragment_tol_mode=fragment_tol_mode,
                 min_intensity=min_intensity,
                 max_num_peaks=max_num_peaks,
-                scale_intensity=scale_intensity,
+                #scale_intensity=scale_intensity,
             )
 
         # except:

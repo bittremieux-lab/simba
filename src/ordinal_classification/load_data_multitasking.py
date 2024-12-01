@@ -72,7 +72,7 @@ class LoadDataMultitasking:
 
         print("Normalizing intensities")
         # Normalize the intensity array
-        intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
+        #intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
 
 
         ## Adjust similarity towards a N classification problem
