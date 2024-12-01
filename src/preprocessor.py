@@ -63,7 +63,7 @@ class Preprocessor:
         min_intensity=0.01,
         max_num_peaks=100,
         #max_num_peaks=40,
-        scale_intensity="root",
+        #scale_intensity="root",
     ):
 
         # Process the spectrum.
