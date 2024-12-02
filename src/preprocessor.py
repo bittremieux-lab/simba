@@ -33,11 +33,10 @@ class Preprocessor:
         random.seed(random_seed)
         for i, spectrum in tqdm(enumerate(spectrums)):
             # try:
-            if training and (random.random()<0.75):
+            if training:
                 min_intensity=0.00
             else:
-                #min_intensity=0.01
-                min_intensity=0.00
+                min_intensity=0.01
 
             spectrums[i] = self.preprocess_spectrum(
                 spectrum,

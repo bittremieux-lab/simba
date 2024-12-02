@@ -17,7 +17,7 @@ class LoadDataBase:
         spectrums=[
                     copy.deepcopy(s) for s in spectrums_input
                 ]
-        spectrums = pp.preprocess_all_spectrums(spectrums)
+        spectrums = pp.preprocess_all_spectrums(spectrums, max_num_peaks=max_num_peaks)
 
         print("Finished preprocessing ")
 

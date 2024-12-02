@@ -44,11 +44,18 @@ class Augmentation:
 
 
     @staticmethod
-    def peak_augmentation_max_peaks(data_sample, p_augmentation=0.5, max_peaks=100):
+    def peak_augmentation_max_peaks(data_sample, p_augmentation= 1.0, max_peaks=100):
          # first normalize to maximum
 
+        ## half of the time select maximum 20, the other half something between 5 and the maximum number of peaks
+
         if random.random()<p_augmentation:
-            max_augmented_peaks= int(max(20, random.random()*max_peaks))
+            if random.random()< 0.5:
+                max_augmented_peaks=20
+            else:
+                max_augmented_peaks= int(max(5, random.random()*max_peaks))
+
+
             for sufix in ['_0','_1']:
                 #put a threshold
                 intensity_column= 'intensity' + sufix
@@ -72,7 +79,7 @@ class Augmentation:
 
 
     @staticmethod
-    def peak_augmentation_removal_noise(data_sample, max_percentage=0.01, p_augmentation=0.5):
+    def peak_augmentation_removal_noise(data_sample, max_percentage=0.01, p_augmentation=1.0):
         
 
 
