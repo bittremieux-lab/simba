@@ -15,7 +15,7 @@ class LoadDataMultitasking:
     @staticmethod
     def from_molecule_pairs_to_dataset(
         molecule_pairs_input,
-        max_num_peaks=100,
+        max_num_peaks,
         training=False,  # shuffle the spectrum 0 and 1 for data augmentation
         N_classes=6,
         use_fingerprints=False,
@@ -39,6 +39,7 @@ class LoadDataMultitasking:
         print("Preprocessing all the data ...")
         molecule_pairs.spectrums_original = pp.preprocess_all_spectrums(
             molecule_pairs.spectrums_original,
+            max_num_peaks=max_num_peaks,
             training=training,
         )
 
@@ -106,4 +107,5 @@ class LoadDataMultitasking:
             df_smiles=molecule_pairs_input.df_smiles,
             use_fingerprints=use_fingerprints,
             fingerprint_0=fingerprint_0,
+            max_num_peaks=max_num_peaks,
         )

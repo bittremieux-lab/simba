@@ -26,6 +26,7 @@ class Config:
         self.USE_PRECURSOR_MZ_FOR_MODEL=True 
         
         # training
+        self.TRANSFORMER_CONTEXT=100   ##number of input peaks to the transformer
         self.ADD_HIGH_SIMILARITY_PAIRS=True
         self.USE_MOLECULAR_FINGERPRINTS=False
         self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range

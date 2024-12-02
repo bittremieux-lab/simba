@@ -20,6 +20,7 @@ class CustomDatasetMultitasking(Dataset):
         df_smiles=None,
         use_fingerprints=False,
         fingerprint_0=None,
+        max_num_peaks=None,
     ):
         self.data = your_dict
         self.keys = list(your_dict.keys())
@@ -34,6 +35,7 @@ class CustomDatasetMultitasking(Dataset):
         self.use_fingerprints=use_fingerprints
         if self.use_fingerprints:
             self.fingerprint_0=fingerprint_0 
+        self.max_num_peaks=max_num_peaks
 
     def __len__(self):
         return len(self.data[self.keys[0]])
@@ -182,7 +184,7 @@ class CustomDatasetMultitasking(Dataset):
         if self.training:
             if random.random() < self.prob_aug:
                 # augmentation
-                sample = Augmentation.augment(sample)
+                sample = Augmentation.augment(sample, max_num_peaks=self.max_num_peaks)
 
         # normalize
         sample = Augmentation.normalize_intensities(sample)

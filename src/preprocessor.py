@@ -24,6 +24,7 @@ class Preprocessor:
         min_intensity=0.01,
         max_num_peaks=100,
         #max_num_peaks=40,
+        scale_intensity=None,
         #scale_intensity="root",
         training=False,
         
@@ -44,9 +45,8 @@ class Preprocessor:
                 fragment_tol_mode=fragment_tol_mode,
                 min_intensity=min_intensity,
                 max_num_peaks=max_num_peaks,
-                #scale_intensity=scale_intensity,
+                scale_intensity=scale_intensity,
             )
-
         # except:
         #    print('Error preprocessing spectrum')
 
@@ -63,6 +63,7 @@ class Preprocessor:
         min_intensity=0.01,
         max_num_peaks=100,
         #max_num_peaks=40,
+        scale_intensity=None,
         #scale_intensity="root",
     ):
 

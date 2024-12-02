@@ -5,15 +5,15 @@ import numpy as np
 class Augmentation:
 
     @staticmethod
-    def augment(data_sample, training=False):
+    def augment(data_sample, training=False, max_num_peaks=None):
         new_sample = copy.deepcopy(data_sample)
         #new_sample = Augmentation.inversion(new_sample)
         #new_sample = Augmentation.add_noise_to_precursor_mass(new_sample)  
 
         # peak augmentation
         new_sample = Augmentation.normalize_max(new_sample)
-        new_sample = Augmentation.peak_augmentation_removal_noise(data_sample)
-        new_sample = Augmentation.peak_augmentation_max_peaks(data_sample,)
+        new_sample = Augmentation.peak_augmentation_removal_noise(new_sample)
+        new_sample = Augmentation.peak_augmentation_max_peaks(new_sample,max_peaks=max_num_peaks)
 
         #precursor mass
         new_sample = Augmentation.add_false_precursor_masses_negatives(new_sample)
@@ -89,9 +89,10 @@ class Augmentation:
                 max_amplitude= random.random()* max_percentage
 
 
-                indexes_to_modify=intensity < max_amplitude
-                intensity[indexes_to_modify] = 0
-                mz[indexes_to_modify] = 0
+                #indexes_to_modify=intensity < max_amplitude
+                indexes_to_be_erased = intensity < max_amplitude
+                intensity[indexes_to_be_erased] = 0
+                mz[indexes_to_be_erased] = 0
 
                 # apply 
                 data_sample[intensity_column] = intensity
