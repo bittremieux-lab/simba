@@ -9,7 +9,14 @@ source activate transformers
 
 nvidia-smi 
 #srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_precursor_augmentation_loss2--USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1
-srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_augmentations --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+
+#srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_context500 --TRANSFORMER_CONTEXT=500   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+#srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_augmentations --TRANSFORMER_CONTEXT=100   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+#srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_augmentations_p20 --TRANSFORMER_CONTEXT=100   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+
+#srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_context200 --TRANSFORMER_CONTEXT=200   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+#srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_augmentations_p20_noprecursornegative --TRANSFORMER_CONTEXT=100   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_augmentations_selective_ed --TRANSFORMER_CONTEXT=100   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
 
 
 #srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_2024115 --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=0 --USE_EDIT_DISTANCE_REGRESSION=0 
