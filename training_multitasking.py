@@ -211,9 +211,9 @@ plt.yscale('log')
 # In[296]:
 
 
-dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, training=True)
+dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, max_num_peaks = int(config.TRANSFORMER_CONTEXT), training=True)
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val)
+dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val,  max_num_peaks = int(config.TRANSFORMER_CONTEXT))
 
 
 # In[297]:

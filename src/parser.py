@@ -22,6 +22,9 @@ class Parser:
                 or (at == "N_LAYERS")
                 or (at == "D_MODEL")
                 or (at == "epochs")
+                or (at == "PREPROCESSING_NUM_NODES")
+                or (at == "PREPROCESSING_CURRENT_NODE")
+                or (at == "PREPROCESSING_NUM_WORKERS")
             )
             is_string_attribute = (at == "extra_info")or (at=='dataset_path') or (at=='PREPROCESSING_DIR') or (at=="BEST_MODEL_NAME") or (at=="PRETRAINED_MODEL_NAME")
             if is_integer_attribute:

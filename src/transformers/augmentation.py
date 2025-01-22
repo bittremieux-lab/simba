@@ -16,7 +16,7 @@ class Augmentation:
         new_sample = Augmentation.peak_augmentation_max_peaks(new_sample,max_peaks=max_num_peaks)
 
         #precursor mass
-        new_sample = Augmentation.add_false_precursor_masses_negatives(new_sample)
+        #new_sample = Augmentation.add_false_precursor_masses_negatives(new_sample)
         new_sample = Augmentation.add_false_precursor_masses_positives(new_sample)
 
         # normalize
@@ -53,7 +53,7 @@ class Augmentation:
             if random.random()< 0.5:
                 max_augmented_peaks=20
             else:
-                max_augmented_peaks= int(max(5, random.random()*max_peaks))
+                max_augmented_peaks= int(max(20, random.random()*max_peaks))
 
 
             for sufix in ['_0','_1']:

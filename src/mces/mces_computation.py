@@ -126,6 +126,8 @@ class MCES:
         # where to save results
         
         # initialize randomness
+        
+        
         if config.COMPUTE_SPECIFIC_PAIRS:
             size_batch_effective = to_compute_indexes_np.shape[0]
             indexes_np = np.zeros((int(size_batch_effective), 3),)
@@ -162,13 +164,14 @@ class MCES:
         #command.extend(['--num_jobs', '32'])
         command.extend([ f'{config.PREPROCESSING_DIR}input_{str(id)}.csv'])
         command.extend([f'{config.PREPROCESSING_DIR}output_{str(id)}.csv'])
-        command.extend(['--num_jobs', '1'])
-
+        #command.extend(['--num_jobs', '1'])
+        #command.extend(['--solver','CPLEX_CMD'])
         # Define threshold
         command.extend(['--threshold', str(int(config.THRESHOLD_MCES))])
 
         command.extend(['--solver_onethreaded'])
         command.extend(['--solver_no_msg'])
+        command.extend(['--choose_bound_dynamically'])
 
         #x = subprocess.run(command,capture_output=True)
         subprocess.run(command)
@@ -250,61 +253,89 @@ class MCES:
                 split_arrays = np.array_split(indexes_np_loaded, N)
 
 
-                print(f'Number of split arrays {len(split_arrays)}')
-                print(f'Size of each array {split_arrays[0].shape[0]}')
-                print(f'Size of each sub-array {np.array_split(split_arrays[0], num_workers)[0].shape[0]}')
+                
         else:
                  # Calculate the number of chunks needed
                 num_chunks = int(np.ceil(len(samples) / N))
                 # Split the array into chunks of size N using np.array_split
                 split_arrays = np.array_split(samples, num_chunks)
                 
-        comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
-                
+        print(f'Number of split arrays: {len(split_arrays)}')
+        print(f'Size of each array: {split_arrays[0].shape[0]}')
+        print(f'Size of each sub-array: {np.array_split(split_arrays[0], num_workers)[0].shape[0]}')
+
+        #comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
+        #comp_function = EditDistance.compute_edit_distance if use_edit_distance else EditDistance.compute_mces_myopic
+        comp_function = EditDistance.compute_ed_or_mces
+
+        ## SINCE I WANT TO EXECUTE THE PREPROCESSING ACROSS SEVERAL NDOES, I WANT TO EXECUTE ONLY SOME indexes
+
         for index_array, array in enumerate(split_arrays):
                 # Create a multiprocessing pool
                 #pool = multiprocessing.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
-                pool = multiprocessing.dummy.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMORY
 
 
-                print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
-                if config.COMPUTE_SPECIFIC_PAIRS: 
-                        print(f'Size of each array {array.shape[0]}')
-                        sub_arrays = np.array_split(array, num_workers)
-                        print(f'Size of each sub-array {sub_arrays[0].shape[0]}')
-                
-                        results = [pool.apply_async(comp_function, args=(smiles, 
-                                            None, 
-                                            size_batch, 
-                                            (index_array*split_arrays[0].shape[0])+sub_index,
-                                            None, 
-                                            config,
-                                            identifier,
-                                            sampled_array
-                                            )) for sub_index, sampled_array in enumerate(sub_arrays)]
-                else:
-                    if use_edit_distance:
-                        results = [pool.apply_async(comp_function, args=(smiles,
-                                                sampled_index, 
+                #if (index_array>38) and ((index_array%config.PREPROCESSING_NUM_NODES)==config.PREPROCESSING_CURRENT_NODE):
+                if ((index_array%config.PREPROCESSING_NUM_NODES)==config.PREPROCESSING_CURRENT_NODE):
+
+                    print(f'Processing index_array: {index_array}')
+                    #pool = multiprocessing.dummy.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMOR 
+                    pool = multiprocessing.Pool(processes=num_workers)   
+
+                    print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
+                    if config.COMPUTE_SPECIFIC_PAIRS: 
+                            print(f'Size of each array {array.shape[0]}')
+                            sub_arrays = np.array_split(array, num_workers)
+                            print(f'Size of each sub-array {sub_arrays[0].shape[0]}')
+                    
+                            results = [pool.apply_async(comp_function, args=(smiles, 
+                                                None, 
                                                 size_batch, 
-                                                (index_array*len(split_arrays[0]))+sub_index,
-                                                random_sampling, config)) for sub_index, sampled_index in enumerate(array)]
+                                                (index_array*split_arrays[0].shape[0])+sub_index,
+                                                None, 
+                                                config,
+                                                identifier,
+                                                sampled_array
+                                                )) for sub_index, sampled_array in enumerate(sub_arrays)]
                     else:
-                        results = [pool.apply_async(comp_function, args=(smiles, 
-                                                sampled_index, 
-                                                size_batch, 
-                                                (index_array*len(split_arrays[0]))+sub_index,
-                                                random_sampling, config,
-                                                )) for sub_index, sampled_index in enumerate(array)]
-                    
-                    
-                # Close the pool and wait for all processes to finish
-                pool.close()
-                pool.join()
-            
-                # Get results from async objects
-                indexes_np_temp = np.concatenate([result.get() for result in results], axis=0)
-                np.save(arr=indexes_np_temp, file= f'{config.PREPROCESSING_DIR}'+ f'indexes_tani_incremental{identifier}_{str(index_array)}.npy')
+                            #if use_edit_distance:
+
+                            print('Compute the mols')
+                            
+                            mols = [Chem.MolFromSmiles(s) for s in smiles]
+                            print('Computing fingerprints')
+                            fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+                            fps = [fpgen.GetFingerprint(m) for m in mols]
+
+                            print('Finished fongerprints')
+                            results = [pool.apply_async(comp_function, args=(smiles,
+                                                    sampled_index, 
+                                                    size_batch, 
+                                                    (index_array*len(split_arrays[0]))+sub_index,
+                                                    random_sampling, config, fps, mols,
+                                                    use_edit_distance,
+                                                    )) for sub_index, sampled_index in enumerate(array)]
+                            #else:
+
+
+                            #    results = [pool.apply_async(comp_function, args=(smiles, 
+                            #                            sampled_index, 
+                            ##                            size_batch, 
+                            #                            sampled_index,
+                            #                            #(index_array*len(split_arrays[0]))+sub_index,
+                            #                            random_sampling, config,
+                            #                            )) for sub_index, sampled_index in enumerate(array)]
+                        
+                        
+                    # Close the pool and wait for all processes to finish
+                    pool.close()
+                    pool.join()
+                
+                    # Get results from async objects
+                    indexes_np_temp = np.concatenate([result.get() for result in results], axis=0)
+
+                    prefix_file= 'edit_distance_' if use_edit_distance else 'mces_'
+                    np.save(arr=indexes_np_temp, file= f'{config.PREPROCESSING_DIR}'+ prefix_file + f'indexes_tani_incremental{identifier}_{str(index_array)}.npy')
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
 

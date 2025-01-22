@@ -10,8 +10,9 @@ from tqdm import tqdm
 from rdkit import DataStructs
 from rdkit.Chem.Fingerprints import FingerprintMols
 import numpy as np
-
+import src.edit_distance.mol_utils as mu
 import os
+from myopic_mces import MCES 
 
 class EditDistance:
 
@@ -25,10 +26,9 @@ class EditDistance:
 
         return df
 
-
-    def compute_edit_distance(smiles, sampled_index, size_batch, identifier, random_sampling, config):
-        
-        print(f'id')
+    def compute_ed_or_mces(smiles, sampled_index, size_batch, identifier, random_sampling, config, fps, mols, use_edit_distance, ):
+        print(f'Processing: {sampled_index}')
+        #print(f'id')
         # where to save results
         indexes_np = np.zeros((int(size_batch), 3),)
         # initialize randomness
@@ -52,12 +52,21 @@ class EditDistance:
 
             s0 = smiles[int(row[0])] 
             s1 = smiles[int(row[1])] 
-            dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(s0,s1)
+            fp0 = fps[int(row[0])] 
+            fp1 = fps[int(row[1])] 
+            mol0= mols[int(row[0])] 
+            mol1= mols[int(row[1])] 
+            if use_edit_distance:
+                dist, tanimoto = EditDistance.simba_solve_pair_edit_distance(s0,s1, fp0, fp1, mol0, mol1)
+            else:
+                dist, tanimoto = EditDistance.simba_solve_pair_mces(s0,s1, fp0, fp1, mol0, mol1, config.THRESHOLD_MCES)
             #print(dist)
             distances.append(dist)
         
         indexes_np[:,2]= distances
         return indexes_np 
+
+    
 
     def get_number_of_modification_edges(mol, substructure):
         if not mol.HasSubstructMatch(substructure):
@@ -102,49 +111,64 @@ class EditDistance:
             #print("The molecules are too small.")
             return np.nan
         
-        dist1 = EditDistance.get_number_of_modification_edges(mol1, mcs_mol)
-        dist2 =  EditDistance.get_number_of_modification_edges(mol2, mcs_mol)
+        #dist1 = EditDistance.get_number_of_modification_edges(mol1, mcs_mol)
+        #dist2 =  EditDistance.get_number_of_modification_edges(mol2, mcs_mol)
 
-        if (dist1 is not None) and (dist2 is not None):
-            return len(dist1) + len(dist2)
-        else:
-            return np.nan
-
-
-
-
-
-    def simba_solve_pair_edit_distance(s0, s1,  low_similarity=5):
+        #if (dist1 is not None) and (dist2 is not None):
+        #    return len(dist1) + len(dist2)
+        #else:
+        #    return np.nan
+        # print("going to calculate edit distance")
+        dist1, dist2 = mu.get_edit_distance_detailed(mol1, mol2, mcs_mol)
         
+        distance = dist1 + dist2
 
-        
-        
-        
-        #try:
-        mol0 = Chem.MolFromSmiles(s0)
-        mol1 = Chem.MolFromSmiles(s1)
+        return distance
 
-        if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
-            #raise ValueError("The molecules are too large.")
-            return np.nan, 0
-        else:
-            fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
-            fps = [fpgen.GetFingerprint(x) for x in [mol0, mol1]]
+    from functools import lru_cache
 
-            #except:
-            #    print('')
-            #    print(f'1: {mol1}')
-            #    print(f'2: {mol1}')
-            #    raise ValueError('None values')
-            tanimoto = DataStructs.TanimotoSimilarity(fps[0],fps[1])
-            #tanimoto = DataStructs.TanimotoSimilarity(fp0,fp1)
-            if tanimoto < 0.2:
+    @lru_cache(maxsize=1000)  # Set maxsize to None for an unbounded cache or a specific integer for a bounded cache
+    def return_mol(smiles):
+        # Simulate some processing
+        return Chem.MolFromSmiles(smiles)
+
+
+
+    def simba_solve_pair_edit_distance(s0, s1,  fp0, fp1,mol0, mol1):
+        
+        tanimoto = DataStructs.TanimotoSimilarity(fp0,fp1)
+        
+        if tanimoto < 0.2:
                 #print("The Tanimoto similarity is too low.")
                 #distance = np.nan
                 distance = 666 # very high number to remark that they are very different
-            else:
-                distance = EditDistance.simba_get_edit_distance(mol0, mol1)
-            return distance, tanimoto
+        else:
+                #mol0 = EditDistance.return_mol(s0)
+                #mol1 = EditDistance.return_mol(s1)
+                if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
+                    #raise ValueError("The molecules are too large.")
+                    return np.nan, 0
+                else:
+                    distance = EditDistance.simba_get_edit_distance(mol0, mol1)
+                    
+        return distance, tanimoto
+
+    def simba_solve_pair_mces(s0, s1,  fp0, fp1,mol0, mol1, threshold):
+        
+        tanimoto = DataStructs.TanimotoSimilarity(fp0,fp1)
+        
+        if tanimoto < 0.2:
+                #print("The Tanimoto similarity is too low.")
+                #distance = np.nan
+                distance = 666 # very high number to remark that they are very different
+        else:
+                #mol0 = EditDistance.return_mol(s0)
+                #mol1 = EditDistance.return_mol(s1)
+                distance = MCES(s0, s1, threshold=threshold)
+                    
+        return distance, tanimoto
+
+        
 
 
     def get_data(data, index, batch_count):

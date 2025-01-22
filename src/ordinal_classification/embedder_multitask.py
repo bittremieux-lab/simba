@@ -50,13 +50,27 @@ class CustomizedCrossEntropyLoss(nn.Module):
                           [0, 0, 0, 4,  20,  4,],
 
                           [0, 0, 0, 0,  4,  20,]]
+
+
+        #penalty_matrix = [[100, 4, 3, 2, 1,  0,],
+                          
+        #                  [5, 30, 10, 0, 0,  0,] ,
+
+        #                  [5, 10, 30, 10, 0,  0,],
+
+        #                  [5, 0,  10, 30, 10,  0,],
+
+        #                  [5, 0, 0, 10,  30,  10,],
+
+        #                  [5, 0, 0, 0,  10,  30]]
+
         
         self.n_classes=n_classes
         self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         #normalize the penalty matrix
         self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device)/np.max(penalty_matrix)
-        self.penalty_matrix = self.penalty_matrix / self.penalty_matrix.sum(dim=1, keepdim=True)
+        #self.penalty_matrix = self.penalty_matrix / self.penalty_matrix.sum(dim=1, keepdim=True)
 
 
     def forward(self, logits, target):

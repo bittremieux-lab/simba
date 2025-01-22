@@ -11,10 +11,13 @@ class Config:
         #PREPROCESSING
         self.PREPROCESSING_BATCH_SIZE=1000
         self.PREPROCESSING_NUM_WORKERS=60
+        self.PREPROCESSING_NUM_NODES=10
+        self.PREPROCESSING_CURRENT_NODE=0  ## CURRENT NODE USED FOR PREPROCESSING
+
         self.PREPROCESSING_OVERWRITE=False #overwrite the output file during generation
-        self.COMPUTE_SPECIFIC_PAIRS=True
+        #self.COMPUTE_SPECIFIC_PAIRS=True
         self.FORMAT_FILE_SPECIFIC_PAIRS='INPUT_SPECIFIC_PAIRS_indexes_tani_incremental' # the prefix of the file containing the indexes to be computed
-        self.USE_EDIT_DISTANCE=False ## If using edit distance for generating data, not for training!!! 
+        #self.USE_EDIT_DISTANCE=False ## If using edit distance for generating data, not for training!!! 
         self.SUBSAMPLE_PREPROCESSING=False
         self.RANDOM_MCES_SAMPLING = False
         self.CHARGES = 0, 1
@@ -25,6 +28,11 @@ class Config:
         self.THRESHOLD_MCES=20
         self.USE_PRECURSOR_MZ_FOR_MODEL=True 
         
+        ## FOR COMPUTING EDIT DISTANCE LOCALLY
+        self.USE_EDIT_DISTANCE=True ## If using edit distance for generating data, not for training!!! 
+        self.COMPUTE_SPECIFIC_PAIRS=False
+        
+
         # training
         self.TRANSFORMER_CONTEXT=100   ##number of input peaks to the transformer
         self.ADD_HIGH_SIMILARITY_PAIRS=True
@@ -60,7 +68,8 @@ class Config:
         self.validate_after_ratio = 0.0010  # it indicates the interval between validations. O.1 means 10 validations in 1 epoch
         self.extra_info = "_multitasking_mces20raw_gumbelhard_20241004"
         self.derived_variables()
-        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
+        self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_20250117/"
+        #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
         self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 
     def derived_variables(self):

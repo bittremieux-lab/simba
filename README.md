@@ -70,6 +70,12 @@ srun -p ampere_gpu --gpus=1 --pty bash
 * run the script: script_all_matched_mces_bash.slurm.sh for computing the mces
 * after the computation of mces is finished in the split folders, the results must be merged with the edit distance, using script merge_edit_distance_mces_20_v2.py
 
+
+## Generation of Edit Distance/MCES 
+
+* Run the script script_preprocessing_ed_mces_parallel.sh. You have to set the PREPROCESSING_DIR where the spectra must be previously saved. This script will generate the npy files for edit distance and mces.
+
+* The results of edit distance and mces must be merged. 
 ## To train a multitask model using edit distance and mces
 
 * run the script script_transformers_multitasking.sh

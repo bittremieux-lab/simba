@@ -163,7 +163,7 @@ uniformed_molecule_pairs_test.indexes_tani
 
 
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test)
+dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test, max_num_peaks=int(config.TRANSFORMER_CONTEXT))
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
