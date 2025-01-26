@@ -43,6 +43,7 @@ class Config:
         self.EDIT_DISTANCE_N_CLASSES=6
         self.EDIT_DISTANCE_USE_GUMBEL=False
         self.USE_TANIMOTO =False # using Tanimoto or MCES20 for training
+        self.EDIT_DISTANCE_MAX_VALUE=666
         self.MCES20_MAX_VALUE=40 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair
         self.USE_LOSS_WEIGHTS_SECOND_SIMILARITY= False # use weights for training the second similarity of multitasking
         self.N_LAYERS = 5  # transformer parameters
@@ -70,6 +71,8 @@ class Config:
         self.derived_variables()
         self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_edit_distance_20250117/"
         #self.PREPROCESSING_DIR=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
+        self.PREPROCESSING_DIR_TRAIN=f'/scratch/antwerpen/209/vsc20939/data/preprocessing_ed_mces_20250123/'
+        self.PREPROCESSING_DIR_VAL_TEST=f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
         self.PREPROCESSING_PICKLE_FILE= f"edit_distance_neurips_nist_exhaustive.pkl"
 
     def derived_variables(self):

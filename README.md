@@ -73,10 +73,31 @@ srun -p ampere_gpu --gpus=1 --pty bash
 
 ## Generation of Edit Distance/MCES 
 
-* Run the script script_preprocessing_ed_mces_parallel.sh. You have to set the PREPROCESSING_DIR where the spectra must be previously saved. This script will generate the npy files for edit distance and mces.
+* Run the script script_preprocessing_ed_parallel.sh and script_preprocessing_mces_parallel.sh. You have to set the PREPROCESSING_DIR where the spectra must be previously saved. This script will generate the npy files for edit distance and mces.
 
-* The results of edit distance and mces must be merged. 
+* The results of edit distance and mces must be merged. For this purpose you can use the script merge_ed_mces_generated_data.py.
 ## To train a multitask model using edit distance and mces
 
-* run the script script_transformers_multitasking.sh
+* run the script script_transformers_multitasking.sh which calls training_multitasking_generated_data.py.
 * run script_inference_multitasking.sh for inference
+
+
+## Install depthcharge from source code:
+The specific version 0.3.2.dev2+g207990 of the depthcharge-ms package is not available on the Python Package Index (PyPI). However, you can access the source code for this version on GitHub and install it manually. Here's how:
+
+Clone the Repository: Open your terminal and run:
+
+
+git clone https://github.com/wfondrie/depthcharge.git
+cd depthcharge
+Checkout the Specific Commit: To access the 0.3.2.dev2+g207990 version, checkout the commit with hash 207990:
+
+
+git checkout 207990
+Install the Package: It's recommended to use a virtual environment to avoid conflicts with other packages:
+
+python3 -m venv venv
+source venv/bin/activate  # On Windows, use venv\Scripts\activate
+Then, install the package:
+
+pip install .

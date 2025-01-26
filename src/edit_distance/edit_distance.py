@@ -147,13 +147,15 @@ class EditDistance:
                 #mol1 = EditDistance.return_mol(s1)
                 if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
                     #raise ValueError("The molecules are too large.")
-                    return np.nan, 0
+                    return np.nan, tanimoto
                 else:
                     distance = EditDistance.simba_get_edit_distance(mol0, mol1)
                     
         return distance, tanimoto
 
-    def simba_solve_pair_mces(s0, s1,  fp0, fp1,mol0, mol1, threshold):
+    def simba_solve_pair_mces(s0, s1,  fp0, fp1,mol0, mol1, threshold, 
+                                TIME_LIMIT=2,# 2 seconds
+                ):
         
         tanimoto = DataStructs.TanimotoSimilarity(fp0,fp1)
         
@@ -164,8 +166,36 @@ class EditDistance:
         else:
                 #mol0 = EditDistance.return_mol(s0)
                 #mol1 = EditDistance.return_mol(s1)
-                distance = MCES(s0, s1, threshold=threshold)
+                #distance = MCES(s0, s1, threshold=threshold)
+                if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
+                    #raise ValueError("The molecules are too large.")
+                    return np.nan, tanimoto
+                else:
                     
+                    result =     MCES(
+                                        s0,
+                                        s1,
+                                        threshold=threshold,
+                                        i=0,
+                                        #solver='CPLEX_CMD',       # or another fast solver you have installed
+                                        solver='PULP_CBC_CMD',
+                                        solver_options={
+                                                'threads': 1, 
+                                                'msg': False,
+                                                'timeLimit': TIME_LIMIT  # Stop CBC after 1 seconds
+                                            },  
+                                        #solver_options={'threads': 1, 'msg': False},  # use single thread + no console messages
+                                        no_ilp_threshold=False,   # allow the ILP to stop early once the threshold is exceeded
+                                        always_stronger_bound=False,  # use dynamic bounding for speed
+                                        catch_errors=False        # typically raise exceptions if something goes wrong
+                                    )
+                    distance = result[1]
+                    time_taken=result[2]
+                    exact_answer= result[3]
+
+                    if (time_taken >=(0.9*TIME_LIMIT) and (exact_answer != 1)):
+                        distance= np.nan
+
         return distance, tanimoto
 
         

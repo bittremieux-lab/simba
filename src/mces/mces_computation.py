@@ -164,7 +164,7 @@ class MCES:
         #command.extend(['--num_jobs', '32'])
         command.extend([ f'{config.PREPROCESSING_DIR}input_{str(id)}.csv'])
         command.extend([f'{config.PREPROCESSING_DIR}output_{str(id)}.csv'])
-        #command.extend(['--num_jobs', '1'])
+        command.extend(['--num_jobs', '1'])
         #command.extend(['--solver','CPLEX_CMD'])
         # Define threshold
         command.extend(['--threshold', str(int(config.THRESHOLD_MCES))])
@@ -264,7 +264,10 @@ class MCES:
         print(f'Size of each array: {split_arrays[0].shape[0]}')
         print(f'Size of each sub-array: {np.array_split(split_arrays[0], num_workers)[0].shape[0]}')
 
+        # using the loading of csv 
         #comp_function = EditDistance.compute_edit_distance if use_edit_distance else MCES.compute_mces_myopic
+
+        # using the edit distance repository
         #comp_function = EditDistance.compute_edit_distance if use_edit_distance else EditDistance.compute_mces_myopic
         comp_function = EditDistance.compute_ed_or_mces
 
@@ -298,33 +301,33 @@ class MCES:
                                                 sampled_array
                                                 )) for sub_index, sampled_array in enumerate(sub_arrays)]
                     else:
-                            #if use_edit_distance:
+                                #if use_edit_distance:
 
-                            print('Compute the mols')
-                            
-                            mols = [Chem.MolFromSmiles(s) for s in smiles]
-                            print('Computing fingerprints')
-                            fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
-                            fps = [fpgen.GetFingerprint(m) for m in mols]
+                                print('Compute the mols')
+                                
+                                mols = [Chem.MolFromSmiles(s) for s in smiles]
+                                print('Computing fingerprints')
+                                fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+                                fps = [fpgen.GetFingerprint(m) for m in mols]
 
-                            print('Finished fongerprints')
-                            results = [pool.apply_async(comp_function, args=(smiles,
-                                                    sampled_index, 
-                                                    size_batch, 
-                                                    (index_array*len(split_arrays[0]))+sub_index,
-                                                    random_sampling, config, fps, mols,
-                                                    use_edit_distance,
-                                                    )) for sub_index, sampled_index in enumerate(array)]
-                            #else:
+                                print('Finished fongerprints')
+                                results = [pool.apply_async(comp_function, args=(smiles,
+                                                        sampled_index, 
+                                                        size_batch, 
+                                                        (index_array*len(split_arrays[0]))+sub_index,
+                                                        random_sampling, config, fps, mols,
+                                                        use_edit_distance,
+                                                        )) for sub_index, sampled_index in enumerate(array)]
+                                 #else:
 
 
-                            #    results = [pool.apply_async(comp_function, args=(smiles, 
-                            #                            sampled_index, 
-                            ##                            size_batch, 
-                            #                            sampled_index,
-                            #                            #(index_array*len(split_arrays[0]))+sub_index,
-                            #                            random_sampling, config,
-                            #                            )) for sub_index, sampled_index in enumerate(array)]
+                                #results = [pool.apply_async(comp_function, args=(smiles, 
+                                #                        sampled_index, 
+                                #                        size_batch, 
+                                #                        sampled_index,
+                                #                        #(index_array*len(split_arrays[0]))+sub_index,
+                                #                        random_sampling, config,
+                                #                        )) for sub_index, sampled_index in enumerate(array)]
                         
                         
                     # Close the pool and wait for all processes to finish
@@ -399,8 +402,9 @@ class MCES:
             command = ['myopic_mces', './input.csv', './output.csv']
 
             # Add the argument --num_jobs 15
+            command.extend(['--num_jobs', '1'])
             #command.extend(['--num_jobs', '32'])
-            command.extend(['--num_jobs', '32'])
+            #command.extend(['--num_jobs', '32'])
 
             # Define threshold
             command.extend(['--threshold', '5'])

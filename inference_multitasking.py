@@ -94,10 +94,14 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', 
+#indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', 
+#                                                             use_edit_distance=config.USE_EDIT_DISTANCE,
+#                                                             use_multitask=config.USE_MULTITASK)
+indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
+                                                        prefix='ed_mces_indexes_tani_incremental_test', 
                                                              use_edit_distance=config.USE_EDIT_DISTANCE,
                                                              use_multitask=config.USE_MULTITASK)
-
+                                                             
 molecule_pairs_test.indexes_tani = indexes_tani_multitasking_test[:,0:3]
 
 
@@ -338,7 +342,6 @@ print(f'Correlation of edit distance model: {corr_model1}')
 def plot_cm(true,preds, config, file_name='cm.png'):
     # Compute the confusion matrix
     cm = confusion_matrix(true, preds)
-
     # Compute the accuracy
     accuracy = accuracy_score(true, preds)
     print("Accuracy:", accuracy)
@@ -348,6 +351,8 @@ def plot_cm(true,preds, config, file_name='cm.png'):
     plt.figure(figsize=(10, 7))
     labels= ['>5', '4', '3', '2' , '1', '0']
     sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',xticklabels=labels, yticklabels=labels)
+    print(f'cm_normalized')
+    print(cm_normalized)
     #Increase font size for x and y tick labels
     plt.xticks(fontsize=12)  # Adjust as needed
     plt.yticks(fontsize=12)  # Adjust as needed

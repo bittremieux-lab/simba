@@ -228,7 +228,7 @@ dependencies:
       - astunparse==1.6.3
       - cycler==0.12.1
       - deprecated==1.2.14
-      #- depthcharge-ms==0.3.2.dev2+g2079903
+      - depthcharge-ms==0.3.2.dev2+g2079903
       - einops==0.7.0
       - fastobo==0.12.2
       - flatbuffers==24.3.25

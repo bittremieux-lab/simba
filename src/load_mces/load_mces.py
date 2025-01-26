@@ -172,7 +172,8 @@ class LoadMCES:
 
         if not(config.USE_TANIMOTO): #if not using tanimoto normalize between 0 and 1
             merged_array[:,config.COLUMN_MCES20] = LoadMCES.normalize_mces20(merged_array[:,config.COLUMN_MCES20],
-                                                            max_value=config.MCES20_MAX_VALUE)
+                                                            max_value=config.MCES20_MAX_VALUE,
+                                                            remove_negative_values=True)
 
         # add the high similarity pairs
         if add_high_similarity_pairs:
@@ -184,12 +185,13 @@ class LoadMCES:
         print(f'Number of pairs loaded: {merged_array.shape[0]}  ')
         return merged_array
 
-    def merge_numpy_arrays(directory_path, prefix, use_edit_distance, use_multitask=False, add_high_similarity_pairs=False):
+    def merge_numpy_arrays(directory_path, prefix, use_edit_distance, use_multitask=False, add_high_similarity_pairs=False, remove_percentage=0):
         '''
         load np arrays containing data as well as apply normalization
         '''
         if use_multitask:
-            return LoadMCES.merge_numpy_arrays_multitask(directory_path, prefix,add_high_similarity_pairs=add_high_similarity_pairs)
+            return LoadMCES.merge_numpy_arrays_multitask(directory_path, prefix,add_high_similarity_pairs=add_high_similarity_pairs,
+                                remove_percentage=remove_percentage)
         else:
             if use_edit_distance:
                 return LoadMCES.merge_numpy_arrays_edit_distance(directory_path, prefix,)
@@ -233,7 +235,7 @@ class LoadMCES:
         return ed_normalized
 
     @staticmethod
-    def normalize_mces20(mcs20, max_value, remove_negative_values=False):
+    def normalize_mces20(mcs20, max_value, remove_negative_values=True):
         # asuming series
         # normalize edit distance. the higher the mces the lower the similarity
         #mces_normalized = mces.apply(lambda x:x if x<=max_mces else max_mces)
