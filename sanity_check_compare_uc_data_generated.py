@@ -146,3 +146,4 @@ for type_data in ['uc', 'generated', 'total']:
     for lista in (train_binned_list):
         print(f"samples: {len(lista)}") 
 
+    

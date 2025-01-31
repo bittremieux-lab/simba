@@ -84,6 +84,7 @@ def remove_duplicates_array(array):
 
 # In[283]:
 print('Loading pairs data ...')
+
 indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
                             prefix='ed_mces_indexes_tani_incremental_train', 
                             use_edit_distance=config.USE_EDIT_DISTANCE, 
@@ -91,11 +92,13 @@ indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSI
                             add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS,
                             remove_percentage=0.75,)
 print('Loading UC Riverside data')
+
 indexes_tani_multitasking_train_uc  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_VAL_TEST, 
                             prefix='indexes_tani_incremental_train', 
                             use_edit_distance=config.USE_EDIT_DISTANCE, 
                             use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=0,)
+                            add_high_similarity_pairs=0,
+                            )
 
 indexes_tani_multitasking_train = np.concatenate((indexes_tani_multitasking_train, indexes_tani_multitasking_train_uc), axis=0)
 indexes_tani_multitasking_train= remove_duplicates_array(indexes_tani_multitasking_train)
@@ -124,6 +127,117 @@ print(f'shape of similarity2: {molecule_pairs_train.tanimotos.shape}')
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
 print(f"Number of pairs for val: {len(molecule_pairs_val)}")
 print(f'Example of data loaded for tanimotos: {molecule_pairs_train.tanimotos}')
+
+#### RESAMPLING
+if config.USE_RESAMPLING:
+
+    high_similarity_indexes= molecule_pairs_train.indexes_tani[:,2]>0 
+    high_similarity_indexes_1 = molecule_pairs_train.indexes_tani[high_similarity_indexes]
+    high_similarity_indexes_2 = molecule_pairs_train.tanimotos[high_similarity_indexes]
+    low_similarity_indexes_1=  molecule_pairs_train.indexes_tani[~high_similarity_indexes]
+    low_similarity_indexes_2=  molecule_pairs_train.tanimotos[~high_similarity_indexes]
+
+    #low similarity pairs
+    molecule_pairs_train.indexes_tani = low_similarity_indexes_1
+    molecule_pairs_train.tanimotos = low_similarity_indexes_2
+
+    model = EmbedderMultitask(
+        d_model=int(config.D_MODEL),
+        n_layers=int(config.N_LAYERS),
+        n_classes=config.EDIT_DISTANCE_N_CLASSES,
+        weights=None,
+        lr=config.LR,
+        use_cosine_distance=config.use_cosine_distance,
+        use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+        #weights_sim2=weights_sim2,
+        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+        use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+        use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+    )
+
+    # Create a model:
+    if config.load_pretrained:
+        model_pretrained= Embedder.load_from_checkpoint(
+            config.pretrained_path,
+            d_model=int(config.D_MODEL),
+            n_layers=int(config.N_LAYERS),
+            weights=None,
+            lr=config.LR,
+            use_cosine_distance=config.use_cosine_distance,
+            use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+            #weights_sim2=weights_sim2,
+            strict=False,
+    )
+        
+        model.spectrum_encoder = model_pretrained.spectrum_encoder
+        print("Loaded pretrained model")
+    else:
+        print("Not loaded pretrained model")
+
+
+    print('Using resampling!')
+    
+    dataset_resampling = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, max_num_peaks = int(config.TRANSFORMER_CONTEXT), training=False)
+    dataloader_resampling = DataLoader(
+    dataset_resampling, batch_size=config.BATCH_SIZE, num_workers=10, shuffle=False)
+
+
+    model.eval()
+
+    # ## Postprocessing
+
+    # In[ ]:
+    trainer_inference = pl.Trainer(max_epochs=2, enable_progress_bar=enable_progress_bar)
+    print('Running inference')
+    pred_test = trainer_inference.predict(
+        model,
+        dataloader_resampling,
+    )
+    print('Finished inference')
+
+    print('extracting array')
+
+    # lets extract the mces distance
+    flat_pred_test1 = [p[1] for p in pred_test]
+    flat_pred_test1 = [[p.item() for p in p_list] for p_list in flat_pred_test1]
+    flat_pred_test1= [item for sublist in flat_pred_test1 for item in sublist]
+    flat_pred_test1=np.array(flat_pred_test1)
+
+    #flat_pred_test1 = np.argmax(np.array([pred[0] for pred in pred_test]), axis=1).tolist()
+
+    ## filtered indexes, if the prediction is higher tha
+    filter_low_similarity_incorrect= (flat_pred_test1>0.90)
+
+    random_indexes= np.random.randint(0,low_similarity_indexes_1.shape[0],sum(filter_low_similarity_incorrect))
+    filter_random = np.zeros(low_similarity_indexes_1.shape[0], dtype=bool)
+    filter_random[random_indexes] = True
+
+    new_indexes_1 = low_similarity_indexes_1[filter_low_similarity_incorrect | filter_random]
+    new_indexes_2 = low_similarity_indexes_2[filter_low_similarity_incorrect | filter_random]
+
+    print(f'The size of the data before resampling: {molecule_pairs_train.indexes_tani.shape}')
+    print(f'The size of the data is now: {new_indexes_1.shape}')
+    print(f'Example of new array: {new_indexes_1}')
+
+    new_indexes_1=np.concatenate((new_indexes_1, high_similarity_indexes_1), axis=0)
+    new_indexes_2=np.concatenate((new_indexes_2, high_similarity_indexes_2), axis=0)
+
+
+    # reassign for training
+
+    # assign features
+    molecule_pairs_train.indexes_tani = new_indexes_1
+    molecule_pairs_train.tanimotos = new_indexes_2
+
+
+else:
+    print('Not using resampling!')  
+
+
+
+
+
+
 ## Sanity checks
 sanity_check_ids = SanityChecks.sanity_checks_ids(
     molecule_pairs_train,
@@ -174,9 +288,8 @@ print("SAMPLES PER RANGE:")
 for lista in (train_binned_list):
     print(f"samples: {len(lista)}") 
 
-train_binned_list[1].indexes_tani.shape
 
-
+###### CALCULATE WEIGHTS
 
 plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]>0][:,2], bins=20)
 
@@ -456,6 +569,10 @@ trainer = pl.Trainer(
     enable_progress_bar=enable_progress_bar,
     # val_check_interval= config.validate_after_ratio,
 )
+
+
+
+
 # trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
 trainer.fit(
     model=model,

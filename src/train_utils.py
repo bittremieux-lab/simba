@@ -637,6 +637,8 @@ class TrainUtils:
 
         # initialize random seed
         random.seed(seed)
+        np.random.seed(seed)
+        
          # choose function 
         function =  TrainUtils.divide_data_into_bins_categories if ordinal_classification else TrainUtils.divide_data_into_bins
 

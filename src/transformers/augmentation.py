@@ -19,6 +19,7 @@ class Augmentation:
         #new_sample = Augmentation.add_false_precursor_masses_negatives(new_sample)
         new_sample = Augmentation.add_false_precursor_masses_positives(new_sample)
 
+        new_sample = Augmentation.random_peak_dropout(new_sample)
         # normalize
         #new_sample = Augmentation.normalize_intensities(new_sample)
         return new_sample
@@ -175,3 +176,27 @@ class Augmentation:
             return sample
         else:
             return sample
+
+    @staticmethod
+    def random_peak_dropout(data_sample, dropout_rate=0.10, p_augmentation=1.0):
+        """
+        Randomly zero out a percentage of peaks to simulate partial data loss.
+        """
+        if random.random() < p_augmentation:
+            for suffix in ['_0', '_1']:
+                int_key = "intensity" + suffix
+                mz_key = "mz" + suffix
+                intensity_array = data_sample[int_key]
+                mz_array = data_sample[mz_key]
+                
+                n_peaks = len(intensity_array)
+                n_drop = int(n_peaks * dropout_rate)
+                # choose random peaks to drop
+                drop_indices = random.sample(range(n_peaks), n_drop)
+                for idx in drop_indices:
+                    intensity_array[idx] = 0
+                    mz_array[idx] = 0
+                
+                data_sample[int_key] = intensity_array
+                data_sample[mz_key] = mz_array
+        return data_sample

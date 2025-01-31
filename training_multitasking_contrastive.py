@@ -66,47 +66,51 @@ molecule_pairs_val = dataset["molecule_pairs_val"]
 molecule_pairs_test = dataset["molecule_pairs_test"]
 uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
-# Initialize a set to track unique first two columns
-def remove_duplicates_array(array):
-    seen = set()
-    filtered_rows = []
-
-    for row in array:
-        # Create a tuple of the first two columns to check uniqueness
-        key = tuple(sorted(row[:2]))  # Sort to account for unordered pairs
-        if key not in seen:
-            seen.add(key)
-            filtered_rows.append(row)
-
-    # Convert the filtered rows back to a NumPy array
-    result = np.array(filtered_rows)
-    return result
 
 # In[283]:
 print('Loading pairs data ...')
-indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
-                            prefix='ed_mces_indexes_tani_incremental_train', 
-                            use_edit_distance=config.USE_EDIT_DISTANCE, 
-                            use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS,
-                            remove_percentage=0.75,)
-print('Loading UC Riverside data')
-indexes_tani_multitasking_train_uc  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_VAL_TEST, 
-                            prefix='indexes_tani_incremental_train', 
-                            use_edit_distance=config.USE_EDIT_DISTANCE, 
-                            use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=0,)
+#indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
+#                            prefix='indexes_tani_incremental_train', 
+#                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+#                            use_multitask=config.USE_MULTITASK,
+#                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
+#indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
+#                            prefix='indexes_tani_incremental_val', 
+#                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+#                            use_multitask=config.USE_MULTITASK,
+#                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
 
-indexes_tani_multitasking_train = np.concatenate((indexes_tani_multitasking_train, indexes_tani_multitasking_train_uc), axis=0)
-indexes_tani_multitasking_train= remove_duplicates_array(indexes_tani_multitasking_train)
 
-indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
-                            prefix='ed_mces_indexes_tani_incremental_val', 
-                            use_edit_distance=config.USE_EDIT_DISTANCE, 
-                            use_multitask=config.USE_MULTITASK,
-                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
 
-indexes_tani_multitasking_val= remove_duplicates_array(indexes_tani_multitasking_val)
+## create a numpy array for equality
+def create_artificial_low_similarity_pairs(max_index_spectrum, number_pairs):
+
+        indexes_tani_low= np.zeros((number_pairs,4))
+        indexes_tani_low[:,0]= np.random.randint(0,max_index_spectrum,number_pairs)
+        indexes_tani_low[:,1]= np.random.randint(0,max_index_spectrum,number_pairs)
+        indexes_tani_low[:,2]= 0
+        # if there is the extra column corresponding to tanimoto
+        indexes_tani_low[:,3]= 0
+        return indexes_tani_low
+
+def create_artificial_high_similarity_pairs(max_index_spectrum):
+        indexes_tani_high= np.zeros((max_index_spectrum,4))
+        indexes_tani_high[:,0]= np.arange(0,max_index_spectrum)
+        indexes_tani_high[:,1]= np.arange(0,max_index_spectrum)
+        indexes_tani_high[:,2]= 1
+        # if there is the extra column corresponding to tanimoto
+        indexes_tani_high[:,3]= 1
+        return indexes_tani_high
+
+def create_artificial_data(max_index_spectrum, number_pairs=500000000):
+    high = create_artificial_high_similarity_pairs(max_index_spectrum)
+    low = create_artificial_low_similarity_pairs(max_index_spectrum, number_pairs=number_pairs)
+    return np.concatenate([high, low])
+
+## training
+indexes_tani_multitasking_train =  create_artificial_data(len(molecule_pairs_train.spectrums), number_pairs=20000000)
+indexes_tani_multitasking_val =    create_artificial_data(len(molecule_pairs_val.spectrums), number_pairs=1000000)
+
 
 # assign features
 molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
@@ -180,7 +184,17 @@ train_binned_list[1].indexes_tani.shape
 
 plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]>0][:,2], bins=20)
 
-weights, range_weights = WeightSampling.compute_weights_categories(train_binned_list)
+def compute_weights_categories(binned_list):
+        freq = np.array([len(r) for r in binned_list])
+        weights = np.array([(np.sum(freq) / f)  if f>0 else 0 for f in freq])
+        weights = weights / np.sum(weights)
+        bin_size= 1/(len(binned_list)-1)
+        range_weights = np.arange(0, len(binned_list)) * bin_size
+        return weights, range_weights
+
+weights, range_weights = compute_weights_categories(train_binned_list)
+
+print(f'Example of weights:{weights}')
 
 ## save info about the weights of similarity 1
 Plotting.plot_weights(range_weights, weights, xlabel='weight bin similarity 1', 
@@ -231,16 +245,16 @@ plt.yscale('log')
 # In[295]:
 
 
-plt.hist(weights_val)
-plt.yscale('log')
+#plt.hist(weights_val)
+#plt.yscale('log')
 
 
 # In[296]:
 
 
-dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, max_num_peaks = int(config.TRANSFORMER_CONTEXT), training=True)
+dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, training=True, max_num_peaks=100)
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val,  max_num_peaks = int(config.TRANSFORMER_CONTEXT))
+dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val,max_num_peaks=100)
 
 
 # In[297]:
@@ -429,19 +443,23 @@ model = EmbedderMultitask(
 
 # Create a model:
 if config.load_pretrained:
-    model_pretrained= Embedder.load_from_checkpoint(
+    model= Embedder.load_from_checkpoint(
         config.pretrained_path,
         d_model=int(config.D_MODEL),
         n_layers=int(config.N_LAYERS),
+        n_classes=config.EDIT_DISTANCE_N_CLASSES,
         weights=None,
         lr=config.LR,
         use_cosine_distance=config.use_cosine_distance,
         use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
         weights_sim2=weights_sim2,
-        strict=False,
+        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+        use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+        use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+        #strict=False,
 )
     
-    model.spectrum_encoder = model_pretrained.spectrum_encoder
+    #model.spectrum_encoder = model_pretrained.spectrum_encoder
     print("Loaded pretrained model")
 else:
     print("Not loaded pretrained model")

@@ -152,7 +152,8 @@ class EmbedderMultitask(Embedder):
 
     def forward(self, batch, return_spectrum_output=False):
         """The inference pass"""
-
+        #batch = {k:torch.tensor(batch[k]) for k in batch}
+        
         if self.use_precursor_mz_for_model:
             mz_0=batch["precursor_mass_0"].float()
             mz_1 =batch["precursor_mass_1"].float()

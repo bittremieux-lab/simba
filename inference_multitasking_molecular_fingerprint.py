@@ -94,14 +94,10 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 # In[283]:
 print('Loading pairs data ...')
-#indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', 
-#                                                             use_edit_distance=config.USE_EDIT_DISTANCE,
-#                                                             use_multitask=config.USE_MULTITASK)
-indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
-                                                        prefix='ed_mces_indexes_tani_incremental_test', 
+indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', 
                                                              use_edit_distance=config.USE_EDIT_DISTANCE,
                                                              use_multitask=config.USE_MULTITASK)
-                                                             
+
 molecule_pairs_test.indexes_tani = indexes_tani_multitasking_test[:,0:3]
 
 
@@ -167,7 +163,8 @@ uniformed_molecule_pairs_test.indexes_tani
 
 
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test, max_num_peaks=int(config.TRANSFORMER_CONTEXT))
+dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test,
+        use_fingerprints=config.USE_MOLECULAR_FINGERPRINTS)
 dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
 
 
@@ -185,10 +182,10 @@ best_model = EmbedderMultitask.load_from_checkpoint(
     use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
     use_element_wise=True,
     use_cosine_distance=config.use_cosine_distance,
-    use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+    use_fingerprints=config.USE_MOLECULAR_FINGERPRINTS,
+    
 )
 
-best_model.eval()
 
 # ## Postprocessing
 
@@ -224,12 +221,7 @@ def which_index_confident(p, threshold=0.50):
 
 def which_index_regression(p, max_index=5):
     ## the value of 0.2 must be the center of the second item
-
     index=np.round(p*max_index)
-    # ad hoc solution
-    #index=(-(np.round(p*max_index)))
-
-    #index=np.clip(index, 0, 5)
     return index
 
 #print(len(pred_test))
@@ -238,7 +230,6 @@ def which_index_regression(p, max_index=5):
 #print(f'Shape of pred_test: {len(pred_test)}')
 # flat the results
 flat_pred_test1 = []
-raw_flat_pred_test1 = []
 confident_pred_test1=[]
 
 flat_pred_test2 = []
@@ -251,8 +242,6 @@ for pred in pred_test: # in the batch dimension
     #similarity1
     if config.USE_EDIT_DISTANCE_REGRESSION:
         flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
-        raw_flat_pred_test1 = raw_flat_pred_test1 + [p.item() for p in pred1]
-        #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.numpy())[0] for p in pred1]
         confident_pred_test1= flat_pred_test1
     else:
         flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
@@ -261,20 +250,7 @@ for pred in pred_test: # in the batch dimension
     #similarity2
     flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
 
-# In[250]:
-#raw_flat_pred_test1=np.array(raw_flat_pred_test1)
-#plt.figure()
-#error_x= np.random.randint(0,100,raw_flat_pred_test1.shape[0])/200 - 0.5
-#error_y= np.random.randint(0,100,raw_flat_pred_test1.shape[0])/200 - 0.5
-#plt.scatter(5-(np.array(similarities_test1))+error_x, 5-5*(raw_flat_pred_test1)+error_y, alpha=0.1)
-#plt.xlabel('edit distance')
-#plt.ylabel('prediction')
-#plt.grid()
-#plt.savefig(config.CHECKPOINT_DIR + f"raw_edit_distance_scatter_plot_{config.MODEL_CODE}.png")
 
-
-
-print(f'Example of edit distance prediction: {flat_pred_test1}')
 # convert to numpy
 flat_pred_test1=np.array( flat_pred_test1)
 confident_pred_test1=np.array(confident_pred_test1)
@@ -294,14 +270,14 @@ print(f'Max value of similarities 1: {max(similarities_test1)}')
 print(f'Min value of similarities 1: {min(similarities_test1)}')
 
 # analyze errors and good predictions
-good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1, flat_pred_test1, similarities_test2, flat_pred_test2,)
-bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1, flat_pred_test1, similarities_test2, flat_pred_test2,)
+good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1, flat_pred_test1)
+bad_indexes = PerformanceMetrics.get_bad_predictions(similarities_test1, flat_pred_test1)
 
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, similarities_test2,
-                                            flat_pred_test1,flat_pred_test2,  good_indexes, config, prefix='good')
+PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, flat_pred_test1, good_indexes, config, prefix='good')
+PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, flat_pred_test1, bad_indexes, config, prefix='bad')
 
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, similarities_test2,
-                                            flat_pred_test1,flat_pred_test2,  bad_indexes, config, prefix='bad')
+
+
 # In[ ]:
 
 
@@ -336,45 +312,26 @@ print(f'Correlation of edit distance model: {corr_model1}')
 # In[ ]:
 
 
-import matplotlib.pyplot as plt
-import numpy as np
-from sklearn.metrics import confusion_matrix, accuracy_score
 
-def plot_cm(true, preds, config, file_name='cm.png'):
+
+def plot_cm(true,preds, config, file_name='cm.png'):
     # Compute the confusion matrix
     cm = confusion_matrix(true, preds)
+
     # Compute the accuracy
     accuracy = accuracy_score(true, preds)
     print("Accuracy:", accuracy)
     # Normalize the confusion matrix by the number of true instances for each class
-    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)
     # Plot the confusion matrix with percentages
     plt.figure(figsize=(10, 7))
-    labels = ['>5', '4', '3', '2', '1', '0']
-    
-    # Create the heatmap manually using plt.imshow
-    im = plt.imshow(cm_normalized, interpolation='nearest', cmap='Blues')
-    
-    # Add colorbar
-    plt.colorbar(im)
-    
-    # Annotate each cell with the corresponding percentage
-    for i in range(cm_normalized.shape[0]):
-        for j in range(cm_normalized.shape[1]):
-            plt.text(j, i, f'{cm_normalized[i, j]:.2%}', 
-                     ha='center', va='center', color='black')
-    
-    # Set tick labels and increase font size
-    plt.xticks(ticks=np.arange(len(labels)), labels=labels, fontsize=12)
-    plt.yticks(ticks=np.arange(len(labels)), labels=labels, fontsize=12)
-    
-    plt.xlabel('Predicted Labels', fontsize=14)
-    plt.ylabel('True Labels', fontsize=14)
-    plt.title(f'Confusion Matrix (Normalized to Percentages), acc: {accuracy:.2f}, samples: {preds.shape[0]}', fontsize=16)
-    
-    # Save and show the plot
+    labels= ['>5', '4', '3', '2' , '1', '0']
+    sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',xticklabels=labels, yticklabels=labels)
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    plt.title(f'Confusion Matrix (Normalized to Percentages), acc:{accuracy:.2f}, samples: {preds.shape[0]}')
     plt.savefig(config.CHECKPOINT_DIR + file_name)
+    plt.show()
 
 plot_cm(similarities_test_cleaned1, flat_pred_test_cleaned1, config)
 ## analyze the impact of thresholding
@@ -395,7 +352,6 @@ print(f'Correlation of model (confident): {confident_corr_model1}')
 plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1, config, file_name='confident_cm.png')
 # In[250]:
 plt.figure()
-np.random.seed(42)
 error_x= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
 error_y= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
 plt.scatter(5-(similarities_test1)+error_x, 5-flat_pred_test1+error_y, alpha=0.1)
@@ -482,10 +438,6 @@ print(flat_pred_test2.shape)
 # In[ ]:
 
 
-## Remove values correspoding to the threshold
-similarities_test2_original=similarities_test2.copy()
-similarities_test2= similarities_test2[similarities_test2_original != 0.5]
-flat_pred_test2 =   flat_pred_test2[similarities_test2_original != 0.5]
 corr_model2, p_value_model2= spearmanr(similarities_test2, flat_pred_test2)
 
 
@@ -497,16 +449,11 @@ if not(config.USE_TANIMOTO): #if using mces20, apply de-normalization to obtain 
     
 print(f'Correlation of tanimoto model: {corr_model2}')
 sns.set_theme(style="ticks")
-plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1, gridsize=15))
+plot = sns.jointplot(x=similarities_test2, y=flat_pred_test2, kind="hex", color="#4CB391", joint_kws=dict(alpha=1))
 # Set x and y labels
 plot.set_axis_labels("Ground truth Similarity", "Prediction", fontsize=12)
 plot.fig.suptitle(f"Spearman Correlation:{corr_model2}", fontsize=16)
-# Set x-axis limits
-plot.ax_joint.set_xlim(0, 40)
-# Set x-axis limits
-plot.ax_joint.set_ylim(0, 40)
 plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
-
 
 
 ## save scatter plot

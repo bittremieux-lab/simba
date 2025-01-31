@@ -17,7 +17,7 @@ from src.edit_distance.edit_distance import EditDistance
 from rdkit.Chem import AllChem
 from rdkit import Chem, Geometry
 from src.load_mces.load_mces import LoadMCES
-
+import os 
 class MCES:
     @staticmethod
     def compute_all_mces_results_unique(
@@ -280,65 +280,67 @@ class MCES:
 
                 #if (index_array>38) and ((index_array%config.PREPROCESSING_NUM_NODES)==config.PREPROCESSING_CURRENT_NODE):
                 if ((index_array%config.PREPROCESSING_NUM_NODES)==config.PREPROCESSING_CURRENT_NODE):
-
-                    print(f'Processing index_array: {index_array}')
-                    #pool = multiprocessing.dummy.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMOR 
-                    pool = multiprocessing.Pool(processes=num_workers)   
-
-                    print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
-                    if config.COMPUTE_SPECIFIC_PAIRS: 
-                            print(f'Size of each array {array.shape[0]}')
-                            sub_arrays = np.array_split(array, num_workers)
-                            print(f'Size of each sub-array {sub_arrays[0].shape[0]}')
-                    
-                            results = [pool.apply_async(comp_function, args=(smiles, 
-                                                None, 
-                                                size_batch, 
-                                                (index_array*split_arrays[0].shape[0])+sub_index,
-                                                None, 
-                                                config,
-                                                identifier,
-                                                sampled_array
-                                                )) for sub_index, sampled_array in enumerate(sub_arrays)]
-                    else:
-                                #if use_edit_distance:
-
-                                print('Compute the mols')
-                                
-                                mols = [Chem.MolFromSmiles(s) for s in smiles]
-                                print('Computing fingerprints')
-                                fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
-                                fps = [fpgen.GetFingerprint(m) for m in mols]
-
-                                print('Finished fongerprints')
-                                results = [pool.apply_async(comp_function, args=(smiles,
-                                                        sampled_index, 
-                                                        size_batch, 
-                                                        (index_array*len(split_arrays[0]))+sub_index,
-                                                        random_sampling, config, fps, mols,
-                                                        use_edit_distance,
-                                                        )) for sub_index, sampled_index in enumerate(array)]
-                                 #else:
-
-
-                                #results = [pool.apply_async(comp_function, args=(smiles, 
-                                #                        sampled_index, 
-                                #                        size_batch, 
-                                #                        sampled_index,
-                                #                        #(index_array*len(split_arrays[0]))+sub_index,
-                                #                        random_sampling, config,
-                                #                        )) for sub_index, sampled_index in enumerate(array)]
-                        
-                        
-                    # Close the pool and wait for all processes to finish
-                    pool.close()
-                    pool.join()
-                
-                    # Get results from async objects
-                    indexes_np_temp = np.concatenate([result.get() for result in results], axis=0)
-
                     prefix_file= 'edit_distance_' if use_edit_distance else 'mces_'
-                    np.save(arr=indexes_np_temp, file= f'{config.PREPROCESSING_DIR}'+ prefix_file + f'indexes_tani_incremental{identifier}_{str(index_array)}.npy')
+                    name_file=f'{config.PREPROCESSING_DIR}'+ prefix_file + f'indexes_tani_incremental{identifier}_{str(index_array)}.npy'
+                    
+                    if not(os.path.exists(name_file)): ## by default not overwriting
+                        print(f'Processing index_array: {index_array}')
+                        #pool = multiprocessing.dummy.Pool(processes=num_workers)      ## USE MULTIPLE PROCESSES - PRIVATE MEMOR 
+                        pool = multiprocessing.Pool(processes=num_workers)   
+
+                        print(f'Value of COMPUTE_SPECIFIC_PAIRS: {config.COMPUTE_SPECIFIC_PAIRS}')
+                        if config.COMPUTE_SPECIFIC_PAIRS: 
+                                print(f'Size of each array {array.shape[0]}')
+                                sub_arrays = np.array_split(array, num_workers)
+                                print(f'Size of each sub-array {sub_arrays[0].shape[0]}')
+                        
+                                results = [pool.apply_async(comp_function, args=(smiles, 
+                                                    None, 
+                                                    size_batch, 
+                                                    (index_array*split_arrays[0].shape[0])+sub_index,
+                                                    None, 
+                                                    config,
+                                                    identifier,
+                                                    sampled_array
+                                                    )) for sub_index, sampled_array in enumerate(sub_arrays)]
+                        else:
+                                    #if use_edit_distance:
+
+                                    print('Compute the mols')
+                                    
+                                    mols = [Chem.MolFromSmiles(s) for s in smiles]
+                                    print('Computing fingerprints')
+                                    fpgen = AllChem.GetRDKitFPGenerator(maxPath=3,fpSize=512)
+                                    fps = [fpgen.GetFingerprint(m) for m in mols]
+
+                                    print('Finished fongerprints')
+                                    results = [pool.apply_async(comp_function, args=(smiles,
+                                                            sampled_index, 
+                                                            size_batch, 
+                                                            (index_array*len(split_arrays[0]))+sub_index,
+                                                            random_sampling, config, fps, mols,
+                                                            use_edit_distance,
+                                                            )) for sub_index, sampled_index in enumerate(array)]
+                                    #else:
+
+
+                                    #results = [pool.apply_async(comp_function, args=(smiles, 
+                                    #                        sampled_index, 
+                                    #                        size_batch, 
+                                    #                        sampled_index,
+                                    #                        #(index_array*len(split_arrays[0]))+sub_index,
+                                    #                        random_sampling, config,
+                                    #                        )) for sub_index, sampled_index in enumerate(array)]
+                            
+                            
+                        # Close the pool and wait for all processes to finish
+                        pool.close()
+                        pool.join()
+                    
+                        # Get results from async objects
+                        indexes_np_temp = np.concatenate([result.get() for result in results], axis=0)
+
+                        np.save(arr=indexes_np_temp, file= name_file)
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
 

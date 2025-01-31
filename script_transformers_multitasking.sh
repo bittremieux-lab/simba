@@ -9,7 +9,7 @@ source activate transformers
 
 nvidia-smi 
 
-srun python training_multitasking_generated_data.py --enable_progress_bar=0    --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_with_uc --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
+srun python training_multitasking_generated_data.py --enable_progress_bar=0  --D_MODEL=512  --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_peak_dropout_more_data  --load_pretrained=1 --LR=0.00001
 
 
 #srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_2024115 --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=0 --USE_EDIT_DISTANCE_REGRESSION=0 
@@ -18,3 +18,4 @@ srun python training_multitasking_generated_data.py --enable_progress_bar=0    -
 #--D_MODEL=128  
 #--PREPROCESSING_DIR=/scratch/antwerpen/209/vsc20939/data/preprocessing_multitasking_min_peaks/ --extra_info=_min_peaks
 #srun python inference_multitasking.py --enable_progress_bar=0  --D_MODEL=128  
+#python training_multitasking_generated_data_resampling.py --enable_progress_bar=0  --USE_RESAMPLING=1  --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_resampling --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001

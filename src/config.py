@@ -34,8 +34,9 @@ class Config:
         
 
         # training
+        self.USE_RESAMPLING=False
         self.TRANSFORMER_CONTEXT=100   ##number of input peaks to the transformer
-        self.ADD_HIGH_SIMILARITY_PAIRS=True
+        self.ADD_HIGH_SIMILARITY_PAIRS=False
         self.USE_MOLECULAR_FINGERPRINTS=False
         self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range
         self.USE_EDIT_DISTANCE_REGRESSION=False
@@ -49,7 +50,7 @@ class Config:
         self.N_LAYERS = 5  # transformer parameters
         self.D_MODEL = 256  # transformer parameters
         self.EMBEDDING_DIM=512
-        self.use_cosine_distance = False
+        self.use_cosine_distance = True
         self.LR = 1e-4
         self.epochs = 1000
         self.BATCH_SIZE = 128
