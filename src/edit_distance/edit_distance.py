@@ -12,7 +12,7 @@ from rdkit.Chem.Fingerprints import FingerprintMols
 import numpy as np
 import src.edit_distance.mol_utils as mu
 import os
-from myopic_mces import MCES 
+#from myopic_mces import MCES 
 
 class EditDistance:
 
@@ -171,7 +171,7 @@ class EditDistance:
                     #raise ValueError("The molecules are too large.")
                     return np.nan, tanimoto
                 else:
-                    
+                    from myopic_mces import MCES 
                     result =     MCES(
                                         s0,
                                         s1,

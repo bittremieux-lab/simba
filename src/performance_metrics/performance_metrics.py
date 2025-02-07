@@ -127,7 +127,7 @@ class PerformanceMetrics:
     def plot_molecules(molecule_pairs, similarities_ed, similarities_mces,
                         predictions_ed, predictions_mces,
                         target_indexes, config, 
-                        samples=50, prefix='good'):
+                        samples=20, prefix='good'):
         output_path = config.CHECKPOINT_DIR
 
         # create folders for the images if they dont exist

@@ -45,4 +45,6 @@ class Postprocessing:
         similarities1 = [[float(b) for b in batch['similarity']] for batch in dataloader]
         similarities2 = [[float(b) for b in batch['similarity2']] for batch in dataloader]
 
+        similarities1= [item for sublist in similarities1 for item in sublist]
+        similarities2= [item for sublist in similarities2 for item in sublist]
         return similarities1, similarities2

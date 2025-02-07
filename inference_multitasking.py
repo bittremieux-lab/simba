@@ -245,22 +245,26 @@ flat_pred_test2 = []
 confident_pred_test2=[]
 for pred in pred_test: # in the batch dimension
     #get the results of each similarity
-    pred1= pred[0]
+    #pred1= pred[0]
     pred2= pred[1]
 
     #similarity1
-    if config.USE_EDIT_DISTANCE_REGRESSION:
-        flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
-        raw_flat_pred_test1 = raw_flat_pred_test1 + [p.item() for p in pred1]
-        #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.numpy())[0] for p in pred1]
-        confident_pred_test1= flat_pred_test1
-    else:
-        flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
-        confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
+    #if config.USE_EDIT_DISTANCE_REGRESSION:
+    #    #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
+    #    #raw_flat_pred_test1 = raw_flat_pred_test1 + [p.item() for p in pred1]
+    #    #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.numpy())[0] for p in pred1]
+    #    #confident_pred_test1= flat_pred_test1
+    #else:
+    #    #flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
+    #    #confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
 
     #similarity2
     flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
 
+
+flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test]
+flat_pred_test2= [item for sublist in flat_pred_test2 for item in sublist]
+flat_pred_test2=np.array( flat_pred_test2)
 # In[250]:
 #raw_flat_pred_test1=np.array(raw_flat_pred_test1)
 #plt.figure()
@@ -273,13 +277,16 @@ for pred in pred_test: # in the batch dimension
 #plt.savefig(config.CHECKPOINT_DIR + f"raw_edit_distance_scatter_plot_{config.MODEL_CODE}.png")
 
 
+# lets extract the mces distance
+flat_pred_test1 = [p[0] for p in pred_test]
+flat_pred_test1 = [[which_index(p) for p in p_list] for p_list in flat_pred_test1]
+flat_pred_test1= [item for sublist in flat_pred_test1 for item in sublist]
+flat_pred_test1=np.array(flat_pred_test1)
 
 print(f'Example of edit distance prediction: {flat_pred_test1}')
 # convert to numpy
-flat_pred_test1=np.array( flat_pred_test1)
 confident_pred_test1=np.array(confident_pred_test1)
 
-flat_pred_test2=np.array( flat_pred_test2)
 
 
 # get the results
