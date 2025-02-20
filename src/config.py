@@ -43,6 +43,8 @@ class Config:
         self.USE_MULTITASK=True
         self.EDIT_DISTANCE_N_CLASSES=6
         self.EDIT_DISTANCE_USE_GUMBEL=False
+        self.TAU_GUMBEL_SOFTMAX=10
+        self.GUMBEL_REG_WEIGHT=0.1
         self.USE_TANIMOTO =False # using Tanimoto or MCES20 for training
         self.EDIT_DISTANCE_MAX_VALUE=666
         self.MCES20_MAX_VALUE=40 # value used as midpoint for normalization. 19 it is chosen to make NORMALIZED_MCES to be in the range below 0.49 and make it consider a low similarity pair

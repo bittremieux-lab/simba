@@ -89,7 +89,11 @@ with open(dataset_path, "rb") as file:
 molecule_pairs_train = dataset["molecule_pairs_train"]
 molecule_pairs_val = dataset["molecule_pairs_val"]
 molecule_pairs_test = dataset["molecule_pairs_test"]
-uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
+
+import copy
+molecule_pairs_test_ed=   copy.deepcopy(molecule_pairs_test)
+molecule_pairs_test_mces= copy.deepcopy(molecule_pairs_test)
+
 
 
 # In[283]:
@@ -102,18 +106,21 @@ indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSIN
                                                              use_edit_distance=config.USE_EDIT_DISTANCE,
                                                              use_multitask=config.USE_MULTITASK)
                                                              
-molecule_pairs_test.indexes_tani = indexes_tani_multitasking_test[:,0:3]
+molecule_pairs_test_ed.indexes_tani = indexes_tani_multitasking_test[:,0:3]
 
 
-print(f'shape of similarity1: {molecule_pairs_test.indexes_tani.shape}')
+print(f'shape of similarity1: {molecule_pairs_test_ed.indexes_tani.shape}')
 
 # add tanimotos
 
-molecule_pairs_test.tanimotos = indexes_tani_multitasking_test[:,3]
+molecule_pairs_test_ed.tanimotos = indexes_tani_multitasking_test[:,3]
 
-print(f'shape of similarity2: {molecule_pairs_test.tanimotos.shape}')
-print(f"Number of pairs for test: {len(molecule_pairs_test)}")
+print(f'shape of similarity2: {molecule_pairs_test_ed.tanimotos.shape}')
+print(f"Number of pairs for test: {len(molecule_pairs_test_ed)}")
 
+# get the mces
+molecule_pairs_test_mces.indexes_tani= indexes_tani_multitasking_test[:,[0,1,3]]
+molecule_pairs_test_mces.tanimotos= indexes_tani_multitasking_test[:,3]
 
 
 #best_model_path = model_path = data_folder + 'best_model_exhaustive_sampled_128n_20240618.ckpt'
@@ -124,22 +131,13 @@ if not(config.INFERENCE_USE_LAST_MODEL) and (os.path.exists(config.CHECKPOINT_DI
     best_model_path = config.CHECKPOINT_DIR + config.BEST_MODEL_NAME
 else:
     best_model_path = config.CHECKPOINT_DIR + f"last.ckpt"
-#best_model_path = config.CHECKPOINT_DIR + f"best_model_n_steps.ckpt"
-
-# In[ ]:
 
 
-molecule_pairs_test.indexes_tani.shape
-
-
-# In[ ]:
-
-
-molecule_pairs_test = dataset["molecule_pairs_test"]
-print(f"Number of molecule pairs: {len(molecule_pairs_test)}")
+#molecule_pairs_test = dataset["molecule_pairs_test"]
+print(f"Number of molecule pairs: {len(molecule_pairs_test_ed)}")
 print("Uniformize the data")
-uniformed_molecule_pairs_test, binned_molecule_pairs = TrainUtils.uniformise(
-    molecule_pairs_test,
+uniformed_molecule_pairs_test_ed, binned_molecule_pairs_ed = TrainUtils.uniformise(
+    molecule_pairs_test_ed,
     number_bins=bins_uniformise_inference,
     return_binned_list=True,
     bin_sim_1=True,
@@ -148,29 +146,21 @@ uniformed_molecule_pairs_test, binned_molecule_pairs = TrainUtils.uniformise(
 )  # do not treat sim==1 as another bin
 
 
-
-
-
-# In[ ]:
-
-
-binned_molecule_pairs[4].indexes_tani.shape
-
-
-# In[ ]:
-
-
-uniformed_molecule_pairs_test.indexes_tani
-
-
-# In[ ]:
-
+uniformed_molecule_pairs_test_mces, binned_molecule_pairs_mces = TrainUtils.uniformise(
+    molecule_pairs_test_mces,
+    number_bins=bins_uniformise_inference,
+    return_binned_list=True,
+    bin_sim_1=False,
+    #bin_sim_1=False,
+    #ordinal_classification=True,
+)  # do not treat sim==1 as another bin
 
 # dataset_train = LoadData.from_molecule_pairs_to_dataset(m_train)
-dataset_test = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test, max_num_peaks=int(config.TRANSFORMER_CONTEXT))
-dataloader_test = DataLoader(dataset_test, batch_size=config.BATCH_SIZE, shuffle=False)
+dataset_test_ed = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test_ed, max_num_peaks=int(config.TRANSFORMER_CONTEXT))
+dataloader_test_ed = DataLoader(dataset_test_ed, batch_size=config.BATCH_SIZE, shuffle=False)
 
-
+dataset_test_mces = LoadDataMultitasking.from_molecule_pairs_to_dataset(uniformed_molecule_pairs_test_mces, max_num_peaks=int(config.TRANSFORMER_CONTEXT))
+dataloader_test_mces = DataLoader(dataset_test_mces, batch_size=config.BATCH_SIZE, shuffle=False)
 
 # In[ ]:
 
@@ -194,15 +184,23 @@ best_model.eval()
 
 # In[ ]:
 
-
-pred_test = trainer.predict(
+# prediction of ed
+pred_test_ed = trainer.predict(
     best_model,
-    dataloader_test,
+    dataloader_test_ed,
 )
 
-similarities_test1, similarities_test2 = Postprocessing.get_similarities_multitasking(dataloader_test)
+# prediction of mces
+pred_test_mces = trainer.predict(
+    best_model,
+    dataloader_test_mces,
+)
+similarities_test1_ed, similarities_test2_ed = Postprocessing.get_similarities_multitasking(dataloader_test_ed)
+similarities_test1_mces, similarities_test2_mces = Postprocessing.get_similarities_multitasking(dataloader_test_mces)
 
-
+## Now assign the coorect similarity
+similarities_test1 = similarities_test1_ed
+similarities_test2 = similarities_test2_mces
 
 # In[ ]:
 def softmax(x):
@@ -243,26 +241,8 @@ confident_pred_test1=[]
 
 flat_pred_test2 = []
 confident_pred_test2=[]
-for pred in pred_test: # in the batch dimension
-    #get the results of each similarity
-    #pred1= pred[0]
-    pred2= pred[1]
 
-    #similarity1
-    #if config.USE_EDIT_DISTANCE_REGRESSION:
-    #    #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.item()) for p in pred1]
-    #    #raw_flat_pred_test1 = raw_flat_pred_test1 + [p.item() for p in pred1]
-    #    #flat_pred_test1 = flat_pred_test1 + [which_index_regression(p.numpy())[0] for p in pred1]
-    #    #confident_pred_test1= flat_pred_test1
-    #else:
-    #    #flat_pred_test1 = flat_pred_test1 + [which_index(p) for p in pred1]
-    #    #confident_pred_test1 = confident_pred_test1 + [which_index_confident(p) for p in pred1]
-
-    #similarity2
-    flat_pred_test2 = flat_pred_test2 + [p.item() for p in pred2]
-
-
-flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test]
+flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test_mces]
 flat_pred_test2= [item for sublist in flat_pred_test2 for item in sublist]
 flat_pred_test2=np.array( flat_pred_test2)
 # In[250]:
@@ -278,7 +258,7 @@ flat_pred_test2=np.array( flat_pred_test2)
 
 
 # lets extract the mces distance
-flat_pred_test1 = [p[0] for p in pred_test]
+flat_pred_test1 = [p[0] for p in pred_test_ed]
 flat_pred_test1 = [[which_index(p) for p in p_list] for p_list in flat_pred_test1]
 flat_pred_test1= [item for sublist in flat_pred_test1 for item in sublist]
 flat_pred_test1=np.array(flat_pred_test1)
@@ -301,14 +281,14 @@ print(f'Max value of similarities 1: {max(similarities_test1)}')
 print(f'Min value of similarities 1: {min(similarities_test1)}')
 
 # analyze errors and good predictions
-good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1, flat_pred_test1, similarities_test2, flat_pred_test2,)
-bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1, flat_pred_test1, similarities_test2, flat_pred_test2,)
+#good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2,)
+#bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2,)
 
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, similarities_test2,
-                                            flat_pred_test1,flat_pred_test2,  good_indexes, config, prefix='good')
+#PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
+#                                            flat_pred_test1,flat_pred_test2,  good_indexes, config, prefix='good')
 
-PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test, similarities_test1, similarities_test2,
-                                            flat_pred_test1,flat_pred_test2,  bad_indexes, config, prefix='bad')
+#PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
+#                                            flat_pred_test1,flat_pred_test2,  bad_indexes, config, prefix='bad')
 # In[ ]:
 
 
@@ -348,40 +328,40 @@ import numpy as np
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 def plot_cm(true, preds, config, file_name='cm.png'):
-    # Compute the confusion matrix
+    # Compute the confusion matrix and accuracy
     cm = confusion_matrix(true, preds)
-    # Compute the accuracy
     accuracy = accuracy_score(true, preds)
     print("Accuracy:", accuracy)
-    # Normalize the confusion matrix by the number of true instances for each class
+
+    # Normalize the confusion matrix by the number of true instances per class
     cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    
-    # Plot the confusion matrix with percentages
+
+    # Create the plot
     plt.figure(figsize=(10, 7))
     labels = ['>5', '4', '3', '2', '1', '0']
     
-    # Create the heatmap manually using plt.imshow
+    # Plot the heatmap using the 'Blues' colormap
     im = plt.imshow(cm_normalized, interpolation='nearest', cmap='Blues')
-    
-    # Add colorbar
     plt.colorbar(im)
-    
-    # Annotate each cell with the corresponding percentage
+
+    # Compute a threshold to decide the annotation text color
+    threshold = cm_normalized.max() / 2.0
+
+    # Annotate each cell with the percentage, using white text if the background is dark
     for i in range(cm_normalized.shape[0]):
         for j in range(cm_normalized.shape[1]):
-            plt.text(j, i, f'{cm_normalized[i, j]:.2%}', 
-                     ha='center', va='center', color='black')
+            text_color = "white" if cm_normalized[i, j] > threshold else "black"
+            plt.text(j, i, f'{cm_normalized[i, j]:.2%}', ha='center', va='center', color=text_color)
     
-    # Set tick labels and increase font size
+    # Set tick labels and increase font size for clarity
     plt.xticks(ticks=np.arange(len(labels)), labels=labels, fontsize=12)
     plt.yticks(ticks=np.arange(len(labels)), labels=labels, fontsize=12)
-    
     plt.xlabel('Predicted Labels', fontsize=14)
     plt.ylabel('True Labels', fontsize=14)
-    plt.title(f'Confusion Matrix (Normalized to Percentages), acc: {accuracy:.2f}, samples: {preds.shape[0]}', fontsize=16)
+    plt.title(f'Confusion Matrix (Normalized), Acc: {accuracy:.2f}, Samples: {preds.shape[0]}', fontsize=16)
     
-    # Save and show the plot
-    plt.savefig(config.CHECKPOINT_DIR + file_name)
+    # Save the plot
+    plt.savefig(os.path.join(config.CHECKPOINT_DIR, file_name))
 
 plot_cm(similarities_test_cleaned1, flat_pred_test_cleaned1, config)
 ## analyze the impact of thresholding
@@ -398,18 +378,20 @@ print(f'Confident size of predictions:{similarities_test_cleaned_confident1.shap
 
 print(f'Correlation of model (confident): {confident_corr_model1}')
 
-
-plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1, config, file_name='confident_cm.png')
-# In[250]:
-plt.figure()
-np.random.seed(42)
-error_x= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
-error_y= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
-plt.scatter(5-(similarities_test1)+error_x, 5-flat_pred_test1+error_y, alpha=0.1)
-plt.xlabel('edit distance')
-plt.ylabel('prediction')
-plt.grid()
-plt.savefig(config.CHECKPOINT_DIR + f"edit_distance_scatter_plot_{config.MODEL_CODE}.png")
+try:    
+    plot_cm(similarities_test_cleaned_confident1, flat_pred_test_cleaned_confident1, config, file_name='confident_cm.png')
+    # In[250]:
+    plt.figure()
+    np.random.seed(42)
+    error_x= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
+    error_y= np.random.randint(0,100,flat_pred_test1.shape[0])/200 - 0.5
+    plt.scatter(5-(similarities_test1)+error_x, 5-flat_pred_test1+error_y, alpha=0.1)
+    plt.xlabel('edit distance')
+    plt.ylabel('prediction')
+    plt.grid()
+    plt.savefig(config.CHECKPOINT_DIR + f"edit_distance_scatter_plot_{config.MODEL_CODE}.png")
+except:
+    print('Problem generating cm matrix for confident predictions')
 
 
 ####### SECOND SIMILARITY ######
@@ -466,8 +448,8 @@ def divide_predictions_in_bins(list_elements1, list_elements2, number_bins=5, bi
 
     return output_elements1, output_elements2
 
-similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_test2, flat_pred_test2, number_bins=5, bin_sim_1=False, min_bin=min_bin, 
-max_value=1)
+#similarities_test2, flat_pred_test2 = divide_predictions_in_bins(similarities_test2, flat_pred_test2, number_bins=5, bin_sim_1=False, min_bin=min_bin, 
+#max_value=1)
 
 print('')
 print('AFTER BINING:')

@@ -21,7 +21,8 @@ nvidia-smi
 #srun  python inference_multitasking.py  --enable_progress_bar=0   --extra_info=_multitasking_augmentations_p20  --TRANSFORMER_CONTEXT=100  --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
 #srun  python inference_multitasking.py  --enable_progress_bar=0   --extra_info=_multitasking_augmentations_selective_ed --TRANSFORMER_CONTEXT=100   --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
 #srun  python inference_multitasking.py  --enable_progress_bar=0   --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_multitasking_nosim1 --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
-srun  python inference_multitasking.py  --enable_progress_bar=0   --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_peak_dropout_more_data --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1  --load_pretrained=1 --LR=0.00001 --BEST_MODEL_NAME=best_model-final_performance.ckpt
+srun  python inference_multitasking.py  --enable_progress_bar=0   --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_logloss --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1  --load_pretrained=1 --LR=0.00001 --BEST_MODEL_NAME=best_model-final_performance.ckpt
+#srun  python inference_multitasking.py  --enable_progress_bar=0   --epochs=100 --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_several_config_1 --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1  --load_pretrained=1 --LR=0.00001 
 
 #srun  python inference_multitasking.py  --enable_progress_bar=0   --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_multitasking_nosim1_nopretraining --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=1 --load_pretrained=1 --LR=0.00001
 

@@ -425,6 +425,8 @@ model = EmbedderMultitask(
     use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
     use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
     use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+    tau_gumbel_softmax=config.TAU_GUMBEL_SOFTMAX,
+    gumbel_reg_weight=config.GUMBEL_REG_WEIGHT
 )
 
 # Create a model:
@@ -445,6 +447,8 @@ if config.load_pretrained:
         use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
         use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
         use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+        tau_gumbel_softmax =config.TAU_GUMBEL_SOFTMAX,
+        gumbel_reg_weight = config.GUMBEL_REG_WEIGHT,
     )
         print('loaded full model!!')
     except:
