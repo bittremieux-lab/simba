@@ -425,24 +425,47 @@ model = EmbedderMultitask(
     use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
     use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
     use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+    tau_gumbel_softmax=config.TAU_GUMBEL_SOFTMAX,
+    gumbel_reg_weight=config.GUMBEL_REG_WEIGHT
 )
 
 # Create a model:
 if config.load_pretrained:
-    model_pretrained= Embedder.load_from_checkpoint(
+
+    # Try to load the full model, otherwise load the encoders only
+    try:
+        model = EmbedderMultitask.load_from_checkpoint(
         config.pretrained_path,
         d_model=int(config.D_MODEL),
         n_layers=int(config.N_LAYERS),
+        n_classes=config.EDIT_DISTANCE_N_CLASSES,
         weights=None,
         lr=config.LR,
         use_cosine_distance=config.use_cosine_distance,
         use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
         weights_sim2=weights_sim2,
-        strict=False,
-)
-    
-    model.spectrum_encoder = model_pretrained.spectrum_encoder
-    print("Loaded pretrained model")
+        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+        use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+        use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+        tau_gumbel_softmax =config.TAU_GUMBEL_SOFTMAX,
+        gumbel_reg_weight = config.GUMBEL_REG_WEIGHT,
+    )
+        print('loaded full model!!')
+    except:
+        model_pretrained= Embedder.load_from_checkpoint(
+            config.pretrained_path,
+            d_model=int(config.D_MODEL),
+            n_layers=int(config.N_LAYERS),
+            weights=None,
+            lr=config.LR,
+            use_cosine_distance=config.use_cosine_distance,
+            use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+            weights_sim2=weights_sim2,
+            strict=False,
+    )
+        
+        model.spectrum_encoder = model_pretrained.spectrum_encoder
+        print("Loaded pretrained encoder model")
 else:
     print("Not loaded pretrained model")
 # In[ ]:

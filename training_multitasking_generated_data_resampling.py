@@ -157,20 +157,37 @@ if config.USE_RESAMPLING:
 
     # Create a model:
     if config.load_pretrained:
-        model_pretrained= Embedder.load_from_checkpoint(
+        try:
+            model = EmbedderMultitask.load_from_checkpoint(
             config.pretrained_path,
             d_model=int(config.D_MODEL),
             n_layers=int(config.N_LAYERS),
+            n_classes=config.EDIT_DISTANCE_N_CLASSES,
             weights=None,
             lr=config.LR,
             use_cosine_distance=config.use_cosine_distance,
             use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
-            #weights_sim2=weights_sim2,
-            strict=False,
-    )
+            weights_sim2=None,
+            use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+            use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+            use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+        )
+            print('loaded full model!!')
+        except:
+            model_pretrained= Embedder.load_from_checkpoint(
+                config.pretrained_path,
+                d_model=int(config.D_MODEL),
+                n_layers=int(config.N_LAYERS),
+                weights=None,
+                lr=config.LR,
+                use_cosine_distance=config.use_cosine_distance,
+                use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+                weights_sim2=None,
+                strict=False,
+        )
         
-        model.spectrum_encoder = model_pretrained.spectrum_encoder
-        print("Loaded pretrained model")
+            model.spectrum_encoder = model_pretrained.spectrum_encoder
+            print("Loaded pretrained encoder model")
     else:
         print("Not loaded pretrained model")
 
@@ -206,9 +223,9 @@ if config.USE_RESAMPLING:
     #flat_pred_test1 = np.argmax(np.array([pred[0] for pred in pred_test]), axis=1).tolist()
 
     ## filtered indexes, if the prediction is higher tha
-    filter_low_similarity_incorrect= (flat_pred_test1>0.90)
+    filter_low_similarity_incorrect= (flat_pred_test1>0.75)
 
-    random_indexes= np.random.randint(0,low_similarity_indexes_1.shape[0],sum(filter_low_similarity_incorrect))
+    random_indexes= np.random.randint(0,low_similarity_indexes_1.shape[0],2*sum(filter_low_similarity_incorrect))
     filter_random = np.zeros(low_similarity_indexes_1.shape[0], dtype=bool)
     filter_random[random_indexes] = True
 
@@ -542,20 +559,37 @@ model = EmbedderMultitask(
 
 # Create a model:
 if config.load_pretrained:
-    model_pretrained= Embedder.load_from_checkpoint(
+    try:
+        model = EmbedderMultitask.load_from_checkpoint(
         config.pretrained_path,
         d_model=int(config.D_MODEL),
         n_layers=int(config.N_LAYERS),
+        n_classes=config.EDIT_DISTANCE_N_CLASSES,
         weights=None,
         lr=config.LR,
         use_cosine_distance=config.use_cosine_distance,
         use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
         weights_sim2=weights_sim2,
-        strict=False,
-)
-    
-    model.spectrum_encoder = model_pretrained.spectrum_encoder
-    print("Loaded pretrained model")
+        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+        use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+        use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+    )
+        print('loaded full model!!')
+    except:
+        model_pretrained= Embedder.load_from_checkpoint(
+            config.pretrained_path,
+            d_model=int(config.D_MODEL),
+            n_layers=int(config.N_LAYERS),
+            weights=None,
+            lr=config.LR,
+            use_cosine_distance=config.use_cosine_distance,
+            use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+            weights_sim2=weights_sim2,
+            strict=False,
+    )
+        
+        model.spectrum_encoder = model_pretrained.spectrum_encoder
+        print("Loaded pretrained encoder model")
 else:
     print("Not loaded pretrained model")
 # In[ ]:

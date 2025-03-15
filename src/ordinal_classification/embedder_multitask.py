@@ -105,6 +105,8 @@ class EmbedderMultitask(Embedder):
         use_mces20_log_loss=True, 
         use_fingerprints=False,
         use_precursor_mz_for_model=True,
+        tau_gumbel_softmax=10,
+        gumbel_reg_weight=0.1,
 ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -127,6 +129,9 @@ class EmbedderMultitask(Embedder):
 
         self.dropout = nn.Dropout(p=dropout)
         self.use_gumbel=use_gumbel
+        if self.use_gumbel:
+            self.tau_gumbel_softmax=tau_gumbel_softmax
+            print(f'Usign TAU GUMBEL softmax: {self.tau_gumbel_softmax}')
         self.weights_sim2=weights_sim2
 
         self.linear1 = nn.Linear(d_model, d_model)
@@ -374,7 +379,9 @@ class EmbedderMultitask(Embedder):
             loss1 = squared_diff_1.view(-1, 1).mean()
         else:
             if self.use_gumbel:
-                gumbel_probs_1 = F.gumbel_softmax(logits1, tau=10.0, hard=False)
+                #gumbel_probs_1 = F.gumbel_softmax(logits1, tau=10.0, hard=False)
+                gumbel_probs_1 = F.gumbel_softmax(logits1, tau=self.tau_gumbel_softmax, hard=False)
+
                 #gumbel_probs_1 = F.gumbel_softmax(logits1, tau=0.0, hard=True)
 
                 # Compute the expected value (continuous) from probabilities
@@ -395,24 +402,24 @@ class EmbedderMultitask(Embedder):
 
                 # Compute difference for the first and second columns (to include the first column)
                 #diff_penalty  =self.compute_adjacent_diffs(gumbel_probs_1, batch_size)
-                reg_weight=0.1
+                #reg_weight=0.1
+                reg_weight= self.gumbel_reg_weight
                 loss1 = loss1 + reg_weight * diff_penalty
             else:
                 #loss1 = self.ordinal_loss(logits1, target1)
                 loss1 =self.customised_ce(logits1, target1) 
 
+        # apply log function if needed
+        if self.use_mces20_log_loss:
+            #scaling_factor= (2*np.log(0.5))#divided by scaling factor just for normalizing the range between 0 and 1 again
+            scaling_factor= np.log(2)
+            logits2_for_loss= torch.log(2-logits2)/scaling_factor 
+            target2_for_loss= torch.log(2-target2)/scaling_factor
+        else:
+            logits2_for_loss=logits2
+            target2_for_loss = target2 
+
         if self.weights_sim2 is not None: # if there are sample weights used 
-
-            # apply log function if needed
-            if self.use_mces20_log_loss:
-                #scaling_factor= (2*np.log(0.5))#divided by scaling factor just for normalizing the range between 0 and 1 again
-                scaling_factor= np.log(2)
-                logits2_for_loss= torch.log(2-logits2)/scaling_factor 
-                target2_for_loss= torch.log(2-target2)/scaling_factor
-            else:
-                logits2_for_loss=logits2
-                target2_for_loss = target2 
-
             # Calculate the squared difference for loss2
             squared_diff = (logits2_for_loss.view(-1,1).float() - target2_for_loss.view(-1, 1).float()) ** 2
             # remove the impact of sim=1 by making target2 ==0 when it is equal to 1

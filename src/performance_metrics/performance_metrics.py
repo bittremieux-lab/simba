@@ -9,7 +9,7 @@ from src.tanimoto import Tanimoto
 from src.analog_discovery.mces import MCES
 import os 
 import pandas as pd 
-
+import seaborn 
 class PerformanceMetrics:
 
     def filter_by_correctness(similarities1, predictions1, similarities2, predictions2, good_predictions=True):
@@ -77,6 +77,7 @@ class PerformanceMetrics:
         fig, ax = plt.subplots(figsize=figsize)
 
         # 1) Mirror plot first
+        seaborn.set_context(context='poster', font_scale=0.5, rc=None)
         sup.mirror(spec0, spec1, ax=ax)
 
         # 2) Prepare a function for filtering important peaks
@@ -103,14 +104,14 @@ class PerformanceMetrics:
         for mz in filter_peaks(spec0):
             intensity0 = spec0.intensity[list(spec0.mz).index(mz)]
             # On mirror plot, spec0 intensities are > 0
-            ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
-                    fontsize=6, color='red', zorder=10)
+            #ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
+            #        fontsize=6, color='red', zorder=10)
 
         for mz in filter_peaks(spec1):
             intensity1 = spec1.intensity[list(spec1.mz).index(mz)]
             # On mirror plot, spec1 intensities are < 0
-            ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
-                    fontsize=6, color='blue', zorder=10)
+            #ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
+            #        fontsize=6, color='blue', zorder=10)
 
         # 4) (Optional) Adjust the y-limit dynamically 
         max_int0 = max(spec0.intensity)
@@ -127,7 +128,7 @@ class PerformanceMetrics:
     def plot_molecules(molecule_pairs, similarities_ed, similarities_mces,
                         predictions_ed, predictions_mces,
                         target_indexes, config, 
-                        samples=50, prefix='good'):
+                        samples=20, prefix='good'):
         output_path = config.CHECKPOINT_DIR
 
         # create folders for the images if they dont exist
