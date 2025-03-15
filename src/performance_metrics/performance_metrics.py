@@ -24,8 +24,12 @@ class PerformanceMetrics:
 
         equal_mces= (np.abs(sim_np_2- pred_np_2)<0.2)
 
+        low_mces = (sim_np_2>0.8) & (sim_np_2!=1)
+
+
+
         if good_predictions:
-            return np.argwhere(equal_edit_distance&equal_mces)
+            return np.argwhere(equal_edit_distance&equal_mces & low_mces)
         else:
             return np.argwhere(~(equal_edit_distance) & ~equal_mces)
     
@@ -125,10 +129,17 @@ class PerformanceMetrics:
         
 
     @staticmethod
-    def plot_molecules(molecule_pairs, similarities_ed, similarities_mces,
-                        predictions_ed, predictions_mces,
+    def plot_molecules(molecule_pairs, prediction_results,
                         target_indexes, config, 
                         samples=20, prefix='good'):
+
+
+        similarities_ed= prediction_results['similarities_ed']
+        similarities_mces= prediction_results['similarities_mces']
+        predictions_ed= prediction_results['predictions_ed']
+        predictions_mces= prediction_results['predictions_mces']
+        pred_mod_cos = prediction_results['pred_mod_cos']
+        #pred_ms2= prediction_results['pred_ms2']
         output_path = config.CHECKPOINT_DIR
 
         # create folders for the images if they dont exist
@@ -158,13 +169,16 @@ class PerformanceMetrics:
         similarities_target_ed = [similarities_target_ed[int(index)] for index in target_indexes]
         similarities_target_mces = [similarities_target_mces[int(index)] for index in target_indexes]
 
+
+        pred_mod_cos_filtered = [pred_mod_cos[int(index)] for index in target_indexes]
         total_df=pd.DataFrame()
-        for index, (spec0, spec1,sim_ed,sim_mces, pred_ed, pred_mces) in enumerate(zip(spectrums_0[0:samples], 
+        for index, (spec0, spec1,sim_ed,sim_mces, pred_ed, pred_mces, pred_mod) in enumerate(zip(spectrums_0[0:samples], 
                                                             spectrums_1[0:samples],
                                                         similarities_target_ed[0:samples],
                                                         similarities_target_mces[0:samples],
                                                         predictions_target_ed[0:samples],
-                                                        predictions_target_mces[0:samples])):
+                                                        predictions_target_mces[0:samples],
+                                                        pred_mod_cos_filtered[0:samples])):
             
             fig, ax= PerformanceMetrics.plot_mirror_spectra(spec0,spec1, figsize=None)
             plot_path = output_path   + prefix + '/' + f'{prefix}_pair_{index}_spectra.png'
@@ -199,6 +213,7 @@ class PerformanceMetrics:
             title = f'SMILES: {smiles_0}\nSMILES: {smiles_1}\n \
                                 \n \
                                 \n Tanimoto: {tanimoto:.2f} \
+                                \n Modified cosine: {pred_mod:.2f} \
                                 \n \
                                 \n Edit distance (ground truth): {sim_ed if sim_ed<5 else ">5"}  \
                                 \n Edit distance (pred).: {pred_ed if pred_ed<5 else ">5"} \

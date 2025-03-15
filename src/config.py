@@ -38,7 +38,7 @@ class Config:
         self.TRANSFORMER_CONTEXT=100   ##number of input peaks to the transformer
         self.ADD_HIGH_SIMILARITY_PAIRS=False
         self.USE_MOLECULAR_FINGERPRINTS=False
-        self.USE_MCES20_LOG_LOSS=True ### apply log function to increase the weight of the differences in the low range
+        self.USE_MCES20_LOG_LOSS=False ### apply log function to increase the weight of the differences in the low range
         self.USE_EDIT_DISTANCE_REGRESSION=False
         self.USE_MULTITASK=True
         self.EDIT_DISTANCE_N_CLASSES=6
