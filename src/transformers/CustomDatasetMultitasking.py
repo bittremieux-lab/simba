@@ -74,6 +74,7 @@ class CustomDatasetMultitasking(Dataset):
             indexes_unique_0 = sample_unique["index_unique_0"]
             indexes_unique_1 = sample_unique["index_unique_1"]
 
+            print(f'value of indexes_unique_0 {indexes_unique_0} ')
             indexes_original_0 = self.df_smiles.loc[int(indexes_unique_0), "indexes"][0]
 
             indexes_original_1 = self.df_smiles.loc[int(indexes_unique_1), "indexes"][0]
@@ -119,6 +120,7 @@ class CustomDatasetMultitasking(Dataset):
 
         # indexes_unique_0 = list(sample_unique['index_unique_0'])
         # indexes_unique_1 = list(sample_unique['index_unique_1'])
+
 
         indexes_unique_0 = sample_unique["index_unique_0"]
         indexes_unique_1 = sample_unique["index_unique_1"]

@@ -53,6 +53,54 @@ class Preprocessor:
         # all_spectrums= self.process_all_spectrum_vectors(spectrums)
         return spectrums
 
+    def preprocess_all_spectrums_variable_max_peaks(
+        self,
+        spectrums,
+        fragment_tol_mass=10,
+        fragment_tol_mode="ppm",
+        min_intensity=0.01,
+        max_num_peaks=100,
+        #max_num_peaks=40,
+        scale_intensity=None,
+        #scale_intensity="root",
+        training=False,
+        
+        random_seed=42
+    ):
+        random.seed(random_seed)
+        for i, spectrum in tqdm(enumerate(spectrums)):
+            # try:
+            if training:
+                min_intensity=0.00
+            else:
+                min_intensity=0.01
+            
+            spectrums[i] = self.preprocess_spectrum(
+                spectrum,
+                fragment_tol_mass=fragment_tol_mass,
+                fragment_tol_mode=fragment_tol_mode,
+                min_intensity=min_intensity,
+                max_num_peaks=max_num_peaks,
+                scale_intensity=scale_intensity,
+            )
+
+            length_mz=len(spectrums[i].mz)
+            if length_mz>20:  
+                spectrums[i] = self.preprocess_spectrum(
+                spectrum,
+                fragment_tol_mass=fragment_tol_mass,
+                fragment_tol_mode=fragment_tol_mode,
+                min_intensity=min_intensity,
+                max_num_peaks=max(20, int(length_mz/(2.5))),
+                scale_intensity=scale_intensity,
+            )
+        # except:
+        #    print('Error preprocessing spectrum')
+
+        # preprocess np vectors
+        # all_spectrums= self.process_all_spectrum_vectors(spectrums)
+        return spectrums
+
   
     def preprocess_spectrum(
         self,
