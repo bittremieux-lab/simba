@@ -89,7 +89,8 @@ indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSI
                             use_edit_distance=config.USE_EDIT_DISTANCE, 
                             use_multitask=config.USE_MULTITASK,
                             add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS,
-                            remove_percentage=0.75,)
+                            remove_percentage=0.0,)
+                            
 print('Loading UC Riverside data')
 indexes_tani_multitasking_train_uc  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_VAL_TEST, 
                             prefix='indexes_tani_incremental_train', 
