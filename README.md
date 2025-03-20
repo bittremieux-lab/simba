@@ -1,6 +1,6 @@
 
 
-<img src="logs/simba_logo.png" width="200"/>
+<img src="docs/simba_logo.png" width="400"/>
 
 # SIMBA
 
