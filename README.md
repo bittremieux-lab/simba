@@ -1,7 +1,7 @@
 
 
 <div style="text-align: center;">
-    <img src="docs/simba_logo.png" width="100"/>
+    <img src="docs/simba_logo.png" width="150"/>
 </div>
 
 # SIMBA
