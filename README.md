@@ -1,8 +1,5 @@
 
-
-<div style="text-align: center;">
-    <img src="docs/simba_logo.png" width="150"/>
-</div>
+<img src="docs/simba_logo.png" width="150" style="display: block; margin: auto;"/>
 
 # SIMBA
 
