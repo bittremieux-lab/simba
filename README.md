@@ -1,103 +1,43 @@
-## Project
-
-Development of a learned similarity model for MS/MS spectrums in order to predict structural similarity.
 
 
-## Organization of code:
-
-* src/ Source code
-* src/transformers: Source code for declaration of transformer model
-* slurm_scripts: Scripts for running jobs in HPC
-* python_scripts: Python scripts for different tasks
-* notebooks: Jupyter Notebooks
-
-## NIST data
-
-* Donwload the installer for NIST
-* Install it in windows
-* Install LIB2NIST
-* Export the library files to MSP
-* Parse MSP file (nist_loader.py in this repository)
- 
+# SIMBA
 
 
+`Simba` is a transformer neural network able to predict structural similarity based on tandem mass spectrometry (MS/MS) from 2 spectra. The model predicts 2 metrics: (1) the Maximum Common Edge Substructure (MCES) distance, and  (2) the substructure edit distance.
 
-## GPU problem solving
-
-* Make sure that pytorch library is not the cpu one in order to use the gpu.
-
-conda remove pytorch cudatoolkit
-conda clean --all
-
-conda install -c anaconda cudatoolkit (11.8)
-
-* Instal PyTorch (GPU version compatible with CUDA verison):
-
-conda install pytorch=2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
-
-## Wetransfer
-
-wget --user-agent Mozilla/4.0 '[your big address here]' -O dest_file_name
-
-## GLOBUS:
-
-Download the server, login and run it in the background
-
-wget https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
- tar xzf globusconnectpersonal-latest.tgzwget 
+This repository provides with the necessary code to preprocess the data, train the model as well as to compute inference based on  user spectra.
 
 
-./globusconnectpersonal
+## Setup
 
- ./globusconnectpersonal -start &
+### Requirements
 
- globus transfer dff8c41a-9419-11ee-83dc-d5484943e99a:/user/antwerpen/209/vsc20939/best_model_20231207.cpkt ddb59aef-6d04-11e5-ba46-22000b92c6ec:~/best_model_gpu_20231207.cpkt
+Python 3.11.7.
 
+### Installation
+This installation is expected to take 10-20 minutes.
 
+###  Environment
 
-## VSC
+It is recommended you can create a conda environment with the corresponding dependencies:
 
-Run an interactive session:
+```
+conda env create -f environment.yml
+conda activate transformers
+```
 
-srun -p ampere_gpu --gpus=1 --pty bash
+## Getting started: How to prepare data, train a model, and compute similarities.
+We recommend to run the complete tutorial in [notebooks/MS2DeepScore_tutorial.ipynb](https://github.com/matchms/ms2deepscore/blob/main/notebooks/MS2DeepScore_tutorial.ipynb) 
+for a more extensive fully-working example on test data. The expected run time on a laptop is less than 5 minutes, including automatic model and dummy data download. 
+Alternatively there are some example scripts below.
+If you are not familiar with `matchms` yet, then we also recommand our [tutorial on how to get started using matchms](https://blog.esciencecenter.nl/build-your-own-mass-spectrometry-analysis-pipeline-in-python-using-matchms-part-i-d96c718c68ee).
 
+## 1) Compute structural similarities
 
-## Loading Edit distance data precomputed at UC Riverside
-* use the notebook load_new_edit_distance_20240925 to load the  data from a csv with inchis, to csv divided with the smiles in them
-* use the notebook matching_data_in_ming_data to match the pairs loaded with the spectra we have
-* compress the output folder and send it to the vsc supercomputer in the supercomputer, split the folder into 30 nodes and run the computation of pairs
-* use the script in python_scripts called script_split_folder.py to split the files into 10 subfolders
-* run the script: script_all_matched_mces_bash.slurm.sh for computing the mces
-* after the computation of mces is finished in the split folders, the results must be merged with the edit distance, using script merge_edit_distance_mces_20_v2.py
+We provide a SIMBA model trained on around 300,000 spectra coming from NIST20 and MassSpecGym. The model can be found at [INSERT LOCATION]. The model works on positive mode for protonized adducts.
 
-
-## Generation of Edit Distance/MCES 
-
-* Run the script script_preprocessing_ed_parallel.sh and script_preprocessing_mces_parallel.sh. You have to set the PREPROCESSING_DIR where the spectra must be previously saved. This script will generate the npy files for edit distance and mces.
-
-* The results of edit distance and mces must be merged. For this purpose you can use the script merge_ed_mces_generated_data.py.
-## To train a multitask model using edit distance and mces
-
-* run the script script_transformers_multitasking.sh which calls training_multitasking_generated_data.py.
-* run script_inference_multitasking.sh for inference
+A example dataset can be found in [LOCATION IN THE REPOSITORY]. You can use your own data using the .mgf format.
 
 
-## Install depthcharge from source code:
-The specific version 0.3.2.dev2+g207990 of the depthcharge-ms package is not available on the Python Package Index (PyPI). However, you can access the source code for this version on GitHub and install it manually. Here's how:
+## 2) Train a SIMBA model
 
-Clone the Repository: Open your terminal and run:
-
-
-git clone https://github.com/wfondrie/depthcharge.git
-cd depthcharge
-Checkout the Specific Commit: To access the 0.3.2.dev2+g207990 version, checkout the commit with hash 207990:
-
-
-git checkout 207990
-Install the Package: It's recommended to use a virtual environment to avoid conflicts with other packages:
-
-python3 -m venv venv
-source venv/bin/activate  # On Windows, use venv\Scripts\activate
-Then, install the package:
-
-pip install .
