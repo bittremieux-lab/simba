@@ -1,5 +1,7 @@
 
 
+<img src="logs/simba_logo.png" width="200"/>
+
 # SIMBA
 
 
