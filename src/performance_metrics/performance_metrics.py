@@ -90,32 +90,36 @@ class PerformanceMetrics:
             mzs = np.array(spec.mz)
             # Keep only peaks with intensity >5% of max:
             threshold = 0.05 * intensities.max()
+
             high_mz = mzs[intensities > threshold]
             high_int = intensities[intensities > threshold]
-            # Sort by intensity, keep top 20
-            idx_sorted = np.argsort(high_int)[-20:]
-            top20_mz = high_mz[idx_sorted]
+            # Sort by intensity, keep top 5
+            idx_sorted = np.argsort(high_int)[-5:]
+            top5_mz = high_mz[idx_sorted]
 
             # Optionally filter out peaks too close in m/z
-            filtered = [top20_mz[0]]
-            for val in top20_mz[1:]:
-                if abs(val - filtered[-1]) >= 20:
-                    filtered.append(val)
-
+            #filtered = [top20_mz[0]]
+            #for val in top20_mz[1:]:
+                #if abs(val - filtered[-1]) >= 100:
+                #    filtered.append(val)
+            filtered = top5_mz
             return filtered
 
         # 3) Annotate after sup.mirror
         for mz in filter_peaks(spec0):
-            intensity0 = spec0.intensity[list(spec0.mz).index(mz)]
+            max_intensity= max(spec0.intensity)
+            intensity0 = spec0.intensity[list(spec0.mz).index(mz)]/max_intensity
+            
             # On mirror plot, spec0 intensities are > 0
-            #ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
-            #        fontsize=6, color='red', zorder=10)
+            ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
+                    fontsize=6, color='red', zorder=10)
 
         for mz in filter_peaks(spec1):
-            intensity1 = spec1.intensity[list(spec1.mz).index(mz)]
+            max_intensity= max(spec1.intensity)
+            intensity1 = spec1.intensity[list(spec1.mz).index(mz)]/max_intensity
             # On mirror plot, spec1 intensities are < 0
-            #ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
-            #        fontsize=6, color='blue', zorder=10)
+            ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
+                    fontsize=6, color='blue', zorder=10)
 
         # 4) (Optional) Adjust the y-limit dynamically 
         max_int0 = max(spec0.intensity)
@@ -139,7 +143,7 @@ class PerformanceMetrics:
         predictions_ed= prediction_results['predictions_ed']
         predictions_mces= prediction_results['predictions_mces']
         pred_mod_cos = prediction_results['pred_mod_cos']
-        #pred_ms2= prediction_results['pred_ms2']
+        pred_ms2= prediction_results['pred_ms2']
         output_path = config.CHECKPOINT_DIR
 
         # create folders for the images if they dont exist
@@ -148,7 +152,8 @@ class PerformanceMetrics:
 
         # randomize the plotting
         np.random.seed(42)
-        target_indexes = target_indexes[np.random.randint(0, target_indexes.shape[0],target_indexes.shape[0] )]
+        target_indexes = np.random.choice(np.reshape(target_indexes,-1), size=target_indexes.shape[0], replace=False)
+
         #  get the spectrums 
         spectrums_0 = molecule_pairs.get_spectrums_from_indexes(pair_index=0)
         spectrums_1 = molecule_pairs.get_spectrums_from_indexes(pair_index=1)
@@ -171,14 +176,18 @@ class PerformanceMetrics:
 
 
         pred_mod_cos_filtered = [pred_mod_cos[int(index)] for index in target_indexes]
+        pred_ms2_filtered = [pred_ms2[int(index)] for index in target_indexes]
         total_df=pd.DataFrame()
-        for index, (spec0, spec1,sim_ed,sim_mces, pred_ed, pred_mces, pred_mod) in enumerate(zip(spectrums_0[0:samples], 
+
+        samples =min(len(target_indexes), samples)
+        for index, (spec0, spec1,sim_ed,sim_mces, pred_ed, pred_mces, pred_mod, pred_ms2_value) in enumerate(zip(spectrums_0[0:samples], 
                                                             spectrums_1[0:samples],
                                                         similarities_target_ed[0:samples],
                                                         similarities_target_mces[0:samples],
                                                         predictions_target_ed[0:samples],
                                                         predictions_target_mces[0:samples],
-                                                        pred_mod_cos_filtered[0:samples])):
+                                                        pred_mod_cos_filtered[0:samples],
+                                                        pred_ms2_filtered[0:samples])):
             
             fig, ax= PerformanceMetrics.plot_mirror_spectra(spec0,spec1, figsize=None)
             plot_path = output_path   + prefix + '/' + f'{prefix}_pair_{index}_spectra.png'
@@ -214,6 +223,7 @@ class PerformanceMetrics:
                                 \n \
                                 \n Tanimoto: {tanimoto:.2f} \
                                 \n Modified cosine: {pred_mod:.2f} \
+                                \n MS2: {pred_ms2_value:.2f} \
                                 \n \
                                 \n Edit distance (ground truth): {sim_ed if sim_ed<5 else ">5"}  \
                                 \n Edit distance (pred).: {pred_ed if pred_ed<5 else ">5"} \
@@ -269,7 +279,7 @@ class PerformanceMetrics:
             # Save the combined graph
             combined_graph_path = output_path + prefix + '/' + f'{prefix}_pair_{index}_combined.png'
             combined_graph.save(combined_graph_path)
-
+            print(combined_graph_path)
             # save data
             total_df= PerformanceMetrics.generate_csv_file(total_df, smiles_0, smiles_1, tanimoto, sim_ed, pred_ed, sim_mces, pred_mces, spec0, spec1, prefix)
 
