@@ -1,6 +1,7 @@
 
 
-<img src="https://github.com/bittremieux-lab/simba/docs/simba_logo.png" width="400"/>
+
+<img src="docs/simba_logo.png" width="400"/>
 
 # SIMBA
 
