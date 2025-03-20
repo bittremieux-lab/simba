@@ -1,5 +1,5 @@
 for EDIT_DISTANCE_USE_GUMBEL in 1; do
-for GUMBEL_REG_WEIGHT in [0.05, 0.1, 0.2, 0.5]; do
+for GUMBEL_REG_WEIGHT in 0.05 0.1 0.2 0.5; do
 for TAU_GUMBEL_SOFTMAX in 10; do
 for load_pretrained in 1; do
 for epochs in 100; do

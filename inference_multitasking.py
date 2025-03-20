@@ -33,6 +33,21 @@ from src.load_mces.load_mces import LoadMCES
 from src.performance_metrics.performance_metrics import PerformanceMetrics
 
 
+def remove_duplicates_array(array):
+    seen = set()
+    filtered_rows = []
+
+    for row in array:
+        # Create a tuple of the first two columns to check uniqueness
+        key = tuple(sorted(row[:2]))  # Sort to account for unordered pairs
+        if key not in seen:
+            seen.add(key)
+            filtered_rows.append(row)
+
+    # Convert the filtered rows back to a NumPy array
+    result = np.array(filtered_rows)
+    return result
+
 config = Config()
 parser = Parser()
 config = parser.update_config(config)
@@ -102,10 +117,11 @@ print('Loading pairs data ...')
 #                                                             use_edit_distance=config.USE_EDIT_DISTANCE,
 #                                                             use_multitask=config.USE_MULTITASK)
 indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR_TRAIN, 
-                                                        prefix='ed_mces_indexes_tani_incremental_test', 
+                                                             prefix='ed_mces_indexes_tani_incremental_test', 
                                                              use_edit_distance=config.USE_EDIT_DISTANCE,
                                                              use_multitask=config.USE_MULTITASK)
-                                                             
+
+indexes_tani_multitasking_test = remove_duplicates_array(indexes_tani_multitasking_test)                          
 molecule_pairs_test_ed.indexes_tani = indexes_tani_multitasking_test[:,0:3]
 
 
@@ -245,6 +261,12 @@ confident_pred_test2=[]
 flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test_mces]
 flat_pred_test2= [item for sublist in flat_pred_test2 for item in sublist]
 flat_pred_test2=np.array( flat_pred_test2)
+
+
+flat_pred_test2_ed = []
+flat_pred_test2_ed = [[p.item() for p in pred[1]] for pred in pred_test_ed]
+flat_pred_test2_ed= [item for sublist in flat_pred_test2_ed for item in sublist]
+flat_pred_test2_ed=np.array( flat_pred_test2_ed)
 # In[250]:
 #raw_flat_pred_test1=np.array(raw_flat_pred_test1)
 #plt.figure()
@@ -281,14 +303,14 @@ print(f'Max value of similarities 1: {max(similarities_test1)}')
 print(f'Min value of similarities 1: {min(similarities_test1)}')
 
 # analyze errors and good predictions
-#good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2,)
-#bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2,)
+#good_indexes = PerformanceMetrics.get_correct_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2_ed,)
+#bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2_ed,)
 
 #PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
-#                                            flat_pred_test1,flat_pred_test2,  good_indexes, config, prefix='good')
+                                            flat_pred_test1,flat_pred_test2_ed,  good_indexes, config, prefix='good')
 
 #PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
-#                                            flat_pred_test1,flat_pred_test2,  bad_indexes, config, prefix='bad')
+ #                                           flat_pred_test1,flat_pred_test2_ed,  bad_indexes, config, prefix='bad')
 # In[ ]:
 
 
