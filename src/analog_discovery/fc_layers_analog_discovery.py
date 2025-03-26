@@ -117,13 +117,13 @@ class FcLayerAnalogDiscovery:
             emb=emb/5
         else:
 
-            if not(hasattr(model, 'linear1_2')):  ## if it does not have a linea1_2 layer
-                emb = emb0 + emb1
-                emb = model.linear1(emb)
-                emb = model.dropout(emb)
-                emb = model.relu(emb)
-                emb= model.classifier(emb)
-            else:
+                #if not(hasattr(model, 'linear1_2')):  ## if it does not have a linea1_2 layer
+                #    emb = emb0 + emb1
+                #    emb = model.linear1(emb)
+                #    emb = model.dropout(emb)
+                #    emb = model.relu(emb)
+                #    emb= model.classifier(emb)
+                #else:
                 emb_0_ = model.linear1(emb0)
                 emb_0_ = model.relu(emb_0_)
                 emb_0_ = model.linear1_2(emb_0_)

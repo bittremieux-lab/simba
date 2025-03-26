@@ -242,13 +242,11 @@ class LoadMCES:
         #return mces_normalized.apply(lambda x:(1-(x/max_mces)))
 
         ## asuming numpy
-        print(f'Example of input mces: {mcs20}')
         mcs20_normalized = 1-mcs20/max_value
 
         if remove_negative_values:
             mcs20_normalized[mcs20_normalized<0]=0
             
-        print(f'Example of normalized mces: {mcs20_normalized}')
         return mcs20_normalized
 
     def load_mces_20_data(directory_path, prefix, number_folders):

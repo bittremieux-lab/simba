@@ -20,7 +20,7 @@ class Config:
         #self.USE_EDIT_DISTANCE=False ## If using edit distance for generating data, not for training!!! 
         self.SUBSAMPLE_PREPROCESSING=False
         self.RANDOM_MCES_SAMPLING = False
-        self.CHARGES = 0, 1
+        self.CHARGES = [1,]
         self.MIN_N_PEAKS = 6
         self.FRAGMENT_MZ_TOLERANCE = 0.1
         self.MIN_MASS_DIFF = 0  # Da

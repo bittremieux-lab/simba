@@ -470,6 +470,10 @@ class MCES:
 
 
     def compute_mces_list_smiles(smiles_0, smiles_1, threshold_mces=20):
+
+        if not(os.path.exists(f'temp')):
+            os.mkdir(f'temp')
+
         input_csv_file=f'temp/smiles_myopic_input.csv'
         output_csv_file=f'temp/smiles_myopic_output.csv'
 
@@ -509,4 +513,6 @@ class MCES:
         os.system(f'rm {output_csv_file}')
         df['mces'] = results[2] # the column 2 is the mces result
 
+
+        os.system(f'rm -r temp')
         return df

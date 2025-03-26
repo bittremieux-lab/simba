@@ -45,7 +45,8 @@ class LoaderSaver:
                 config=config,
                 use_gnps_format=not (use_janssen),
             )  # Janssen data does not use the GNPS format
-            self.save_pickle(self.pickle_janssen_path, spectrums)
+            if self.pickle_janssen_path is not None:
+                self.save_pickle(self.pickle_janssen_path, spectrums)
         elif use_nist:
 
             spectrums = self.load_and_save_nist(
@@ -63,7 +64,8 @@ class LoaderSaver:
                 use_tqdm=use_tqdm,
                 config=config,
             )
-            self.save_pickle(self.pickle_gnps_path, spectrums)
+            if self.pickle_gnps_path is not None:
+                self.save_pickle(self.pickle_gnps_path, spectrums)
 
         return spectrums
 

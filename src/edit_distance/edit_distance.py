@@ -84,12 +84,12 @@ class EditDistance:
         return modification_edges
 
 
-    def get_edit_distance_from_smiles(smiles1, smiles2):
+    def get_edit_distance_from_smiles(smiles1, smiles2, return_nans=True):
         mol1=Chem.MolFromSmiles(smiles1)
         mol2=Chem.MolFromSmiles(smiles2)
-        return EditDistance.simba_get_edit_distance(mol1, mol2)
+        return EditDistance.simba_get_edit_distance(mol1, mol2, return_nans=return_nans)
 
-    def simba_get_edit_distance(mol1, mol2):
+    def simba_get_edit_distance(mol1, mol2, return_nans=True):
         """
             Calculates the edit distance between mol1 and mol2.
             Input:
@@ -103,13 +103,14 @@ class EditDistance:
         #    return np.nan
         mcs1 = rdFMCS.FindMCS([mol1, mol2])
         mcs_mol = Chem.MolFromSmarts(mcs1.smartsString)
-        if mcs_mol.GetNumAtoms() < mol1.GetNumAtoms()//2 and mcs_mol.GetNumAtoms() < mol2.GetNumAtoms()//2:
-            #print("The molecules are too small.")
-            return np.nan
-        if mcs_mol.GetNumAtoms() < 2:
-            
-            #print("The molecules are too small.")
-            return np.nan
+        if return_nans:
+            if mcs_mol.GetNumAtoms() < mol1.GetNumAtoms()//2 and mcs_mol.GetNumAtoms() < mol2.GetNumAtoms()//2:
+                #print("The molecules are too small.")
+                return np.nan
+            if mcs_mol.GetNumAtoms() < 2:
+                
+                #print("The molecules are too small.")
+                return np.nan
         
         #dist1 = EditDistance.get_number_of_modification_edges(mol1, mcs_mol)
         #dist2 =  EditDistance.get_number_of_modification_edges(mol2, mcs_mol)

@@ -140,7 +140,10 @@ class LoadData:
 
     @staticmethod
     def is_valid_spectrum_gnps(spectrum: SpectrumExt, config):
-        cond_library = int(spectrum["params"]["libraryquality"]) <= 3
+        if "libraryquality" in spectrum["params"].keys():
+            cond_library = int(spectrum["params"]["libraryquality"]) <= 3
+        else:
+            cond_library= True
         cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
 
         # try to convert to float the pep mass
@@ -155,8 +158,8 @@ class LoadData:
         cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
         cond_inchi_smiles = (
             # spectrum['params']["inchi"] != "N/A" or
-            spectrum["params"]["smiles"]
-            != "N/A"
+            (spectrum["params"]["smiles"]
+            != "N/A") & (spectrum["params"]["smiles"] != '')
         )
         ##cond_name=True
         ##cond_name=True
@@ -278,12 +281,14 @@ class LoadData:
 
     def get_all_spectrums_mgf(
         file,
-        num_samples=10,
+        num_samples=-1,
         compute_classes=False,
         use_tqdm=True,
         config=None,
         use_gnps_format=True,
-    ):
+    ):  
+        
+        num_samples=10**8 if num_samples == -1 else num_samples
         spectrums = []  # to save all the spectrums
         spectra = LoadData.get_spectra(
             file,
