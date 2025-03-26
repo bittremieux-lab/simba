@@ -34,7 +34,7 @@ conda activate transformers
 
 We provide a SIMBA model trained on around 300,000 spectra coming from NIST20 and MassSpecGym. The model can be found at [INSERT LOCATION]. The model works on positive mode for protonized adducts.
 
-We recommend to use the tutorial in [run inference](https://github.com/simba/notebooks/final_tutorials/run_inference.ipynb)  for an extensive example on test data. The expected run time on a laptop is less than 10 minutes, including automatic model and dummy data download. 
+We recommend to use the tutorial in [Run Inference](https://github.com/bittremieux-lab/simba/tree/main/notebooks/final_tutorials/run_inference.ipynb)  for an extensive example on test data. The expected run time on a laptop is less than 10 minutes, including automatic model and data download. 
 
 A example dataset can be found in [LOCATION IN THE REPOSITORY]. You can use your own data using the .mgf format.
 
