@@ -1,4 +1,4 @@
-name: transformers
+name: simba
 channels:
   - pytorch
   - anaconda
@@ -286,4 +286,4 @@ dependencies:
       - termcolor==2.4.0
       - werkzeug==3.0.2
       - wrapt==1.16.0
-prefix: /data/antwerpen/209/vsc20939/miniconda3/envs/transformers
+prefix: /data/antwerpen/209/vsc20939/miniconda3/envs/simba

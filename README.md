@@ -24,7 +24,7 @@ You can create a conda environment with the corresponding dependencies:
 
 ```
 conda env create -f environment.yml
-conda activate transformers
+conda activate simba
 ```
 
 ## Getting started: How to prepare data, train a model, and compute similarities.
