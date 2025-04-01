@@ -27,6 +27,18 @@ conda env create -f environment.yml
 conda activate simba
 ```
 
+After activating the conda environment, the module SIMBA is installed through:
+
+```
+pip install -e .
+```
+
+In case you are working on MAC, install the corresponding xz dependency through Homebrew:
+
+```
+brew install xz
+```
+
 ## Getting started: How to prepare data, train a model, and compute similarities.
 
 
@@ -40,4 +52,18 @@ A example dataset can be found in [LOCATION IN THE REPOSITORY]. You can use your
 
 
 ## 2) Train a SIMBA model
+
+
+
+## 3) Inference time for CPU/GPU 
+
+Using an Apple M3 Pro with 36GB of RAM, SIMBA obtains the embeddings of 100,000 embeddings in approximately 1 minute. These embeddings are the vectors used by the headers that compute the final outputs of the model.
+
+<img src="docs/nn_architecture.png" width="300" style="display: block; margin: auto;"/>
+
+SIMBA is able to cache embeddings of spectra previously computed to accelerate library search. In this way, it is not necessary to compute again the embeddings of the reference spectra.
+
+To compute the susbtructure edit distance and MCES distance between 100,000 precomputed embeddings and 1 query spectra, it takes 10 seconds.
+
+
 
