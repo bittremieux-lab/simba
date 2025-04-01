@@ -49,9 +49,6 @@ class Simba:
         
         # Example: based on dataset size and transform config
         dataset = dataloader.dataset
-        print('hash:')
-        print( dir(dataset))
-
 
         hash_string=""
         for attr in dir(dataset):
