@@ -51,10 +51,21 @@ class Simba:
         dataset = dataloader.dataset
         print('hash:')
         print( dir(dataset))
+
+
+        hash_string=""
+        for attr in dir(dataset):
+            if not attr.startswith("_"):  # Skip private/internal attributes
+                hash_string =hash_string + attr
+        try:
+            value = getattr(dataset, attr)
+            print(f"{attr}: {value}")
+        except Exception:
+            pass
         try:
             return hash((
                 len(dataset),
-                getattr(dataset, 'some_config_param', None),  # optional
+                hash_string,
             ))
         except Exception:
             return None
