@@ -56,7 +56,7 @@ class Simba:
         hash_string=""
         for attr in dir(dataset):
             if not attr.startswith("_"):  # Skip private/internal attributes
-                hash_string =hash_string + attr
+                hash_string =hash_string + str(dataset.attr)
         try:
             value = getattr(dataset, attr)
             print(f"{attr}: {value}")
