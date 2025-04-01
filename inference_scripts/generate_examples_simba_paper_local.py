@@ -1,7 +1,11 @@
-
-
-# In[268]:
+import sys
 import os
+# Make sure the root path is in sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, project_root)
+
+# Optional: change the working directory too
+os.chdir(project_root)
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 import dill
@@ -146,7 +150,7 @@ indexes_tani_multitasking_test = remove_duplicates_array(indexes_tani_multitaski
 
 ### Just for subsampling
 #np.random.seed(42)
-#random_indexes= np.random.randint(0,indexes_tani_multitasking_test.shape[0], 100000)
+#random_indexes= np.random.randint(0,indexes_tani_multitasking_test.shape[0], 1000000)
 #indexes_tani_multitasking_test = indexes_tani_multitasking_test[random_indexes]
 
 
@@ -182,7 +186,7 @@ print(f"Number of molecule pairs: {len(molecule_pairs_test_ed)}")
 print("Uniformize the data")
 uniformed_molecule_pairs_test_ed, binned_molecule_pairs_ed = TrainUtils.uniformise(
     molecule_pairs_test_ed,
-    number_bins=bins_uniformise_inference,
+    number_bins=5,
     return_binned_list=True,
     bin_sim_1=True,
     #bin_sim_1=False,
@@ -192,7 +196,7 @@ uniformed_molecule_pairs_test_ed, binned_molecule_pairs_ed = TrainUtils.uniformi
 
 uniformed_molecule_pairs_test_mces, binned_molecule_pairs_mces = TrainUtils.uniformise(
     molecule_pairs_test_mces,
-    number_bins=bins_uniformise_inference,
+    number_bins=10,
     return_binned_list=True,
     bin_sim_1=False,
     #bin_sim_1=False,
@@ -201,9 +205,12 @@ uniformed_molecule_pairs_test_mces, binned_molecule_pairs_mces = TrainUtils.unif
 
 
 ## Get the test spectra
-n_spectra= len(uniformed_molecule_pairs_test_mces)
-indexes_0 = uniformed_molecule_pairs_test_mces.indexes_tani[:,0]
-indexes_1 = uniformed_molecule_pairs_test_mces.indexes_tani[:,1]
+n_spectra= len(uniformed_molecule_pairs_test_ed)
+#n_spectra= len(uniformed_molecule_pairs_test_mces)
+#indexes_0 = uniformed_molecule_pairs_test_mces.indexes_tani[:,0]
+#indexes_1 = uniformed_molecule_pairs_test_mces.indexes_tani[:,1]
+indexes_0 = uniformed_molecule_pairs_test_ed.indexes_tani[:,0]
+indexes_1 = uniformed_molecule_pairs_test_ed.indexes_tani[:,1]
 spectra0 = [uniformed_molecule_pairs_test_mces.get_original_spectrum_from_unique_index(index,0) for index in indexes_0]
 spectra1 = [uniformed_molecule_pairs_test_mces.get_original_spectrum_from_unique_index(index,1) for index in indexes_1]
 
@@ -272,11 +279,19 @@ pred_test_mces = trainer.predict(
     best_model,
     dataloader_test_mces,
 )
+
+pred_test_ed = trainer.predict(
+    best_model,
+    dataloader_test_ed,
+)
 similarities_test1_mces, similarities_test2_mces = Postprocessing.get_similarities_multitasking(dataloader_test_mces)
+similarities_test1_ed, similarities_test2_ed= Postprocessing.get_similarities_multitasking(dataloader_test_ed)
 
 ## Now assign the coorect similarity
-similarities_test1 = similarities_test1_mces
-similarities_test2 = similarities_test2_mces
+#similarities_test1 = similarities_test1_mces
+#similarities_test2 = similarities_test2_mces
+similarities_test1 = similarities_test1_ed
+similarities_test2 = similarities_test2_ed
 
 # In[ ]:
 def softmax(x):
@@ -317,12 +332,14 @@ raw_flat_pred_test1 = []
 
 flat_pred_test2 = []
 
-flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test_mces]
+#flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test_mces]
+flat_pred_test2 = [[p.item() for p in pred[1]] for pred in pred_test_ed]
 flat_pred_test2= [item for sublist in flat_pred_test2 for item in sublist]
 flat_pred_test2=np.array( flat_pred_test2)
 
 
-flat_pred_test1 = [p[0] for p in pred_test_mces]
+#flat_pred_test1 = [p[0] for p in pred_test_mces]
+flat_pred_test1 = [p[0] for p in pred_test_ed]
 flat_pred_test1 = [[which_index(p) for p in p_list] for p_list in flat_pred_test1]
 flat_pred_test1= [item for sublist in flat_pred_test1 for item in sublist]
 flat_pred_test1=np.array(flat_pred_test1)
@@ -396,8 +413,6 @@ tanimotos = [Tanimoto.compute_tanimoto_from_smiles(s0.params['smiles'],s1.params
 
 ## Get interesting examples
 def filter_good_examples(similarities1, predictions1, similarities2, predictions2,pred_mod_cos,pred_ms2, tanimotos):
-        print(f'similarities 1: {similarities1}')
-        print(f'similarities 2: {similarities2}')
         sim_np_1= np.array(similarities1)
         pred_np_1=np.array(predictions1)
 
@@ -405,7 +420,9 @@ def filter_good_examples(similarities1, predictions1, similarities2, predictions
         pred_np_2=np.array(predictions2)
 
         #return np.argwhere((sim_np==pred_np)&(sim_np>0.1))
-        equal_edit_distance= (sim_np_1==pred_np_1) & (sim_np_1 < 5) & (sim_np_1 > 0) ## not equal molecules
+        #equal_edit_distance= (sim_np_1==pred_np_1) & (sim_np_1 < 5) & (sim_np_1 > 0) ## not equal molecules
+        equal_edit_distance= (sim_np_1==pred_np_1)
+
         #equal_edit_distance= (sim_np_1==pred_np_1) 
         equal_mces= (np.abs(sim_np_2- pred_np_2)<0.2)
 
@@ -459,5 +476,6 @@ for k in good_indexes_dict:
     prediction_results['predictions_mces'] = flat_pred_test2
     prediction_results['pred_mod_cos'] =pred_mod_cos
     prediction_results['pred_ms2'] =pred_ms2
-    PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_mces, prediction_results,  good_indexes, config, prefix=k)
+    #PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_mces, prediction_results,  good_indexes, config, prefix=k)
+    PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, prediction_results,  good_indexes, config, prefix=k)
 

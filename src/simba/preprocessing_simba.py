@@ -5,7 +5,7 @@ import copy
 
 class PreprocessingSimba:
 
-    def load_spectra(mgf_file, config, min_peaks=6, ):
+    def load_spectra(mgf_file, config, min_peaks=6, n_samples=100000000):
         #load
         from src.loader_saver import LoaderSaver
         loader_saver = LoaderSaver(
@@ -16,7 +16,7 @@ class PreprocessingSimba:
                 )
         all_spectrums = loader_saver.get_all_spectrums(
                         mgf_file,
-                        100000000,
+                        n_samples,
                         use_tqdm=True,
                         use_nist=False,
                         config=config,

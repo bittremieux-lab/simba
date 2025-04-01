@@ -81,7 +81,7 @@ class PerformanceMetrics:
         fig, ax = plt.subplots(figsize=figsize)
 
         # 1) Mirror plot first
-        seaborn.set_context(context='poster', font_scale=0.5, rc=None)
+        #seaborn.set_context(context='poster', font_scale=0.5, rc=None)
         sup.mirror(spec0, spec1, ax=ax)
 
         # 2) Prepare a function for filtering important peaks
@@ -111,15 +111,15 @@ class PerformanceMetrics:
             intensity0 = spec0.intensity[list(spec0.mz).index(mz)]/max_intensity
             
             # On mirror plot, spec0 intensities are > 0
-            ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
-                    fontsize=6, color='red', zorder=10)
+            #ax.text(mz, intensity0, f"{mz:.2f}", ha='center', va='bottom',
+            #        fontsize=6, color='red', zorder=10)
 
         for mz in filter_peaks(spec1):
             max_intensity= max(spec1.intensity)
             intensity1 = spec1.intensity[list(spec1.mz).index(mz)]/max_intensity
             # On mirror plot, spec1 intensities are < 0
-            ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
-                    fontsize=6, color='blue', zorder=10)
+            #ax.text(mz, -intensity1, f"{mz:.2f}", ha='center', va='top',
+            #        fontsize=6, color='blue', zorder=10)
 
         # 4) (Optional) Adjust the y-limit dynamically 
         max_int0 = max(spec0.intensity)
@@ -180,6 +180,8 @@ class PerformanceMetrics:
         total_df=pd.DataFrame()
 
         samples =min(len(target_indexes), samples)
+        
+        print(f'Similarities EDIT DISTANCES: {similarities_target_ed}')
         for index, (spec0, spec1,sim_ed,sim_mces, pred_ed, pred_mces, pred_mod, pred_ms2_value) in enumerate(zip(spectrums_0[0:samples], 
                                                             spectrums_1[0:samples],
                                                         similarities_target_ed[0:samples],
