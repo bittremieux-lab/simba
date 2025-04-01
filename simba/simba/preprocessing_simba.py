@@ -2,31 +2,36 @@
 from simba.load_data import LoadData
 from simba.preprocessor import Preprocessor
 import copy 
+from simba.loader_saver import LoaderSaver
 
 class PreprocessingSimba:
 
-    def load_spectra(mgf_file, config, min_peaks=6, n_samples=100000000):
+    def load_spectra(file_name, config, min_peaks=6, n_samples=100000000):
         #load
-        from simba.loader_saver import LoaderSaver
-        loader_saver = LoaderSaver(
-                    block_size=100,
-                    pickle_nist_path='',
-                    pickle_gnps_path=None,
-                    pickle_janssen_path='',
-                )
-        all_spectrums = loader_saver.get_all_spectrums(
-                        mgf_file,
-                        n_samples,
-                        use_tqdm=True,
-                        use_nist=False,
-                        config=config,
-                        use_janssen=False,
+        print(file_name)
+        if file_name.endswith('.mgf'):
+            print('File name ends with mgf')
+            loader_saver = LoaderSaver(
+                        block_size=100,
+                        pickle_nist_path='',
+                        pickle_gnps_path=None,
+                        pickle_janssen_path='',
                     )
-        #all_spectrums= LoadData.get_all_spectrums_mgf(
-        #        file=mgf_file,
-        #        config=config,
-        #    )
-
+            all_spectrums = loader_saver.get_all_spectrums(
+                            file_name,
+                            n_samples,
+                            use_tqdm=True,
+                            use_nist=False,
+                            config=config,
+                            use_janssen=False,
+                        )
+        elif file_name.endswith('.pkl'):
+            all_spectrums=LoadData.get_all_spectrums_casmi(
+            file_name,
+            config=config,
+            )
+        else:
+            print('Error: unrecognized file extension')
         #preprocess
         all_spectrums_processed= [copy.deepcopy(s) for s in all_spectrums]
 
