@@ -62,8 +62,8 @@ class Encoder(pl.LightningModule):
 
         return emb
     
-    def get_embeddings(self, dataloader_spectrums):
-        predictor = pl.Trainer(max_epochs=0, enable_progress_bar=True)
+    def get_embeddings(self, dataloader_spectrums, device='gpu'):
+        predictor = pl.Trainer(max_epochs=0, enable_progress_bar=True, accelerator=device)
         embeddings = predictor.predict(
             self,
             dataloader_spectrums,

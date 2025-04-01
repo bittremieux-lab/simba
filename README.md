@@ -59,7 +59,7 @@ A example dataset can be found in [LOCATION IN THE REPOSITORY]. You can use your
 
 Using an Apple M3 Pro with 36GB of RAM, SIMBA obtains the embeddings of 100,000 embeddings in approximately 1 minute. These embeddings are the vectors used by the headers that compute the final outputs of the model.
 
-<img src="docs/nn_architecture.png" width="300" style="display: block; margin: auto;"/>
+<img src="docs/nn_architecture.png" width="600" style="display: block; margin: auto;"/>
 
 SIMBA is able to cache embeddings of spectra previously computed to accelerate library search. In this way, it is not necessary to compute again the embeddings of the reference spectra.
 
