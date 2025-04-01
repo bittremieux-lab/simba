@@ -46,8 +46,11 @@ class Simba:
         return model
 
     def get_dataloader_key(self, dataloader):
+        
         # Example: based on dataset size and transform config
         dataset = dataloader.dataset
+        print('hash:')
+        print( dir(dataset))
         try:
             return hash((
                 len(dataset),
@@ -57,6 +60,7 @@ class Simba:
             return None
 
     def encoder_embeddings(self, dataloader):
+        print('running')
         cache_key = self.get_dataloader_key(dataloader)
         if self.cache_embeddings and (cache_key in self._embedding_cache):
             embeddings= self._embedding_cache[cache_key]
@@ -89,7 +93,7 @@ class Simba:
         similarities_ed = (self.config.EDIT_DISTANCE_N_CLASSES-1) - np.argmax(similarities_ed, axis=-1)
         
         similarities_mces= self.config.MCES20_MAX_VALUE*(1-similarities_mces)
-        similarities_mces = np.round(similarities_mces)
+        #similarities_mces = np.round(similarities_mces)
         return similarities_ed, similarities_mces
 
 
