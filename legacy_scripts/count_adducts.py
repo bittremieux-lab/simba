@@ -1,8 +1,8 @@
 import dill
-from src.load_data import LoadData
+from simba.load_data import LoadData
 from sklearn.model_selection import train_test_split
-from src.train_utils import TrainUtils
-from src.preprocessor import Preprocessor
+from simba.train_utils import TrainUtils
+from simba.preprocessor import Preprocessor
 import pickle
 import sys
 import numpy as np

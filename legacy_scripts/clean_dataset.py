@@ -1,7 +1,7 @@
 import dill
-from src.sanity_checks import SanityChecks
-from src.train_utils import TrainUtils
-from src.config import Config
+from simba.sanity_checks import SanityChecks
+from simba.train_utils import TrainUtils
+from simba.config import Config
 
 config=Config()
 def write_data(

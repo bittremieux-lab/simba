@@ -1,14 +1,14 @@
 ### Check the distribution of edit distance and mces with threshold 20
 
-from src.load_mces.load_mces import LoadMCES
-from src.mces.mces_computation import MCES
+from simba.load_mces.load_mces import LoadMCES
+from simba.mces.mces_computation import MCES
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
-from src.config import Config
-from src.mces.mces_computation import MCES
+from simba.config import Config
+from simba.mces.mces_computation import MCES
 
 def remove_duplicates_array(array):
     seen = set()

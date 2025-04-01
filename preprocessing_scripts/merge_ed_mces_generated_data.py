@@ -1,6 +1,6 @@
 import numpy as np
 import pickle
-from src.config import Config
+from simba.config import Config
 import os
 
 config=Config()

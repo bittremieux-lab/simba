@@ -14,27 +14,27 @@ from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from matchms.similarity import ModifiedCosine
 from pytorch_lightning.callbacks import ProgressBar
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.config import Config
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from src.parser import Parser
+from simba.parser import Parser
 import random
-from src.weight_sampling import WeightSampling
-from src.losscallback import LossCallback
-from src.molecular_pairs_set import MolecularPairsSet
-from src.sanity_checks import SanityChecks
-from src.transformers.postprocessing import Postprocessing
+from simba.weight_sampling import WeightSampling
+from simba.losscallback import LossCallback
+from simba.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
+from simba.transformers.postprocessing import Postprocessing
 from scipy.stats import spearmanr
 import seaborn as sns
-from src.ordinal_classification.load_data_multitasking import LoadDataMultitasking
-from src.ordinal_classification.embedder_multitask import EmbedderMultitask
+from simba.ordinal_classification.load_data_multitasking import LoadDataMultitasking
+from simba.ordinal_classification.embedder_multitask import EmbedderMultitask
 from sklearn.metrics import confusion_matrix, accuracy_score
-from src.load_mces.load_mces import LoadMCES   
-from src.performance_metrics.performance_metrics import PerformanceMetrics
-from src.tanimoto import Tanimoto
+from simba.load_mces.load_mces import LoadMCES   
+from simba.performance_metrics.performance_metrics import PerformanceMetrics
+from simba.tanimoto import Tanimoto
 from matchms import calculate_scores
 import tensorflow as tf 
 from tqdm import tqdm 
@@ -215,7 +215,7 @@ spectra0 = [uniformed_molecule_pairs_test_mces.get_original_spectrum_from_unique
 spectra1 = [uniformed_molecule_pairs_test_mces.get_original_spectrum_from_unique_index(index,1) for index in indexes_1]
 
 ## Convert from spectrum utils to matchms
-from src.matchms_utils import MatchmsUtils
+from simba.matchms_utils import MatchmsUtils
 
 spectra0_mms =[MatchmsUtils.from_su_to_matchms(s) for s in spectra0]
 spectra1_mms =[MatchmsUtils.from_su_to_matchms(s) for s in spectra1]

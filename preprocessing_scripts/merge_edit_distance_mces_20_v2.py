@@ -1,10 +1,10 @@
-from src.load_mces.load_mces import LoadMCES
-from src.mces.mces_computation import MCES
+from simba.load_mces.load_mces import LoadMCES
+from simba.mces.mces_computation import MCES
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
 import os
-from src.config import Config
+from simba.config import Config
 
 config=Config()
 

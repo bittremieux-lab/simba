@@ -1,4 +1,4 @@
-from src.load_mces.load_mces import LoadMCES
+from simba.load_mces.load_mces import LoadMCES
 import numpy as np
 import dill
 

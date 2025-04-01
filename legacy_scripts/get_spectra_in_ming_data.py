@@ -11,26 +11,26 @@ from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 
 from pytorch_lightning.callbacks import ProgressBar
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.config import Config
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import os
-from src.parser import Parser
+from simba.parser import Parser
 import random
-from src.weight_sampling import WeightSampling
-from src.losscallback import LossCallback
-from src.molecular_pairs_set import MolecularPairsSet
-from src.sanity_checks import SanityChecks
-from src.transformers.postprocessing import Postprocessing
+from simba.weight_sampling import WeightSampling
+from simba.losscallback import LossCallback
+from simba.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
+from simba.transformers.postprocessing import Postprocessing
 from scipy.stats import spearmanr
 import seaborn as sns
-from src.ordinal_classification.load_data_multitasking import LoadDataMultitasking
-from src.ordinal_classification.embedder_multitask import EmbedderMultitask
+from simba.ordinal_classification.load_data_multitasking import LoadDataMultitasking
+from simba.ordinal_classification.embedder_multitask import EmbedderMultitask
 from sklearn.metrics import confusion_matrix
-from src.load_mces.load_mces import LoadMCES
-from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
+from simba.load_mces.load_mces import LoadMCES
+from simba.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
 
 # parameters
 config = Config()

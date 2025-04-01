@@ -5,42 +5,42 @@
 #os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 # %%
-#from src.transformers.sklearn_model import SklearnModel
+#from simba.transformers.sklearn_model import SklearnModel
 import gensim
-from src.load_data import LoadData
-from src.config import Config
+from simba.load_data import LoadData
+from simba.config import Config
 from tqdm import tqdm
-from src.loader_saver import LoaderSaver
+from simba.loader_saver import LoaderSaver
 import itertools
 import numpy as np
 from scipy.stats import spearmanr
 import dill
-from src.plotting import Plotting
-from src.load_data import LoadData
-from src.molecule_pairs_opt import MoleculePairsOpt
+from simba.plotting import Plotting
+from simba.load_data import LoadData
+from simba.molecule_pairs_opt import MoleculePairsOpt
 from sklearn.model_selection import train_test_split
-from src.train_utils import TrainUtils
-from src.preprocessor import Preprocessor
+from simba.train_utils import TrainUtils
+from simba.preprocessor import Preprocessor
 import pickle
 import sys
-from src.config import Config
-from src.parser import Parser
+from simba.config import Config
+from simba.parser import Parser
 from datetime import datetime
 from ms2deepscore import MS2DeepScore
-from src.loader_saver import LoaderSaver
-from src.molecular_pairs_set import MolecularPairsSet
+from simba.loader_saver import LoaderSaver
+from simba.molecular_pairs_set import MolecularPairsSet
 from scipy.stats import spearmanr
-from src.transformers.embedder import Embedder
-from src.transformers.encoder import Encoder
+from simba.transformers.embedder import Embedder
+from simba.transformers.encoder import Encoder
 import matplotlib.pyplot as plt
-from src.transformers.CustomDatasetEncoder import CustomDatasetEncoder
-from src.transformers.load_data_encoder import LoadDataEncoder
+from simba.transformers.CustomDatasetEncoder import CustomDatasetEncoder
+from simba.transformers.load_data_encoder import LoadDataEncoder
 from torch.utils.data import DataLoader
-from src.analog_discovery.cosine_similarity import CosineSimilarity
+from simba.analog_discovery.cosine_similarity import CosineSimilarity
 from rdkit import Chem
 from matchms.importing import load_from_mgf,load_from_msp
 from matchms.similarity import ModifiedCosine
-#from src.spec2vec_comparison import Spec2VecComparison
+#from simba.spec2vec_comparison import Spec2VecComparison
 #from spec2vec import Spec2Vec
 import tensorflow as tf
 from ms2deepscore.models import load_model
@@ -281,7 +281,7 @@ smiles_retrieved = [s.metadata['smiles'] for s in spectrums_retrieved]
 smiles_janssen = [s.metadata['smiles'] for s in preprocessed_all_spectrums_janssen]
 
 # %%
-from src.tanimoto import Tanimoto
+from simba.tanimoto import Tanimoto
 
 # %%
 tanimoto_retrieved = [Tanimoto.compute_tanimoto_from_smiles(s0,s1) for s0, s1 in zip(smiles_janssen, smiles_retrieved)]

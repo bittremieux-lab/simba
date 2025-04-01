@@ -4,22 +4,22 @@ os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data_unique import LoadDataUnique
+from simba.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
-from src.transformers.embedder import Embedder
+from simba.transformers.embedder import Embedder
 from pytorch_lightning.callbacks import ProgressBar
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.config import Config
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import os
-from src.parser import Parser
+from simba.parser import Parser
 import random
-from src.weight_sampling import WeightSampling
-from src.losscallback import LossCallback
-from src.molecular_pairs_set import MolecularPairsSet
-from src.sanity_checks import SanityChecks
+from simba.weight_sampling import WeightSampling
+from simba.losscallback import LossCallback
+from simba.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
 
 config = Config()
 parser = Parser()

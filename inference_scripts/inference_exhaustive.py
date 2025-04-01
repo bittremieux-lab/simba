@@ -1,22 +1,22 @@
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data_unique import LoadDataUnique
+from simba.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
-from src.transformers.embedder import Embedder
-from src.transformers.postprocessing import Postprocessing
+from simba.transformers.embedder import Embedder
+from simba.transformers.postprocessing import Postprocessing
 from sklearn.metrics import r2_score
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.deterministic_similarity import DetSimilarity
-from src.plotting import Plotting
-from src.config import Config
+from simba.deterministic_similarity import DetSimilarity
+from simba.plotting import Plotting
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader
 import argparse
 import sys
 import os
-from src.parser import Parser
+from simba.parser import Parser
 from scipy.stats import spearmanr
 
 # parse arguments

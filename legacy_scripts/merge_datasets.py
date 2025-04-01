@@ -1,5 +1,5 @@
 import dill
-from src.sanity_checks import SanityChecks
+from simba.sanity_checks import SanityChecks
 
 
 def write_data(
