@@ -1,4 +1,4 @@
-
+import numpy as np
 
 class AnalogDiscovery:
     def compute_ranking(similarities_mces, similarities_ed, max_value_2_int=5):
