@@ -35,9 +35,9 @@ class TrainUtils:
             indexes_np[index, 2] = high_sim
 
         new_indexes_np = np.concatenate(
-                (molecule_pairs.indexes_tani, indexes_np), axis=0
-            )
-        
+            (molecule_pairs.indexes_tani, indexes_np), axis=0
+        )
+
         new_indexes_np = np.unique(new_indexes_np, axis=0)
         # add info to
         new_molecule_pairs = MoleculePairsOpt(
@@ -49,7 +49,6 @@ class TrainUtils:
 
         return new_molecule_pairs
 
-   
     @staticmethod
     def train_val_test_split_bms(spectrums, val_split=0.1, test_split=0.1):
 
@@ -108,7 +107,6 @@ class TrainUtils:
             fp = Tanimoto.compute_fingerprint(all_spectrums[i].params["smiles"])
             fingerprints.append(fp)
         return fingerprints
-
 
     @staticmethod
     def precompute_min_max_indexes(
@@ -246,7 +244,11 @@ class TrainUtils:
 
         print("Computing tanimoto results based on unique smiles")
 
-        function_tanimoto=TrainUtils.compute_all_tanimoto_results_exhaustive if use_exhaustive else TrainUtils.compute_all_tanimoto_results
+        function_tanimoto = (
+            TrainUtils.compute_all_tanimoto_results_exhaustive
+            if use_exhaustive
+            else TrainUtils.compute_all_tanimoto_results
+        )
 
         spectrums_unique, df_smiles = TrainUtils.get_unique_spectra(spectrums_original)
 
@@ -288,7 +290,7 @@ class TrainUtils:
         print("Starting computation of molecule pairs")
         print(datetime.now())
         # asume the spectra is already ordered previously
-        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+        # all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
 
         # indexes=[]
         indexes_np = np.zeros((max_combinations, 3))
@@ -328,7 +330,7 @@ class TrainUtils:
             i = np.random.randint(0, len(all_spectrums))
             if use_all_range == 1:
                 min_mz_index = i
-                max_mz_index = len(all_spectrums)-1
+                max_mz_index = len(all_spectrums) - 1
             else:
                 min_mz_index = df_precomputed_indexes.loc[i, "min_index"]
                 max_mz_index = df_precomputed_indexes.loc[i, "max_index"]
@@ -337,7 +339,7 @@ class TrainUtils:
             j = random.randint(min_mz_index, max_mz_index)
 
             # order indexes to avoid duplicates
-            i,j = min(i,j), max(i,j)
+            i, j = min(i, j), max(i, j)
 
             # Submit the task to the executor
             tani = Tanimoto.compute_tanimoto(
@@ -362,7 +364,7 @@ class TrainUtils:
         print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
         indexes_np = np.unique(indexes_np, axis=0)
 
-        #remove reordered 
+        # remove reordered
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
         # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
@@ -373,7 +375,6 @@ class TrainUtils:
         print(datetime.now())
         return molecular_pair_set
 
-    
     @staticmethod
     def compute_all_tanimoto_results_exhaustive(
         all_spectrums,
@@ -392,17 +393,17 @@ class TrainUtils:
         print("Starting computation of molecule pairs")
         print(datetime.now())
         # asume the spectra is already ordered previously
-        #all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
+        # all_spectrums = PreprocessingUtils.order_spectrums_by_mz(all_spectrums)
 
         # indexes=[]
-        first_row=0
-        max_row=int(len(all_spectrums))
-        M= max_row-first_row
-        N= len(all_spectrums)
+        first_row = 0
+        max_row = int(len(all_spectrums))
+        M = max_row - first_row
+        N = len(all_spectrums)
 
-        exhaustive_combinations = M*N
+        exhaustive_combinations = M * N
         indexes_np = np.zeros(((exhaustive_combinations), 3))
-        #indexes_np = MoleculePairsOpt.adjust_data_format(np.array(indexes_np))
+        # indexes_np = MoleculePairsOpt.adjust_data_format(np.array(indexes_np))
 
         counter_indexes = 0
         # Iterate through the list to form pairsi
@@ -430,17 +431,15 @@ class TrainUtils:
             use_tqdm=use_tqdm,
         )
 
-        for i in range(first_row,max_row):
+        for i in range(first_row, max_row):
             # to use the whole range or only a small range?
-            for j in range(0,len(all_spectrums)):
-
+            for j in range(0, len(all_spectrums)):
 
                 # Submit the task to the executor
                 tani = Tanimoto.compute_tanimoto(
                     fingerprints[i],
                     fingerprints[j],
                 )
-
 
                 indexes_np[counter_indexes, 0] = i
                 indexes_np[counter_indexes, 1] = j
@@ -452,18 +451,17 @@ class TrainUtils:
                 if use_tqdm:
                     progress_bar.update(1)
 
-                counter_indexes=counter_indexes+1
-            
-        
-        print(f'Number of combinations computed: {counter_indexes}')
-        #print('Remove similarities not computed')
-        #indexes_np = indexes_np[indexes_np[:,2]<=1]
-        # 
-        # avoid duplicates:
-        #print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
-        #indexes_np = np.unique(indexes_np, axis=0)
+                counter_indexes = counter_indexes + 1
 
-        #remove reordered 
+        print(f"Number of combinations computed: {counter_indexes}")
+        # print('Remove similarities not computed')
+        # indexes_np = indexes_np[indexes_np[:,2]<=1]
+        #
+        # avoid duplicates:
+        # print(f"Number of effective pairs originally computed: {indexes_np.shape[0]} ")
+        # indexes_np = np.unique(indexes_np, axis=0)
+
+        # remove reordered
 
         print(f"Number of effective pairs retrieved: {indexes_np.shape[0]} ")
         # molecular_pair_set= MolecularPairsSet(spectrums=all_spectrums,indexes_tani= indexes)
@@ -472,17 +470,17 @@ class TrainUtils:
         )
 
         print(datetime.now())
-        return molecular_pair_set  
-    
+        return molecular_pair_set
+
     @staticmethod
     def count_ranges(list_elements, number_bins=5, bin_sim_1=False, max_value=1):
-        #count the instances in the  bins from 0 to 1
+        # count the instances in the  bins from 0 to 1
         # Group the values into the corresponding bins, adding one for sim=1
-        counts=[]
-        bins=[]
+        counts = []
+        bins = []
 
         # normalize the elements of list_elements based on max_value
-        list_elements_norm = list_elements/max_value
+        list_elements_norm = list_elements / max_value
 
         if bin_sim_1:
             number_bins_effective = number_bins + 1
@@ -491,8 +489,8 @@ class TrainUtils:
 
         for p in range(int(number_bins_effective)):
 
-            if p==0:
-                low=-np.inf 
+            if p == 0:
+                low = -np.inf
             else:
                 low = p * (1 / number_bins)
 
@@ -504,10 +502,13 @@ class TrainUtils:
                 else:
                     high = (p + 1) * (1 / number_bins)
 
-            list_elements_temp = list_elements_norm[(list_elements_norm>=low) & (list_elements_norm<high)] 
+            list_elements_temp = list_elements_norm[
+                (list_elements_norm >= low) & (list_elements_norm < high)
+            ]
             counts.append(len(list_elements_temp))
             bins.append(low)
         return counts, bins
+
     @staticmethod
     def divide_data_into_bins(
         molecule_pairs,
@@ -543,10 +544,12 @@ class TrainUtils:
             ]
 
             if molecule_pairs.tanimotos is not None:
-                tanimotos_temp = molecule_pairs.tanimotos[(molecule_pairs.indexes_tani[:, 2] >= low)
-                & (molecule_pairs.indexes_tani[:, 2] < high)]
+                tanimotos_temp = molecule_pairs.tanimotos[
+                    (molecule_pairs.indexes_tani[:, 2] >= low)
+                    & (molecule_pairs.indexes_tani[:, 2] < high)
+                ]
             else:
-                tanimotos_temp=None
+                tanimotos_temp = None
 
             temp_molecule_pairs = MoleculePairsOpt(
                 spectrums_unique=molecule_pairs.spectrums,
@@ -577,17 +580,18 @@ class TrainUtils:
             number_bins_effective = number_bins
 
         # convert it to an integer
-        bin_size=1/number_bins
-        #target = np.ceil(molecule_pairs.indexes_tani[:, 2]/bin_size)
-        target= OrdinalClassification.custom_random(molecule_pairs.indexes_tani[:, 2]/bin_size)
+        bin_size = 1 / number_bins
+        # target = np.ceil(molecule_pairs.indexes_tani[:, 2]/bin_size)
+        target = OrdinalClassification.custom_random(
+            molecule_pairs.indexes_tani[:, 2] / bin_size
+        )
         for p in range(int(number_bins_effective)):
-            
-            
-            #low = p * (1 / number_bins)
 
-            #if bin_sim_1:
+            # low = p * (1 / number_bins)
+
+            # if bin_sim_1:
             #    high = (p + 1) * (1 / number_bins)
-            #else:
+            # else:
             #    if p == (number_bins_effective - 1):
             #        high = 1 + 0.1
             #    else:
@@ -596,14 +600,12 @@ class TrainUtils:
             # temp_molecule_pairs = [m for m in molecule_pairs if ((m.similarity>=low) and (m.similarity<high))]
             # check the similarity
             # temp_indexes_tani = np.array([ row for row in molecule_pairs.indexes_tani if ((row[2]>=low) and (row[2]<high)) ])
-            temp_indexes_tani = molecule_pairs.indexes_tani[
-                (target == p)
-            ]
+            temp_indexes_tani = molecule_pairs.indexes_tani[(target == p)]
 
             if molecule_pairs.tanimotos is not None:
-                tanimotos_temp = molecule_pairs.tanimotos[(target==p)]
+                tanimotos_temp = molecule_pairs.tanimotos[(target == p)]
             else:
-                tanimotos_temp=None
+                tanimotos_temp = None
             temp_molecule_pairs = MoleculePairsOpt(
                 spectrums_unique=molecule_pairs.spectrums,
                 indexes_tani_unique=temp_indexes_tani,
@@ -616,7 +618,7 @@ class TrainUtils:
         # get minimum bin size
         min_bin = min([len(b) for b in binned_molecule_pairs])
         return binned_molecule_pairs, min_bin
-    
+
     @staticmethod
     def uniformise(
         molecule_pairs,
@@ -630,7 +632,6 @@ class TrainUtils:
         get a uniform distribution of labels between 0 and 1
         """
 
-       
         # get spectrums and indexes
         spectrums = molecule_pairs.spectrums
         indexes_tani = molecule_pairs.indexes_tani
@@ -638,9 +639,13 @@ class TrainUtils:
         # initialize random seed
         random.seed(seed)
         np.random.seed(seed)
-        
-         # choose function 
-        function =  TrainUtils.divide_data_into_bins_categories if ordinal_classification else TrainUtils.divide_data_into_bins
+
+        # choose function
+        function = (
+            TrainUtils.divide_data_into_bins_categories
+            if ordinal_classification
+            else TrainUtils.divide_data_into_bins
+        )
 
         # min_bin = TrainUtils.get_min_bin(molecule_pairs, number_bins)
         binned_molecule_pairs, min_bin = function(
@@ -660,7 +665,7 @@ class TrainUtils:
             if target_molecule_pairs.tanimotos is not None:
                 tanimotos = target_molecule_pairs.tanimotos[sampled_rows]
             else:
-                tanimotos=None
+                tanimotos = None
 
             sampled_molecule_pairs = MoleculePairsOpt(
                 spectrums_unique=target_molecule_pairs.spectrums,
@@ -684,7 +689,6 @@ class TrainUtils:
         else:
             return uniform_molecule_pairs
 
-    
     @staticmethod
     def get_data_from_indexes(spectrums, indexes):
         return [

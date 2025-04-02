@@ -1,5 +1,6 @@
 import os
-os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
+
+os.chdir("/scratch/antwerpen/209/vsc20939/metabolomics")
 
 import dill
 import torch
@@ -280,7 +281,6 @@ if config.load_pretrained:
     print("Loaded pretrained model")
 else:
     print("Not loaded pretrained model")
-
 
 
 trainer = pl.Trainer(

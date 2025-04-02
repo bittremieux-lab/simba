@@ -15,7 +15,7 @@ from depthcharge.data import AnnotatedSpectrumDataset
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.transformers import (
     SpectrumTransformerEncoder,
-    #PeptideTransformerEncoder,
+    # PeptideTransformerEncoder,
 )
 from simba.transformers.spectrum_transformer_encoder_custom import (
     SpectrumTransformerEncoderCustom,
@@ -89,7 +89,7 @@ class Embedder(pl.LightningModule):
 
         self.use_cosine_library = True
 
-        #print(f"Using cosine library from Pytorch?: {self.use_cosine_library}")
+        # print(f"Using cosine library from Pytorch?: {self.use_cosine_library}")
 
     def normalized_dot_product(self, a, b):
         # Normalize inputs

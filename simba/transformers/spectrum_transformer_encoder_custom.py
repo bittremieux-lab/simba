@@ -2,7 +2,7 @@ import torch
 
 from depthcharge.transformers import (
     SpectrumTransformerEncoder,
-    #PeptideTransformerEncoder,
+    # PeptideTransformerEncoder,
 )
 
 

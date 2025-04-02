@@ -126,14 +126,14 @@ x = np.array([c[0] for c in combinations_test])
 y = np.array([c[1] for c in combinations_test])
 y = np.clip(y, 0, 1)
 
-corr_model, p_value_model= spearmanr(x, y)
+corr_model, p_value_model = spearmanr(x, y)
 
 # plot scatter
 plt.xlabel("tanimoto similarity")
 plt.ylabel("prediction similarity")
 plt.scatter(x, y, label="test", alpha=0.01)
 # plt.scatter(similarities_test,cosine_similarity_test, label='test')
-plt.title(f'Spearman Correlation: {corr_model}')
+plt.title(f"Spearman Correlation: {corr_model}")
 plt.legend()
 plt.grid()
 plt.savefig(fig_path)
@@ -151,7 +151,5 @@ plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
 
 
 # comparison with
-DetSimilarity.compute_all_scores(
-    m_test, model_file=best_model_path, config=config
-)
-#Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)
+DetSimilarity.compute_all_scores(m_test, model_file=best_model_path, config=config)
+# Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)

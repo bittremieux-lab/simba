@@ -1,6 +1,4 @@
-
-
-import os 
+import os
 
 # In[268]:
 
@@ -31,14 +29,16 @@ from simba.ordinal_classification.embedder_multitask import EmbedderMultitask
 from simba.transformers.embedder import Embedder
 from sklearn.metrics import confusion_matrix
 from simba.load_mces.load_mces import LoadMCES
-from simba.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
+from simba.weight_sampling_tools.custom_weighted_random_sampler import (
+    CustomWeightedRandomSampler,
+)
 from simba.plotting import Plotting
 
 # parameters
 config = Config()
 parser = Parser()
 config = parser.update_config(config)
-config.bins_uniformise_INFERENCE=config.EDIT_DISTANCE_N_CLASSES-1
+config.bins_uniformise_INFERENCE = config.EDIT_DISTANCE_N_CLASSES - 1
 config.use_uniform_data_INFERENCE = True
 
 # In[281]:
@@ -55,7 +55,6 @@ fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
 
 
-
 print("loading file")
 # Load the dataset from the pickle file
 with open(dataset_path, "rb") as file:
@@ -68,66 +67,80 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 
 # In[283]:
-print('Loading pairs data ...')
-#indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
-#                            prefix='indexes_tani_incremental_train', 
-#                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+print("Loading pairs data ...")
+# indexes_tani_multitasking_train=  LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR,
+#                            prefix='indexes_tani_incremental_train',
+#                            use_edit_distance=config.USE_EDIT_DISTANCE,
 #                            use_multitask=config.USE_MULTITASK,
 #                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
-#indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, 
-#                            prefix='indexes_tani_incremental_val', 
-#                            use_edit_distance=config.USE_EDIT_DISTANCE, 
+# indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR,
+#                            prefix='indexes_tani_incremental_val',
+#                            use_edit_distance=config.USE_EDIT_DISTANCE,
 #                            use_multitask=config.USE_MULTITASK,
 #                            add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS)
-
 
 
 ## create a numpy array for equality
 def create_artificial_low_similarity_pairs(max_index_spectrum, number_pairs):
 
-        indexes_tani_low= np.zeros((number_pairs,4))
-        indexes_tani_low[:,0]= np.random.randint(0,max_index_spectrum,number_pairs)
-        indexes_tani_low[:,1]= np.random.randint(0,max_index_spectrum,number_pairs)
-        indexes_tani_low[:,2]= 0
-        # if there is the extra column corresponding to tanimoto
-        indexes_tani_low[:,3]= 0
-        return indexes_tani_low
+    indexes_tani_low = np.zeros((number_pairs, 4))
+    indexes_tani_low[:, 0] = np.random.randint(0, max_index_spectrum, number_pairs)
+    indexes_tani_low[:, 1] = np.random.randint(0, max_index_spectrum, number_pairs)
+    indexes_tani_low[:, 2] = 0
+    # if there is the extra column corresponding to tanimoto
+    indexes_tani_low[:, 3] = 0
+    return indexes_tani_low
+
 
 def create_artificial_high_similarity_pairs(max_index_spectrum):
-        indexes_tani_high= np.zeros((max_index_spectrum,4))
-        indexes_tani_high[:,0]= np.arange(0,max_index_spectrum)
-        indexes_tani_high[:,1]= np.arange(0,max_index_spectrum)
-        indexes_tani_high[:,2]= 1
-        # if there is the extra column corresponding to tanimoto
-        indexes_tani_high[:,3]= 1
-        return indexes_tani_high
+    indexes_tani_high = np.zeros((max_index_spectrum, 4))
+    indexes_tani_high[:, 0] = np.arange(0, max_index_spectrum)
+    indexes_tani_high[:, 1] = np.arange(0, max_index_spectrum)
+    indexes_tani_high[:, 2] = 1
+    # if there is the extra column corresponding to tanimoto
+    indexes_tani_high[:, 3] = 1
+    return indexes_tani_high
+
 
 def create_artificial_data(max_index_spectrum, number_pairs=500000000):
     high = create_artificial_high_similarity_pairs(max_index_spectrum)
-    low = create_artificial_low_similarity_pairs(max_index_spectrum, number_pairs=number_pairs)
+    low = create_artificial_low_similarity_pairs(
+        max_index_spectrum, number_pairs=number_pairs
+    )
     return np.concatenate([high, low])
 
+
 ## training
-indexes_tani_multitasking_train =  create_artificial_data(len(molecule_pairs_train.spectrums), number_pairs=20000000)
-indexes_tani_multitasking_val =    create_artificial_data(len(molecule_pairs_val.spectrums), number_pairs=1000000)
+indexes_tani_multitasking_train = create_artificial_data(
+    len(molecule_pairs_train.spectrums), number_pairs=20000000
+)
+indexes_tani_multitasking_val = create_artificial_data(
+    len(molecule_pairs_val.spectrums), number_pairs=1000000
+)
 
 
 # assign features
-molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
-molecule_pairs_val.indexes_tani = indexes_tani_multitasking_val[:,[0,1,config.COLUMN_EDIT_DISTANCE]]
+molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[
+    :, [0, 1, config.COLUMN_EDIT_DISTANCE]
+]
+molecule_pairs_val.indexes_tani = indexes_tani_multitasking_val[
+    :, [0, 1, config.COLUMN_EDIT_DISTANCE]
+]
 
-print(f'shape of similarity1: {molecule_pairs_train.indexes_tani.shape}')
+print(f"shape of similarity1: {molecule_pairs_train.indexes_tani.shape}")
 
 # add tanimotos
 
-molecule_pairs_train.tanimotos = indexes_tani_multitasking_train[:,config.COLUMN_MCES20]
-molecule_pairs_val.tanimotos = indexes_tani_multitasking_val[:,config.COLUMN_MCES20]
+molecule_pairs_train.tanimotos = indexes_tani_multitasking_train[
+    :, config.COLUMN_MCES20
+]
+molecule_pairs_val.tanimotos = indexes_tani_multitasking_val[:, config.COLUMN_MCES20]
 
 
-print(f'shape of similarity2: {molecule_pairs_train.tanimotos.shape}')
+print(f"shape of similarity2: {molecule_pairs_train.tanimotos.shape}")
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
 print(f"Number of pairs for val: {len(molecule_pairs_val)}")
-print(f'Example of data loaded for tanimotos: {molecule_pairs_train.tanimotos}')
+print(f"Example of data loaded for tanimotos: {molecule_pairs_train.tanimotos}")
 ## Sanity checks
 sanity_check_ids = SanityChecks.sanity_checks_ids(
     molecule_pairs_train,
@@ -143,7 +156,6 @@ sanity_check_bms = SanityChecks.sanity_checks_bms(
 )
 
 
-
 print(f"Sanity check ids. Passed? {sanity_check_ids}")
 print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
@@ -151,57 +163,70 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 ## CALCULATION OF WEIGHTS
 train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
     molecule_pairs_train,
-    config.EDIT_DISTANCE_N_CLASSES-1,
-        bin_sim_1=True, 
+    config.EDIT_DISTANCE_N_CLASSES - 1,
+    bin_sim_1=True,
 )
 
 import copy
-# create a new copy of the pairs, to get the weights of the second similarity 
-molecule_pairs_train_similarity2= copy.deepcopy(molecule_pairs_train)
-molecule_pairs_train_similarity2.indexes_tani[:,2]= molecule_pairs_train_similarity2.tanimotos
 
-#print(f'Example of tanimotos processed: {molecule_pairs_train_similarity2.indexes_tani[:,2]}')
-#train_binned_list2, ranges = TrainUtils.divide_data_into_bins(
+# create a new copy of the pairs, to get the weights of the second similarity
+molecule_pairs_train_similarity2 = copy.deepcopy(molecule_pairs_train)
+molecule_pairs_train_similarity2.indexes_tani[:, 2] = (
+    molecule_pairs_train_similarity2.tanimotos
+)
+
+# print(f'Example of tanimotos processed: {molecule_pairs_train_similarity2.indexes_tani[:,2]}')
+# train_binned_list2, ranges = TrainUtils.divide_data_into_bins(
 #    molecule_pairs_train_similarity2,
 #    config.N_CLASSES-1,
-#        bin_sim_1=False, 
-#)
+#        bin_sim_1=False,
+# )
 
 # weights of similarity 2
-#weights2, range_weights2 = WeightSampling.compute_weights(train_binned_list2)
-#print(f'Train binned list of second similarity: {[len(t) for t in train_binned_list2]}')
-#print(f'Weights of second similarity:{weights2}')
-#print(f'Ranges of second similarity:{range_weights2}')
+# weights2, range_weights2 = WeightSampling.compute_weights(train_binned_list2)
+# print(f'Train binned list of second similarity: {[len(t) for t in train_binned_list2]}')
+# print(f'Weights of second similarity:{weights2}')
+# print(f'Ranges of second similarity:{range_weights2}')
 
 # check distribution of similarities
 print("SAMPLES PER RANGE:")
-for lista in (train_binned_list):
-    print(f"samples: {len(lista)}") 
+for lista in train_binned_list:
+    print(f"samples: {len(lista)}")
 
 train_binned_list[1].indexes_tani.shape
 
 
+plt.hist(
+    molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:, 2] > 0][
+        :, 2
+    ],
+    bins=20,
+)
 
-plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]>0][:,2], bins=20)
 
 def compute_weights_categories(binned_list):
-        freq = np.array([len(r) for r in binned_list])
-        weights = np.array([(np.sum(freq) / f)  if f>0 else 0 for f in freq])
-        weights = weights / np.sum(weights)
-        bin_size= 1/(len(binned_list)-1)
-        range_weights = np.arange(0, len(binned_list)) * bin_size
-        return weights, range_weights
+    freq = np.array([len(r) for r in binned_list])
+    weights = np.array([(np.sum(freq) / f) if f > 0 else 0 for f in freq])
+    weights = weights / np.sum(weights)
+    bin_size = 1 / (len(binned_list) - 1)
+    range_weights = np.arange(0, len(binned_list)) * bin_size
+    return weights, range_weights
+
 
 weights, range_weights = compute_weights_categories(train_binned_list)
 
-print(f'Example of weights:{weights}')
+print(f"Example of weights:{weights}")
 
 ## save info about the weights of similarity 1
-Plotting.plot_weights(range_weights, weights, xlabel='weight bin similarity 1', 
-                filepath=config.CHECKPOINT_DIR+ 'weights_similarity_1.png')
+Plotting.plot_weights(
+    range_weights,
+    weights,
+    xlabel="weight bin similarity 1",
+    filepath=config.CHECKPOINT_DIR + "weights_similarity_1.png",
+)
 
 
-#weights, range_weights = WeightSampling.compute_weights(train_binned_list)
+# weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
 
 # In[289]:
@@ -219,42 +244,53 @@ range_weights
 # In[291]:
 
 
-weights_tr = WeightSampling.compute_sample_weights_categories(molecule_pairs_train, weights)
-weights_val = WeightSampling.compute_sample_weights_categories(molecule_pairs_val, weights)
+weights_tr = WeightSampling.compute_sample_weights_categories(
+    molecule_pairs_train, weights
+)
+weights_val = WeightSampling.compute_sample_weights_categories(
+    molecule_pairs_val, weights
+)
 
 
 # In[292]:
 
 
-weights_val[(molecule_pairs_val.indexes_tani[:,2]<0.1)]
+weights_val[(molecule_pairs_val.indexes_tani[:, 2] < 0.1)]
 
 
 # In[293]:
 
 
-weights_val[(molecule_pairs_val.indexes_tani[:,2]<0.21) & (molecule_pairs_val.indexes_tani[:,2]>0.19)]
+weights_val[
+    (molecule_pairs_val.indexes_tani[:, 2] < 0.21)
+    & (molecule_pairs_val.indexes_tani[:, 2] > 0.19)
+]
 
 
 # In[294]:
 
 
-plt.hist(molecule_pairs_val.indexes_tani[:,2], bins=100)
-plt.yscale('log')
+plt.hist(molecule_pairs_val.indexes_tani[:, 2], bins=100)
+plt.yscale("log")
 
 
 # In[295]:
 
 
-#plt.hist(weights_val)
-#plt.yscale('log')
+# plt.hist(weights_val)
+# plt.yscale('log')
 
 
 # In[296]:
 
 
-dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_train, training=True, max_num_peaks=100)
+dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    molecule_pairs_train, training=True, max_num_peaks=100
+)
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val,max_num_peaks=100)
+dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    molecule_pairs_val, max_num_peaks=100
+)
 
 
 # In[297]:
@@ -267,15 +303,12 @@ dataset_train
 
 
 # delete variables that are not useful for memory savings
-#del molecule_pairs_val
-#del molecule_pairs_test
-#del uniformed_molecule_pairs_test
+# del molecule_pairs_val
+# del molecule_pairs_test
+# del uniformed_molecule_pairs_test
 
 
 # In[299]:
-
-
-
 
 
 train_sampler = CustomWeightedRandomSampler(
@@ -295,7 +328,7 @@ weights_tr
 # In[301]:
 
 
-dataset['molecule_pairs_train'].indexes_tani
+dataset["molecule_pairs_train"].indexes_tani
 
 
 # In[302]:
@@ -314,61 +347,68 @@ dataloader_train
 
 
 ## check that the distribution of the loader is balanced
-similarities_sampled=[]
-similarities_sampled2= []
-for i,batch in enumerate(dataloader_train):
-    #sim = batch['similarity']
-    #sim = np.array(sim).reshape(-1)
-    similarities_sampled = similarities_sampled + list(batch['similarity'].reshape(-1))
+similarities_sampled = []
+similarities_sampled2 = []
+for i, batch in enumerate(dataloader_train):
+    # sim = batch['similarity']
+    # sim = np.array(sim).reshape(-1)
+    similarities_sampled = similarities_sampled + list(batch["similarity"].reshape(-1))
 
-    similarities_sampled2 = similarities_sampled2 + list(batch['similarity2'].reshape(-1))
-    if i==100:
+    similarities_sampled2 = similarities_sampled2 + list(
+        batch["similarity2"].reshape(-1)
+    )
+    if i == 100:
 
         # for second similarity remove the sim=1 since it is the same task as the edit distance ==0
-        similarities_sampled2= np.array(similarities_sampled2)
-        #similarities_sampled2=similarities_sampled2[similarities_sampled2<1]
+        similarities_sampled2 = np.array(similarities_sampled2)
+        # similarities_sampled2=similarities_sampled2[similarities_sampled2<1]
         break
 
 ## plot similarity distributions
-#print(f'similarities 1: {similarities_sampled}')
+# print(f'similarities 1: {similarities_sampled}')
 plt.figure()
-plt.xlabel('similarity 1')
-plt.ylabel('freq')
+plt.xlabel("similarity 1")
+plt.ylabel("freq")
 plt.hist(similarities_sampled)
-plt.savefig(config.CHECKPOINT_DIR + 'similarity_distribution_1.png')
+plt.savefig(config.CHECKPOINT_DIR + "similarity_distribution_1.png")
 
-#print(f'similarities 2: {similarities_sampled2}')
+# print(f'similarities 2: {similarities_sampled2}')
 plt.figure()
 plt.hist(similarities_sampled2)
-plt.xlabel('similarity 2')
-plt.ylabel('freq')
-plt.savefig(config.CHECKPOINT_DIR +'similarity_distribution_2.png')
+plt.xlabel("similarity 2")
+plt.ylabel("freq")
+plt.savefig(config.CHECKPOINT_DIR + "similarity_distribution_2.png")
 
 
+counting, bins, patches = plt.hist(similarities_sampled, bins=6)
 
-counting, bins, patches =plt.hist(similarities_sampled, bins=6)
-
-print(f'SIMILARITY 1: Distribution of similarity for dataset train: {counting}')
-print(f'SIMILARITY 1: Ranges of similarity for dataset train: {bins}')
+print(f"SIMILARITY 1: Distribution of similarity for dataset train: {counting}")
+print(f"SIMILARITY 1: Ranges of similarity for dataset train: {bins}")
 # In[304]:
 
-# count the number of samples between 
-counting2,bins2 = TrainUtils.count_ranges(np.array(similarities_sampled2), 
-                                                    number_bins=5, 
-                                                    bin_sim_1=False, 
-                                                    max_value=1)
+# count the number of samples between
+counting2, bins2 = TrainUtils.count_ranges(
+    np.array(similarities_sampled2), number_bins=5, bin_sim_1=False, max_value=1
+)
 
-print(f'SIMILARITY 2: Distribution of similarity for dataset train: {counting2}')
-print(f'SIMILARITY 2: Ranges of similarity for dataset train: {bins2}')
+print(f"SIMILARITY 2: Distribution of similarity for dataset train: {counting2}")
+print(f"SIMILARITY 2: Ranges of similarity for dataset train: {bins2}")
 
-weights2 = np.array([np.sum(counting2)/c if c != 0 else 0 for c in counting2]) 
-weights2= weights2/np.sum(weights2)
+weights2 = np.array([np.sum(counting2) / c if c != 0 else 0 for c in counting2])
+weights2 = weights2 / np.sum(weights2)
 
 ## save info about the weights of similarity 1
-bins2_normalized = [b if b>0 else 0 for b in bins2 ] # the first bin has -inf as the lower range
-Plotting.plot_weights(bins2_normalized, weights2, xlabel='weight bin similarity 2', 
-                filepath=config.CHECKPOINT_DIR+ 'weights_similarity_2.png')
-print(f'WEIGHTS CALCULATED FOR SECOND SIMILARITY: {weights2}')
+bins2_normalized = [
+    b if b > 0 else 0 for b in bins2
+]  # the first bin has -inf as the lower range
+Plotting.plot_weights(
+    bins2_normalized,
+    weights2,
+    xlabel="weight bin similarity 2",
+    filepath=config.CHECKPOINT_DIR + "weights_similarity_2.png",
+)
+print(f"WEIGHTS CALCULATED FOR SECOND SIMILARITY: {weights2}")
+
 
 def worker_init_fn(
     worker_id,
@@ -388,7 +428,6 @@ dataloader_val = DataLoader(
     worker_init_fn=worker_init_fn,
     num_workers=10,
 )
-
 
 
 # Define the ModelCheckpoint callback
@@ -417,15 +456,13 @@ losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
 print("define model")
 
 
-
-
 # In[309]:
 
 ## use or not use weights for the second similarity loss
 if config.USE_LOSS_WEIGHTS_SECOND_SIMILARITY:
-    weights_sim2=np.array(weights2)
+    weights_sim2 = np.array(weights2)
 else:
-    weights_sim2=None
+    weights_sim2 = None
 
 model = EmbedderMultitask(
     d_model=int(config.D_MODEL),
@@ -434,16 +471,16 @@ model = EmbedderMultitask(
     weights=None,
     lr=config.LR,
     use_cosine_distance=config.use_cosine_distance,
-    use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+    use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
     weights_sim2=weights_sim2,
-    use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+    use_mces20_log_loss=config.USE_MCES20_LOG_LOSS,
     use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
     use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
 )
 
 # Create a model:
 if config.load_pretrained:
-    model= Embedder.load_from_checkpoint(
+    model = Embedder.load_from_checkpoint(
         config.pretrained_path,
         d_model=int(config.D_MODEL),
         n_layers=int(config.N_LAYERS),
@@ -451,15 +488,15 @@ if config.load_pretrained:
         weights=None,
         lr=config.LR,
         use_cosine_distance=config.use_cosine_distance,
-        use_gumbel = config.EDIT_DISTANCE_USE_GUMBEL,
+        use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
         weights_sim2=weights_sim2,
-        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS, 
+        use_mces20_log_loss=config.USE_MCES20_LOG_LOSS,
         use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
         use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
-        #strict=False,
-)
-    
-    #model.spectrum_encoder = model_pretrained.spectrum_encoder
+        # strict=False,
+    )
+
+    # model.spectrum_encoder = model_pretrained.spectrum_encoder
     print("Loaded pretrained model")
 else:
     print("Not loaded pretrained model")
@@ -467,7 +504,7 @@ else:
 
 
 trainer = pl.Trainer(
-    #max_steps=100000,
+    # max_steps=100000,
     val_check_interval=10000,
     max_epochs=10,
     callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],

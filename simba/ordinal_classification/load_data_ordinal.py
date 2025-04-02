@@ -6,6 +6,7 @@ from simba.molecule_pairs_opt import MoleculePairsOpt
 import copy
 from simba.ordinal_classification.ordinal_classification import OrdinalClassification
 
+
 class LoadDataOrdinal:
     """
     using unique identifiers
@@ -71,10 +72,11 @@ class LoadDataOrdinal:
         # Normalize the intensity array
         intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
 
-
         ## Adjust similarity towards a N classification problem
-        similarity = OrdinalClassification.from_float_to_class(molecule_pairs_input.indexes_tani[:, 2].reshape(-1, 1), N_classes=N_classes)
-        #similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
+        similarity = OrdinalClassification.from_float_to_class(
+            molecule_pairs_input.indexes_tani[:, 2].reshape(-1, 1), N_classes=N_classes
+        )
+        # similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
 
         print("Creating dictionaries")
         dictionary_data = {

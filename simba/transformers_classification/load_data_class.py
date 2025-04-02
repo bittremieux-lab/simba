@@ -72,10 +72,11 @@ class LoadDataClass:
 
         print("Creating dictionaries")
 
+        print("Adapt code for classification, assuming a 6 label problem")
 
-        print('Adapt code for classification, assuming a 6 label problem')
-
-        similarity_classification = np.round((N_classes*molecule_pairs_input.indexes_tani[:, 2])).astype(int)
+        similarity_classification = np.round(
+            (N_classes * molecule_pairs_input.indexes_tani[:, 2])
+        ).astype(int)
 
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.indexes_tani[:, 0].reshape(-1, 1),

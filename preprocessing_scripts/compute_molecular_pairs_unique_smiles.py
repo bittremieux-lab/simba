@@ -1,5 +1,6 @@
 import dill
-#from simba.load_data import LoadData
+
+# from simba.load_data import LoadData
 from sklearn.model_selection import train_test_split
 from simba.train_utils import TrainUtils
 from simba.preprocessor import Preprocessor
@@ -25,21 +26,23 @@ nist_path = r"/scratch/antwerpen/209/vsc20939/data/hr_msms_nist_all.MSP"
 
 # pickle files
 output_pairs_file = "../data/merged_gnps_nist_20240516_exhaustive.pkl"
-output_np_indexes_train = '../data/indexes_tani_train.npy'
-output_np_indexes_val = '../data/indexes_tani_val.npy'
-output_np_indexes_test = '../data/indexes_tani_test.npy'
+output_np_indexes_train = "../data/indexes_tani_train.npy"
+output_np_indexes_val = "../data/indexes_tani_val.npy"
+output_np_indexes_test = "../data/indexes_tani_test.npy"
 
 output_nist_file = "../data/all_spectrums_nist.pkl"
 output_gnps_file = "../data/all_spectrums_gnps.pkl"
 output_spectrums_file = "../data/all_spectrums_gnps_nist_20240311.pkl"
-USE_ONLY_LOW_RANGE=True
-high_tanimoto_range = 0 if USE_ONLY_LOW_RANGE else 0.5 # to get more high similarity pairs
+USE_ONLY_LOW_RANGE = True
+high_tanimoto_range = (
+    0 if USE_ONLY_LOW_RANGE else 0.5
+)  # to get more high similarity pairs
 
 print(f"output_file:{output_pairs_file}")
 # params
 max_number_spectra_gnps = 1000000000
 max_number_spectra_nist = 10000000000
-#train_molecules = 100 * (10**6)
+# train_molecules = 100 * (10**6)
 train_molecules = 50 * (10**6)
 val_molecules = 10**6
 test_molecules = 10**6
@@ -183,8 +186,8 @@ molecule_pairs_test = TrainUtils.compute_all_tanimoto_results_unique(
 )
 
 ## add molecules with similarity=1
-#molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
-#molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
+# molecule_pairs_train = TrainUtils.compute_unique_combinations(molecule_pairs_train)
+# molecule_pairs_val = TrainUtils.compute_unique_combinations(molecule_pairs_val)
 
 # Dump the dictionary to a file using pickle
 
@@ -195,9 +198,9 @@ print(f"Current time: {datetime.now()}")
 
 
 # save np files
-np.save(arr=molecule_pairs_train.indexes_tani, file= output_np_indexes_train)
-np.save(arr=molecule_pairs_val.indexes_tani, file= output_np_indexes_val)
-np.save(arr=molecule_pairs_test.indexes_tani, file= output_np_indexes_test)
+np.save(arr=molecule_pairs_train.indexes_tani, file=output_np_indexes_train)
+np.save(arr=molecule_pairs_val.indexes_tani, file=output_np_indexes_val)
+np.save(arr=molecule_pairs_test.indexes_tani, file=output_np_indexes_test)
 
 # create uniform test data
 uniformed_molecule_pairs_test, _ = TrainUtils.uniformise(

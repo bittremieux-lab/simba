@@ -1,5 +1,6 @@
 import os
-os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
+
+os.chdir("/scratch/antwerpen/209/vsc20939/metabolomics")
 
 import dill
 import torch
@@ -121,17 +122,21 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
 ## Get a low range pretraining set
 molecule_pairs_train_low_range = MoleculePairsOpt(
-                 spectrums_original=molecule_pairs_train.spectrums_original, 
-                 spectrums_unique=molecule_pairs_train.spectrums, 
-                 df_smiles=molecule_pairs_train.df_smiles, 
-                 indexes_tani_unique=molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]<0.5] #sim <0.5
+    spectrums_original=molecule_pairs_train.spectrums_original,
+    spectrums_unique=molecule_pairs_train.spectrums,
+    df_smiles=molecule_pairs_train.df_smiles,
+    indexes_tani_unique=molecule_pairs_train.indexes_tani[
+        molecule_pairs_train.indexes_tani[:, 2] < 0.5
+    ],  # sim <0.5
 )
 
 molecule_pairs_val_low_range = MoleculePairsOpt(
-                 spectrums_original=molecule_pairs_val.spectrums_original, 
-                 spectrums_unique=molecule_pairs_val.spectrums, 
-                 df_smiles=molecule_pairs_val.df_smiles, 
-                 indexes_tani_unique=molecule_pairs_val.indexes_tani[molecule_pairs_val.indexes_tani[:,2]<0.5] #sim <0.5
+    spectrums_original=molecule_pairs_val.spectrums_original,
+    spectrums_unique=molecule_pairs_val.spectrums,
+    df_smiles=molecule_pairs_val.df_smiles,
+    indexes_tani_unique=molecule_pairs_val.indexes_tani[
+        molecule_pairs_val.indexes_tani[:, 2] < 0.5
+    ],  # sim <0.5
 )
 
 ## CALCULATION OF WEIGHTS
@@ -176,11 +181,15 @@ print(f"number of train molecule pairs: {len(m_train)}")
 
 
 dataset_train = LoadDataUnique.from_molecule_pairs_to_dataset(m_train, training=True)
-dataset_train_low_range = LoadDataUnique.from_molecule_pairs_to_dataset(molecule_pairs_train_low_range, training=True)
+dataset_train_low_range = LoadDataUnique.from_molecule_pairs_to_dataset(
+    molecule_pairs_train_low_range, training=True
+)
 
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
 dataset_val = LoadDataUnique.from_molecule_pairs_to_dataset(m_val)
-dataset_val_low_range = LoadDataUnique.from_molecule_pairs_to_dataset(molecule_pairs_val_low_range)
+dataset_val_low_range = LoadDataUnique.from_molecule_pairs_to_dataset(
+    molecule_pairs_val_low_range
+)
 
 # delete variables that are not useful for memory savings
 del dataset
@@ -272,7 +281,9 @@ progress_bar_callback = ProgressBar()
 
 # loss callback
 losscallback = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss.png")
-losscallback_pretrain = LossCallback(file_path=config.CHECKPOINT_DIR + f"loss_pretrain.png")
+losscallback_pretrain = LossCallback(
+    file_path=config.CHECKPOINT_DIR + f"loss_pretrain.png"
+)
 print("define model")
 
 
@@ -301,8 +312,6 @@ if config.load_pretrained:
     print("Loaded pretrained model")
 else:
     print("Not loaded pretrained model")
-
-
 
 
 trainer = pl.Trainer(

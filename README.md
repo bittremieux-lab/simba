@@ -114,13 +114,7 @@ The best-performing model (lowest validation loss) is saved in `CHECKPOINT_DIR`.
 
 ---
 
-## 🎯 Performance and Validation
 
-- **MCES Prediction**: Spearman correlation of **0.93**
-- **Substructure Edit Distance Prediction**: Spearman correlation of **0.71**, 50% accuracy on balanced datasets
-- **Analog Discovery Task (CASMI 2022)**: SIMBA retrieves analogs with higher accuracy compared to traditional methods (modified cosine similarity, Spec2vec, MS2Deepscore).
-
----
 
 ## 📬 Contact & Support
 

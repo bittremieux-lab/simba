@@ -15,7 +15,7 @@ from depthcharge.data import AnnotatedSpectrumDataset
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.transformers import (
     SpectrumTransformerEncoder,
-    #PeptideTransformerEncoder,
+    # PeptideTransformerEncoder,
 )
 from simba.transformers.spectrum_transformer_encoder_custom import (
     SpectrumTransformerEncoderCustom,

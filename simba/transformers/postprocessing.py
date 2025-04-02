@@ -27,13 +27,12 @@ class Postprocessing:
             similarities = similarities + sim_temp
         return similarities
 
-
     @staticmethod
     def get_similarities_multitasking(dataloader):
         # calculate similarity
-        #similarities1 = []
-        #similarities2 = []
-        #for batch in dataloader:
+        # similarities1 = []
+        # similarities2 = []
+        # for batch in dataloader:
         #    # similarities.append(float(b['similarity'][0]))
         #    sim_temp1 = [float(b) for b in batch["similarity"]]
         #    # similarities = similarities  +  [b for b in batch]
@@ -41,10 +40,14 @@ class Postprocessing:
 
         #    sim_temp2 = [float(b) for b in batch["similarity2"]]
         #    similarities2 = similarities2 + sim_temp2
-            
-        similarities1 = [[float(b) for b in batch['similarity']] for batch in dataloader]
-        similarities2 = [[float(b) for b in batch['similarity2']] for batch in dataloader]
 
-        similarities1= [item for sublist in similarities1 for item in sublist]
-        similarities2= [item for sublist in similarities2 for item in sublist]
+        similarities1 = [
+            [float(b) for b in batch["similarity"]] for batch in dataloader
+        ]
+        similarities2 = [
+            [float(b) for b in batch["similarity2"]] for batch in dataloader
+        ]
+
+        similarities1 = [item for sublist in similarities1 for item in sublist]
+        similarities2 = [item for sublist in similarities2 for item in sublist]
         return similarities1, similarities2

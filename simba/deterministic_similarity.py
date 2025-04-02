@@ -135,8 +135,12 @@ class DetSimilarity:
             spectra_1 = m.spectrum_object_1
 
             # apply specific preprocessing for spectra going into the deterministic metrics
-            spectra_0_det = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_0)
-            spectra_1_det = DetSimilarity.preprocessing_for_deterministic_metrics(spectra_1)
+            spectra_0_det = DetSimilarity.preprocessing_for_deterministic_metrics(
+                spectra_0
+            )
+            spectra_1_det = DetSimilarity.preprocessing_for_deterministic_metrics(
+                spectra_1
+            )
 
             # compute deterministic similarities
             cos = cosine(spectra_0_det, spectra_1_det, config.FRAGMENT_MZ_TOLERANCE)
@@ -191,14 +195,17 @@ class DetSimilarity:
 
         Plotting.plot_roc_curve_comparison(
             x_class,
-            #[model_temp, mod_cosine_temp],
-            [model_temp,],
+            # [model_temp, mod_cosine_temp],
+            [
+                model_temp,
+            ],
             title="ROC Curve",
             roc_file_path=config.CHECKPOINT_DIR
             + f"roc_curve_comparison_{config.MODEL_CODE}.png",
-            #labels=["model", "mod_cosine"],
+            # labels=["model", "mod_cosine"],
             labels=["model"],
-            #colors=["r", "b"],
-            colors=["r",],
+            # colors=["r", "b"],
+            colors=[
+                "r",
+            ],
         )
-

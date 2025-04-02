@@ -20,6 +20,7 @@ from simba.preprocessor import Preprocessor
 from simba.utils import spectrum_hash
 import pickle
 
+
 class LoadData:
 
     def get_spectra(
@@ -89,20 +90,20 @@ class LoadData:
         if "charge" in spectrum["params"]:
             cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
         else:
-            cond_charge=True 
+            cond_charge = True
 
-        #try:
+        # try:
         #    cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
-        #except:
+        # except:
         #    cond_pepmass = float(spectrum["params"]["pepmass"]) > 0
         cond_pepmass = True
 
         cond_mz_array = len(spectrum["m/z array"]) >= config.MIN_N_PEAKS
 
-        if 'ionmode' in spectrum["params"]:
+        if "ionmode" in spectrum["params"]:
             cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
         else:
-            cond_ion_mode=True
+            cond_ion_mode = True
         cond_name = spectrum["params"]["adduct"] in ["M+", "[M+H]+", "M+H"]  # adduct
         cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
         cond_inchi_smiles = (
@@ -143,9 +144,12 @@ class LoadData:
         if "libraryquality" in spectrum["params"].keys():
             cond_library = int(spectrum["params"]["libraryquality"]) <= 3
         else:
-            cond_library= True
-        cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
+            cond_library = True
 
+        if "charge" in spectrum["params"]:
+            cond_charge = int(spectrum["params"]["charge"][0]) in config.CHARGES
+        else:
+            cond_charge = True
         # try to convert to float the pep mass
         try:
             cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
@@ -153,13 +157,17 @@ class LoadData:
             cond_pepmass = 0.0
 
         cond_mz_array = len(spectrum["m/z array"]) >= config.MIN_N_PEAKS
-        cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+
+        if "ionmode" in spectrum["params"]:
+            cond_ion_mode = spectrum["params"]["ionmode"] == "Positive"
+        else:
+            cond_ion_mode = True
         cond_name = spectrum["params"]["name"].rstrip().endswith(" M+H")
         cond_centroid = PreprocessingUtils.is_centroid(spectrum["intensity array"])
         cond_inchi_smiles = (
             # spectrum['params']["inchi"] != "N/A" or
-            (spectrum["params"]["smiles"]
-            != "N/A") & (spectrum["params"]["smiles"] != '')
+            (spectrum["params"]["smiles"] != "N/A")
+            & (spectrum["params"]["smiles"] != "")
         )
         ##cond_name=True
         ##cond_name=True
@@ -209,10 +217,10 @@ class LoadData:
             inchi = spectrum_dict["params"]["inchi"]
             library = spectrum_dict["params"]["organism"]
         else:  # JANSSEN
-            if 'id' in spectrum_dict["params"]:
+            if "id" in spectrum_dict["params"]:
                 identifier = spectrum_dict["params"]["id"]
             else:
-                identifier='none'
+                identifier = "none"
             inchi = ""
             library = "janssen"
 
@@ -220,10 +228,10 @@ class LoadData:
         library = library
         inchi = inchi
         smiles = spectrum_dict["params"]["smiles"]
-        if 'ionmode' in spectrum_dict["params"]:
+        if "ionmode" in spectrum_dict["params"]:
             ionmode = spectrum_dict["params"]["ionmode"]
         else:
-            ionmode='none'
+            ionmode = "none"
 
         # compute hash id value
         spectrum_hash_result = spectrum_hash(
@@ -245,12 +253,12 @@ class LoadData:
             subclass = None
 
         try:
-            precursor_mz= float(spectrum_dict["params"]["pepmass"][0]) 
+            precursor_mz = float(spectrum_dict["params"]["pepmass"][0])
         except:
-            precursor_mz= float(spectrum_dict["params"]['precursor_mz']) 
+            precursor_mz = float(spectrum_dict["params"]["precursor_mz"])
 
         try:
-            charge=max(int(spectrum_dict["params"]["charge"][0]), 1)
+            charge = max(int(spectrum_dict["params"]["charge"][0]), 1)
         except:
             charge = 1
         spec = SpectrumExt(
@@ -286,9 +294,9 @@ class LoadData:
         use_tqdm=True,
         config=None,
         use_gnps_format=True,
-    ):  
-        
-        num_samples=10**8 if num_samples == -1 else num_samples
+    ):
+
+        num_samples = 10**8 if num_samples == -1 else num_samples
         spectrums = []  # to save all the spectrums
         spectra = LoadData.get_spectra(
             file,
@@ -379,38 +387,43 @@ class LoadData:
         config=None,
         initial_line_number=0,
     ):
-        # open casmi file 
-        with open(file, 'rb') as f:
+        # open casmi file
+        with open(file, "rb") as f:
             spectra_df = pickle.load(f)
         all_spectrums_parsed = []
 
-        for index,spectra_row in spectra_df.iterrows():
+        for index, spectra_row in spectra_df.iterrows():
 
-            #initialize
-            spectrum_dict={}
-            spectrum_dict['params'] = {}
+            # initialize
+            spectrum_dict = {}
+            spectrum_dict["params"] = {}
 
             # get info
-            adduct = ' M+H' if spectra_row['prec_type'] =='[M+H]+'else spectra_row['prec_type']
-            spectrum_dict['params']['spectrumid'] = str(spectra_row['casmi_id']) + adduct
-            spectrum_dict['params']['name'] = str(spectra_row['casmi_id']) + adduct
-            spectrum_dict['params']['inchi']=''
-            spectrum_dict['params']['organism']='casmi'
-            spectrum_dict['params']['id']=spectra_row['casmi_id']
-            spectrum_dict['params']['smiles'] = spectra_row['smiles']
-            ionmode = 'Positive' if spectra_row['ion_mode']=='P' else 'Negative'
-            spectrum_dict['params']['ionmode']=ionmode
-            spectrum_dict['params']['pepmass']=[spectra_row['prec_mz']]
-            spectrum_dict['params']['charge']=[1]
-            spectrum_dict['params']['libraryquality']=1
-            #get peaks
-            peaks = spectra_row['peaks']
+            adduct = (
+                " M+H"
+                if spectra_row["prec_type"] == "[M+H]+"
+                else spectra_row["prec_type"]
+            )
+            spectrum_dict["params"]["spectrumid"] = (
+                str(spectra_row["casmi_id"]) + adduct
+            )
+            spectrum_dict["params"]["name"] = str(spectra_row["casmi_id"]) + adduct
+            spectrum_dict["params"]["inchi"] = ""
+            spectrum_dict["params"]["organism"] = "casmi"
+            spectrum_dict["params"]["id"] = spectra_row["casmi_id"]
+            spectrum_dict["params"]["smiles"] = spectra_row["smiles"]
+            ionmode = "Positive" if spectra_row["ion_mode"] == "P" else "Negative"
+            spectrum_dict["params"]["ionmode"] = ionmode
+            spectrum_dict["params"]["pepmass"] = [spectra_row["prec_mz"]]
+            spectrum_dict["params"]["charge"] = [1]
+            spectrum_dict["params"]["libraryquality"] = 1
+            # get peaks
+            peaks = spectra_row["peaks"]
             mz = np.array([p[0] for p in peaks])
             intensity = np.array([p[1] for p in peaks])
 
-            spectrum_dict['m/z array']= mz
-            spectrum_dict['intensity array']= intensity 
-
+            spectrum_dict["m/z array"] = mz
+            spectrum_dict["intensity array"] = intensity
 
             all_spectrums_parsed.append(spectrum_dict)
 

@@ -25,8 +25,20 @@ class Parser:
                 or (at == "PREPROCESSING_NUM_NODES")
                 or (at == "PREPROCESSING_CURRENT_NODE")
                 or (at == "PREPROCESSING_NUM_WORKERS")
+                or (at == "TRAINING_NUM_WORKERS")
             )
-            is_string_attribute = (at == "extra_info")or (at=='dataset_path') or (at=='PREPROCESSING_DIR') or (at=="BEST_MODEL_NAME") or (at=="PRETRAINED_MODEL_NAME")
+
+            is_string_attribute = at in [
+                "ACCELERATOR",
+                "extra_info",
+                "dataset_path",
+                "PREPROCESSING_DIR",
+                "BEST_MODEL_NAME",
+                "PRETRAINED_MODEL_NAME",
+                "CHECKPOINT_DIR",
+                "PREPROCESSING_DIR_TRAIN",
+                "PREPROCESSING_DIR_TEST",
+            ]
             if is_integer_attribute:
                 self.parser.add_argument(f"--{at}", type=int, help=at, default=None)
             elif is_string_attribute:

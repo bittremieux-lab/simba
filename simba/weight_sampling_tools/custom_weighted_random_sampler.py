@@ -1,7 +1,7 @@
-
 import torch
 from torch.utils.data import WeightedRandomSampler
-import numpy as np 
+import numpy as np
+
 
 class CustomWeightedRandomSampler(WeightedRandomSampler):
     """WeightedRandomSampler except allows for more than 2^24 samples to be sampled"""

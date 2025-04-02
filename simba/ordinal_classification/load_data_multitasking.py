@@ -7,6 +7,7 @@ import copy
 from simba.ordinal_classification.ordinal_classification import OrdinalClassification
 from simba.tanimoto import Tanimoto
 
+
 class LoadDataMultitasking:
     """
     using unique identifiers
@@ -73,27 +74,33 @@ class LoadDataMultitasking:
 
         print("Normalizing intensities")
         # Normalize the intensity array
-        #intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
-
+        # intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
 
         ## Adjust similarity towards a N classification problem
-        similarity = OrdinalClassification.from_float_to_class(molecule_pairs_input.indexes_tani[:, 2].reshape(-1, 1), N_classes=N_classes)
-        #similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
+        similarity = OrdinalClassification.from_float_to_class(
+            molecule_pairs_input.indexes_tani[:, 2].reshape(-1, 1), N_classes=N_classes
+        )
+        # similarity= molecule_pairs_input.indexes_tani[:, 2].reshape(-1,1)
 
-        similarity2= molecule_pairs.tanimotos.reshape(-1,1)
+        similarity2 = molecule_pairs.tanimotos.reshape(-1, 1)
 
         if use_fingerprints:
-            print('Computing molecular fingerprints')
-            fingerprint_0= np.array([np.array(Tanimoto.compute_fingerprint(s.params['smiles'])) for s in molecule_pairs_input.spectrums])
+            print("Computing molecular fingerprints")
+            fingerprint_0 = np.array(
+                [
+                    np.array(Tanimoto.compute_fingerprint(s.params["smiles"]))
+                    for s in molecule_pairs_input.spectrums
+                ]
+            )
         else:
-            fingerprint_0= np.array([0 for m in molecule_pairs_input.spectrums])
+            fingerprint_0 = np.array([0 for m in molecule_pairs_input.spectrums])
 
         print("Creating dictionaries")
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.indexes_tani[:, 0].reshape(-1, 1),
             "index_unique_1": molecule_pairs_input.indexes_tani[:, 1].reshape(-1, 1),
             "similarity": similarity,
-            "similarity2" : similarity2,
+            "similarity2": similarity2,
             # "fingerprint_0": fingerprint_0,
         }
 

@@ -16,28 +16,33 @@ from simba.config import Config
 class Plotting:
 
     @staticmethod
-    def plot_n_pca(list_pca_data, list_labels,colors, alpha=0.5):
+    def plot_n_pca(list_pca_data, list_labels, colors, alpha=0.5):
         # Generate a list of colors from a colormap
-        num_labels=len(list_labels)
-        #cmap = plt.cm.get_cmap('nipy_spectral', num_labels)  # You can choose other colormaps as well
-        #cmap = plt.cm.get_cmap( 'viridis',num_labels )  # You can choose other colormaps as well
-        cmap = plt.colormaps['tab20']
+        num_labels = len(list_labels)
+        # cmap = plt.cm.get_cmap('nipy_spectral', num_labels)  # You can choose other colormaps as well
+        # cmap = plt.cm.get_cmap( 'viridis',num_labels )  # You can choose other colormaps as well
+        cmap = plt.colormaps["tab20"]
 
         for pca_data, label, color in zip(list_pca_data, list_labels, colors):
-            Plotting.plot_pca(pca_data, label,alpha=alpha,color= color)
+            Plotting.plot_pca(pca_data, label, alpha=alpha, color=color)
         plt.legend()
         plt.grid()
-        
-    @staticmethod
-    def plot_pca(pca_data, label='',alpha=0.5, color=None):
-        # Plot PCA projection
-        #plt.figure(figsize=(8, 6))
-        plt.scatter(pca_data[:, 0], pca_data[:, 1], label=label, alpha=alpha, color=color,)
-        plt.title('PCA Projection')
-        plt.xlabel('Principal Component 1')
-        plt.ylabel('Principal Component 2')
-        plt.grid()
 
+    @staticmethod
+    def plot_pca(pca_data, label="", alpha=0.5, color=None):
+        # Plot PCA projection
+        # plt.figure(figsize=(8, 6))
+        plt.scatter(
+            pca_data[:, 0],
+            pca_data[:, 1],
+            label=label,
+            alpha=alpha,
+            color=color,
+        )
+        plt.title("PCA Projection")
+        plt.xlabel("Principal Component 1")
+        plt.ylabel("Principal Component 2")
+        plt.grid()
 
     @staticmethod
     def plot_spectrum(spectrum):
@@ -49,7 +54,7 @@ class Plotting:
         # plt.savefig("quickstart.png", bbox_inches="tight", dpi=300, transparent=True)
 
     @staticmethod
-    def plot_mirror_plot(spectrum_top,spectrum_bottom):
+    def plot_mirror_plot(spectrum_top, spectrum_bottom):
         fig, ax = plt.subplots(figsize=(12, 6))
         sup.mirror(spectrum_top, spectrum_bottom, ax=ax)
 
@@ -76,7 +81,7 @@ class Plotting:
         roc_file_path="./roc_curve.png",
         label="",
         color="r",
-        linestyle='-',
+        linestyle="-",
     ):
         """
         Compute and plot the Receiver Operating Characteristic (ROC) curve.
@@ -84,7 +89,7 @@ class Plotting:
         """
         fpr, tpr, thresholds = roc_curve(y_true, y_scores)
 
-        print(f'fpr with tpr=0.70 {fpr[tpr>=0.70]}')
+        print(f"fpr with tpr=0.70 {fpr[tpr>=0.70]}")
         roc_auc = auc(fpr, tpr)
 
         # plt.figure(figsize=(8, 8))
@@ -98,14 +103,14 @@ class Plotting:
             alpha=1,
         )
 
-        #print(f"tpr: {tpr}")
-        #print(f"fpr: {fpr}")
+        # print(f"tpr: {tpr}")
+        # print(f"fpr: {fpr}")
         # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.0])
         plt.xlabel("False Positive Rate (FPR)")
         plt.ylabel("True Positive Rate (TPR)")
-        
+
         plt.title(title)
         plt.legend(loc="lower right")
         plt.grid()
@@ -120,17 +125,21 @@ class Plotting:
         colors,
         linestyles,
         title="ROC Curve",
-        figsize=(4,4)
-        
+        figsize=(4, 4),
     ):
         plt.rcParams["font.size"] = 14
         plt.figure(figsize=figsize)
         plt.plot([0, 1], [0, 1], linestyle="--", color="k")
-        for y_true_list, y_scores_list, l, c , linestyle in zip(
+        for y_true_list, y_scores_list, l, c, linestyle in zip(
             y_true_list, y_scores_list, labels, colors, linestyles
         ):
             Plotting.plot_roc_curve(
-                y_true_list, y_scores_list, title=title, label=l, color=c, linestyle=linestyle
+                y_true_list,
+                y_scores_list,
+                title=title,
+                label=l,
+                color=c,
+                linestyle=linestyle,
             )
 
     def plot_roc_curve_comparison(
@@ -142,13 +151,13 @@ class Plotting:
         colors=["r", "b"],
         fontsize=18,
     ):  # Add fontsize parameter
-        
+
         plt.figure(figsize=(10, 10))  # Increase the figure size
 
         for y_scores, label, color in zip(y_scores_list, labels, colors):
             fpr, tpr, thresholds = roc_curve(y_true, y_scores)
 
-            print(fpr[tpr>=0.70])
+            print(fpr[tpr >= 0.70])
             roc_auc = auc(fpr, tpr)
 
             plt.plot(
@@ -853,5 +862,5 @@ class Plotting:
         plt.scatter(weights_range, weights_value)
         plt.grid()
         plt.xlabel(xlabel)
-        plt.ylabel('weight value')
+        plt.ylabel("weight value")
         plt.savefig(filepath)

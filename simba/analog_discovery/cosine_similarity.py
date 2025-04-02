@@ -20,7 +20,7 @@ class CosineSimilarity:
         norm_vec2 = np.linalg.norm(batch_vec2, axis=1)
         similarity = dot_product / (norm_vec1 * norm_vec2)
         return similarity
-    
+
     @staticmethod
     def batch_cosine_similarity_combinations(batch_vec1, batch_vec2):
         """

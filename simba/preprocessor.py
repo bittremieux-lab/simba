@@ -5,7 +5,8 @@ from simba.config import Config
 from simba.spectrum_ext import SpectrumExt
 from simba.preprocessing_utils import PreprocessingUtils
 import copy
-import random 
+import random
+
 
 class Preprocessor:
 
@@ -23,20 +24,19 @@ class Preprocessor:
         fragment_tol_mode="ppm",
         min_intensity=0.01,
         max_num_peaks=100,
-        #max_num_peaks=40,
+        # max_num_peaks=40,
         scale_intensity=None,
-        #scale_intensity="root",
+        # scale_intensity="root",
         training=False,
-        
-        random_seed=42
+        random_seed=42,
     ):
         random.seed(random_seed)
         for i, spectrum in tqdm(enumerate(spectrums)):
             # try:
             if training:
-                min_intensity=0.00
+                min_intensity = 0.00
             else:
-                min_intensity=0.01
+                min_intensity = 0.01
 
             spectrums[i] = self.preprocess_spectrum(
                 spectrum,
@@ -60,21 +60,20 @@ class Preprocessor:
         fragment_tol_mode="ppm",
         min_intensity=0.01,
         max_num_peaks=100,
-        #max_num_peaks=40,
+        # max_num_peaks=40,
         scale_intensity=None,
-        #scale_intensity="root",
+        # scale_intensity="root",
         training=False,
-        
-        random_seed=42
+        random_seed=42,
     ):
         random.seed(random_seed)
         for i, spectrum in tqdm(enumerate(spectrums)):
             # try:
             if training:
-                min_intensity=0.00
+                min_intensity = 0.00
             else:
-                min_intensity=0.01
-            
+                min_intensity = 0.01
+
             spectrums[i] = self.preprocess_spectrum(
                 spectrum,
                 fragment_tol_mass=fragment_tol_mass,
@@ -84,16 +83,16 @@ class Preprocessor:
                 scale_intensity=scale_intensity,
             )
 
-            length_mz=len(spectrums[i].mz)
-            if length_mz>20:  
+            length_mz = len(spectrums[i].mz)
+            if length_mz > 20:
                 spectrums[i] = self.preprocess_spectrum(
-                spectrum,
-                fragment_tol_mass=fragment_tol_mass,
-                fragment_tol_mode=fragment_tol_mode,
-                min_intensity=min_intensity,
-                max_num_peaks=max(20, int(length_mz/(2.5))),
-                scale_intensity=scale_intensity,
-            )
+                    spectrum,
+                    fragment_tol_mass=fragment_tol_mass,
+                    fragment_tol_mode=fragment_tol_mode,
+                    min_intensity=min_intensity,
+                    max_num_peaks=max(20, int(length_mz / (2.5))),
+                    scale_intensity=scale_intensity,
+                )
         # except:
         #    print('Error preprocessing spectrum')
 
@@ -101,7 +100,6 @@ class Preprocessor:
         # all_spectrums= self.process_all_spectrum_vectors(spectrums)
         return spectrums
 
-  
     def preprocess_spectrum(
         self,
         spectrum,
@@ -109,18 +107,18 @@ class Preprocessor:
         fragment_tol_mode="ppm",
         min_intensity=0.01,
         max_num_peaks=100,
-        #max_num_peaks=40,
+        # max_num_peaks=40,
         scale_intensity=None,
-        #scale_intensity="root",
+        # scale_intensity="root",
     ):
 
         # Process the spectrum.
         return (
-            spectrum
-            .remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
-            #.set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
-            .filter_intensity(min_intensity=min_intensity, max_num_peaks=max_num_peaks)
-            .scale_intensity(scale_intensity)
+            spectrum.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode)
+            # .set_mz_range(min_mz=self.min_mz, max_mz=self.max_mz)
+            .filter_intensity(
+                min_intensity=min_intensity, max_num_peaks=max_num_peaks
+            ).scale_intensity(scale_intensity)
         )
 
     def return_spectrum_vector(self, spectrum):
@@ -167,12 +165,13 @@ class Preprocessor:
             all_binned_spectrums[i] = spectrum.spectrum_vector
         return all_binned_spectrums
 
-
-    def return_valid_spectra_n_peaks(self,spectra_original, min_peaks):
-        '''
+    def return_valid_spectra_n_peaks(self, spectra_original, min_peaks):
+        """
         return valid spectra based on the minimum number of peaks
-        '''
-        input_spectra= [copy.deepcopy(s) for s in spectra_original]
-        preprocessed_spectra= self.preprocess_all_spectrums(input_spectra)
-        valid_indexes = [i for i,s in enumerate(preprocessed_spectra) if len(s.mz)>min_peaks]
-        return [spectra_original[i]for i in valid_indexes]
+        """
+        input_spectra = [copy.deepcopy(s) for s in spectra_original]
+        preprocessed_spectra = self.preprocess_all_spectrums(input_spectra)
+        valid_indexes = [
+            i for i, s in enumerate(preprocessed_spectra) if len(s.mz) > min_peaks
+        ]
+        return [spectra_original[i] for i in valid_indexes]

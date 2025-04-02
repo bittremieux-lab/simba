@@ -1,5 +1,6 @@
 import os
-os.chdir('/scratch/antwerpen/209/vsc20939/metabolomics')
+
+os.chdir("/scratch/antwerpen/209/vsc20939/metabolomics")
 
 import dill
 import torch
@@ -33,9 +34,9 @@ bins_uniformise = config.bins_uniformise_TRAINING
 enable_progress_bar = config.enable_progress_bar
 fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
-output_np_indexes_train = '../data/indexes_tani_train_resampled.npy'
-output_np_indexes_val = '../data/indexes_tani_val.npy'
-output_np_indexes_test = '../data/indexes_tani_test.npy'
+output_np_indexes_train = "../data/indexes_tani_train_resampled.npy"
+output_np_indexes_val = "../data/indexes_tani_val.npy"
+output_np_indexes_test = "../data/indexes_tani_test.npy"
 
 if not os.path.exists(config.CHECKPOINT_DIR):
     os.makedirs(config.CHECKPOINT_DIR)
@@ -79,7 +80,9 @@ molecule_pairs_train.indexes_tani = np.load(output_np_indexes_train)
 molecule_pairs_val.indexes_tani = np.load(output_np_indexes_val)
 molecule_pairs_test.indexes_tani = np.load(output_np_indexes_test)
 
-print(f'New size of the molecule pairs train indexes {molecule_pairs_train.indexes_tani.shape}')
+print(
+    f"New size of the molecule pairs train indexes {molecule_pairs_train.indexes_tani.shape}"
+)
 ##### ADHOC SOLUTION TO AVOID MEMORY OVERHEAD ###########################
 # only get 50% of the molecules below 0.5 similarity
 # num_half = int(len(molecule_pairs_train)/2)
@@ -288,7 +291,6 @@ if config.load_pretrained:
     print("Loaded pretrained model")
 else:
     print("Not loaded pretrained model")
-
 
 
 trainer = pl.Trainer(

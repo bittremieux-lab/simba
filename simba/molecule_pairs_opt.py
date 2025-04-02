@@ -9,7 +9,12 @@ class MoleculePairsOpt(MolecularPairsSet):
     """
 
     def __init__(
-        self, spectrums_original, spectrums_unique, df_smiles, indexes_tani_unique, tanimotos=None
+        self,
+        spectrums_original,
+        spectrums_unique,
+        df_smiles,
+        indexes_tani_unique,
+        tanimotos=None,
     ):
         """
         it receives a set of spectrums, and a tuple with indexes i,j, tani tuple
@@ -18,12 +23,12 @@ class MoleculePairsOpt(MolecularPairsSet):
         self.spectrums = spectrums_unique
         self.df_smiles = df_smiles  # table containing the indexes to map unique to repetitions of the same smiles
         # treat the first 2 columns as int and the 3 column as float
-        #self.indexes_tani = MolecularPairsSet.adjust_data_format(
+        # self.indexes_tani = MolecularPairsSet.adjust_data_format(
         #    np.array(indexes_tani_unique)
-        #)
+        # )
         self.indexes_tani = indexes_tani_unique
-        self.tanimotos=tanimotos
-        
+        self.tanimotos = tanimotos
+
     def __add__(self, other):
         # only to be used when the spectrums are the same
 
@@ -34,9 +39,9 @@ class MoleculePairsOpt(MolecularPairsSet):
                 (self.indexes_tani, other.indexes_tani), axis=0
             )
             if (self.tanimotos is not None) and (other.tanimotos is not None):
-                tanimotos= np.concatenate( (self.tanimotos, other.tanimotos), axis=0)
+                tanimotos = np.concatenate((self.tanimotos, other.tanimotos), axis=0)
             else:
-                tanimotos=None
+                tanimotos = None
             return MoleculePairsOpt(
                 spectrums_unique=self.spectrums,
                 spectrums_original=self.spectrums_original,
@@ -73,8 +78,8 @@ class MoleculePairsOpt(MolecularPairsSet):
             index_in_spectrum_1=self.get_original_index_from_unique_index(j, 1),
             spectrum_object_0=self.get_original_spectrum_from_unique_index(i, 0),
             spectrum_object_1=self.get_original_spectrum_from_unique_index(j, 1),
-            params_0=self.get_original_spectrum_from_unique_index(i,0).params,
-            params_1=self.get_original_spectrum_from_unique_index(j,1).params,
+            params_0=self.get_original_spectrum_from_unique_index(i, 0).params,
+            params_1=self.get_original_spectrum_from_unique_index(j, 1).params,
         )
 
         return molecule_pair
@@ -111,4 +116,3 @@ class MoleculePairsOpt(MolecularPairsSet):
         spectrums_index_0 = self.get_spectrums_from_indexes(0)
         spectrums_index_1 = self.get_spectrums_from_indexes(1)
         return spectrums_index_0, spectrums_index_1
-

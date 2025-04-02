@@ -12,7 +12,7 @@ class CustomDatasetMultitasking(Dataset):
         your_dict,
         training=False,
         prob_aug=1.0,
-        #prob_aug=0.2,
+        # prob_aug=0.2,
         mz=None,
         intensity=None,
         precursor_mass=None,
@@ -32,10 +32,10 @@ class CustomDatasetMultitasking(Dataset):
         self.precursor_mass = precursor_mass
         self.precursor_charge = precursor_charge
         self.df_smiles = df_smiles  ### df with rows smiles, indexes
-        self.use_fingerprints=use_fingerprints
+        self.use_fingerprints = use_fingerprints
         if self.use_fingerprints:
-            self.fingerprint_0=fingerprint_0 
-        self.max_num_peaks=max_num_peaks
+            self.fingerprint_0 = fingerprint_0
+        self.max_num_peaks = max_num_peaks
 
     def __len__(self):
         return len(self.data[self.keys[0]])
@@ -65,7 +65,7 @@ class CustomDatasetMultitasking(Dataset):
         dictionary["precursor_charge_1"] = np.zeros((len_data, 1), dtype=np.int32)
 
         if self.use_fingerprints:
-            print('Defining fingerprints ...')
+            print("Defining fingerprints ...")
             dictionary["fingerprint_0"] = np.zeros((len_data, 2048), dtype=np.int32)
 
         for idx in tqdm((range(0, len_data))):
@@ -74,7 +74,7 @@ class CustomDatasetMultitasking(Dataset):
             indexes_unique_0 = sample_unique["index_unique_0"]
             indexes_unique_1 = sample_unique["index_unique_1"]
 
-            print(f'value of indexes_unique_0 {indexes_unique_0} ')
+            print(f"value of indexes_unique_0 {indexes_unique_0} ")
             indexes_original_0 = self.df_smiles.loc[int(indexes_unique_0), "indexes"][0]
 
             indexes_original_1 = self.df_smiles.loc[int(indexes_unique_1), "indexes"][0]
@@ -108,7 +108,9 @@ class CustomDatasetMultitasking(Dataset):
             )
 
             if self.use_fingerprints:
-                dictionary["fingerprint_0"][idx] =self.fingeprint_0[indexes_original_0].astype(np.float32)
+                dictionary["fingerprint_0"][idx] = self.fingeprint_0[
+                    indexes_original_0
+                ].astype(np.float32)
 
         return dictionary
 
@@ -120,7 +122,6 @@ class CustomDatasetMultitasking(Dataset):
 
         # indexes_unique_0 = list(sample_unique['index_unique_0'])
         # indexes_unique_1 = list(sample_unique['index_unique_1'])
-
 
         indexes_unique_0 = sample_unique["index_unique_0"]
         indexes_unique_1 = sample_unique["index_unique_1"]
@@ -171,9 +172,9 @@ class CustomDatasetMultitasking(Dataset):
         sample["similarity2"] = sample_unique["similarity2"].astype(np.float32)
 
         if self.use_fingerprints:
-            sample["fingerprint_0"] = self.fingerprint_0[int(indexes_unique_0[0])].astype(
-            np.float32
-        )
+            sample["fingerprint_0"] = self.fingerprint_0[
+                int(indexes_unique_0[0])
+            ].astype(np.float32)
 
         # print(sample["mz_0"]).shape
         # print(sample["intensity_0"].shape)

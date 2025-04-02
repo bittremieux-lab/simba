@@ -33,9 +33,11 @@ from simba.weight_sampling_tools.custom_weighted_random_sampler import (
     CustomWeightedRandomSampler,
 )
 from simba.plotting import Plotting
-from simba.ordinal_classification.embedder_multitask_pretrain import (
-    EmbedderMultitaskPretrain,
-)
+import sys
+import simba
+
+# In case a MAC is being used:
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 # parameters
 config = Config()
@@ -50,7 +52,7 @@ if not os.path.exists(config.CHECKPOINT_DIR):
 
 
 # parameters
-dataset_path = config.PREPROCESSING_DIR + config.PREPROCESSING_PICKLE_FILE
+dataset_path = config.PREPROCESSING_DIR_TRAIN + config.PREPROCESSING_PICKLE_FILE
 epochs = config.epochs
 bins_uniformise_inference = config.bins_uniformise_INFERENCE
 enable_progress_bar = config.enable_progress_bar
@@ -60,6 +62,7 @@ model_code = config.MODEL_CODE
 
 print("loading file")
 # Load the dataset from the pickle file
+sys.modules["src"] = simba
 with open(dataset_path, "rb") as file:
     dataset = dill.load(file)
 
@@ -69,23 +72,47 @@ molecule_pairs_test = dataset["molecule_pairs_test"]
 uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 
+# Initialize a set to track unique first two columns
+def remove_duplicates_array(array):
+    seen = set()
+    filtered_rows = []
+
+    for row in array:
+        # Create a tuple of the first two columns to check uniqueness
+        key = tuple(sorted(row[:2]))  # Sort to account for unordered pairs
+        if key not in seen:
+            seen.add(key)
+            filtered_rows.append(row)
+
+    # Convert the filtered rows back to a NumPy array
+    result = np.array(filtered_rows)
+    return result
+
+
 # In[283]:
 print("Loading pairs data ...")
 indexes_tani_multitasking_train = LoadMCES.merge_numpy_arrays(
-    config.PREPROCESSING_DIR,
-    prefix="indexes_tani_incremental_train",
+    config.PREPROCESSING_DIR_TRAIN,
+    prefix="ed_mces_indexes_tani_incremental_train",
     use_edit_distance=config.USE_EDIT_DISTANCE,
     use_multitask=config.USE_MULTITASK,
-    add_high_similarity_pairs=True,
-)
-indexes_tani_multitasking_val = LoadMCES.merge_numpy_arrays(
-    config.PREPROCESSING_DIR,
-    prefix="indexes_tani_incremental_val",
-    use_edit_distance=config.USE_EDIT_DISTANCE,
-    use_multitask=config.USE_MULTITASK,
-    add_high_similarity_pairs=True,
+    add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS,
+    remove_percentage=0.0,
 )
 
+indexes_tani_multitasking_train = remove_duplicates_array(
+    indexes_tani_multitasking_train
+)
+
+indexes_tani_multitasking_val = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR_TRAIN,
+    prefix="ed_mces_indexes_tani_incremental_val",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+    use_multitask=config.USE_MULTITASK,
+    add_high_similarity_pairs=config.ADD_HIGH_SIMILARITY_PAIRS,
+)
+
+indexes_tani_multitasking_val = remove_duplicates_array(indexes_tani_multitasking_val)
 
 # assign features
 molecule_pairs_train.indexes_tani = indexes_tani_multitasking_train[
@@ -207,9 +234,7 @@ weights_val = WeightSampling.compute_sample_weights_categories(
     molecule_pairs_val, weights
 )
 
-## give the same weight for every spectrum
-weights_tr = np.ones(weights_tr.shape)
-weights_val = np.ones(weights_val.shape)
+
 # In[292]:
 
 
@@ -243,10 +268,12 @@ plt.yscale("log")
 
 
 dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(
-    molecule_pairs_train, training=True
+    molecule_pairs_train, max_num_peaks=int(config.TRANSFORMER_CONTEXT), training=True
 )
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
-dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(molecule_pairs_val)
+dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    molecule_pairs_val, max_num_peaks=int(config.TRANSFORMER_CONTEXT)
+)
 
 
 # In[297]:
@@ -292,7 +319,10 @@ dataset["molecule_pairs_train"].indexes_tani
 
 print("Creating train data loader")
 dataloader_train = DataLoader(
-    dataset_train, batch_size=config.BATCH_SIZE, sampler=train_sampler, num_workers=10
+    dataset_train,
+    batch_size=config.BATCH_SIZE,
+    sampler=train_sampler,
+    num_workers=config.TRAINING_NUM_WORKERS,
 )
 
 
@@ -344,7 +374,7 @@ print(f"SIMILARITY 1: Ranges of similarity for dataset train: {bins}")
 
 # count the number of samples between
 counting2, bins2 = TrainUtils.count_ranges(
-    np.array(similarities_sampled2), number_bins=5, bin_sim_1=True, max_value=1
+    np.array(similarities_sampled2), number_bins=5, bin_sim_1=False, max_value=1
 )
 
 print(f"SIMILARITY 2: Distribution of similarity for dataset train: {counting2}")
@@ -382,7 +412,7 @@ dataloader_val = DataLoader(
     batch_size=config.BATCH_SIZE,
     sampler=val_sampler,
     worker_init_fn=worker_init_fn,
-    num_workers=10,
+    num_workers=config.TRAINING_NUM_WORKERS,
 )
 
 
@@ -415,9 +445,12 @@ print("define model")
 # In[309]:
 
 ## use or not use weights for the second similarity loss
-weights_sim2 = None
+if config.USE_LOSS_WEIGHTS_SECOND_SIMILARITY:
+    weights_sim2 = np.array(weights2)
+else:
+    weights_sim2 = None
 
-model = EmbedderMultitaskPretrain(
+model = EmbedderMultitask(
     d_model=int(config.D_MODEL),
     n_layers=int(config.N_LAYERS),
     n_classes=config.EDIT_DISTANCE_N_CLASSES,
@@ -426,24 +459,50 @@ model = EmbedderMultitaskPretrain(
     use_cosine_distance=config.use_cosine_distance,
     use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
     weights_sim2=weights_sim2,
+    use_mces20_log_loss=config.USE_MCES20_LOG_LOSS,
+    use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+    use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+    tau_gumbel_softmax=config.TAU_GUMBEL_SOFTMAX,
+    gumbel_reg_weight=config.GUMBEL_REG_WEIGHT,
 )
 
 # Create a model:
 if config.load_pretrained:
-    model_pretrained = Embedder.load_from_checkpoint(
-        config.pretrained_path,
-        d_model=int(config.D_MODEL),
-        n_layers=int(config.N_LAYERS),
-        weights=None,
-        lr=config.LR,
-        use_cosine_distance=config.use_cosine_distance,
-        use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
-        weights_sim2=weights_sim2,
-        strict=False,
-    )
 
-    model.spectrum_encoder = model_pretrained.spectrum_encoder
-    print("Loaded pretrained model")
+    # Try to load the full model, otherwise load the encoders only
+    try:
+        model = EmbedderMultitask.load_from_checkpoint(
+            config.pretrained_path,
+            d_model=int(config.D_MODEL),
+            n_layers=int(config.N_LAYERS),
+            n_classes=config.EDIT_DISTANCE_N_CLASSES,
+            weights=None,
+            lr=config.LR,
+            use_cosine_distance=config.use_cosine_distance,
+            use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
+            weights_sim2=weights_sim2,
+            use_mces20_log_loss=config.USE_MCES20_LOG_LOSS,
+            use_edit_distance_regresion=config.USE_EDIT_DISTANCE_REGRESSION,
+            use_precursor_mz_for_model=config.USE_PRECURSOR_MZ_FOR_MODEL,
+            tau_gumbel_softmax=config.TAU_GUMBEL_SOFTMAX,
+            gumbel_reg_weight=config.GUMBEL_REG_WEIGHT,
+        )
+        print("loaded full model!!")
+    except:
+        model_pretrained = Embedder.load_from_checkpoint(
+            config.pretrained_path,
+            d_model=int(config.D_MODEL),
+            n_layers=int(config.N_LAYERS),
+            weights=None,
+            lr=config.LR,
+            use_cosine_distance=config.use_cosine_distance,
+            use_gumbel=config.EDIT_DISTANCE_USE_GUMBEL,
+            weights_sim2=weights_sim2,
+            strict=False,
+        )
+
+        model.spectrum_encoder = model_pretrained.spectrum_encoder
+        print("Loaded pretrained encoder model")
 else:
     print("Not loaded pretrained model")
 # In[ ]:
@@ -455,6 +514,7 @@ trainer = pl.Trainer(
     max_epochs=10,
     callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],
     enable_progress_bar=enable_progress_bar,
+    accelerator=config.ACCELERATOR,
     # val_check_interval= config.validate_after_ratio,
 )
 # trainer = pl.Trainer(max_steps=100,  callbacks=[checkpoint_callback, losscallback], enable_progress_bar=enable_progress_bar)
