@@ -39,19 +39,20 @@ class CustomizedCrossEntropyLoss(nn.Module):
         #                  [1, 2, 3, 4,  20,  4,],
         #                  [0, 1, 2, 3,  4,  20,]]
 
-        penalty_matrix = [[20, 4, 0, 0, 0,  0,],
+        #penalty_matrix = [[20, 4, 0, 0, 0,  0,],
                           
-                          [4, 20, 4, 0, 0,  0,] ,
+        #                  [4, 20, 4, 0, 0,  0,] ,
 
-                          [0, 4, 20, 4, 0,  0,],
+        #                  [0, 4, 20, 4, 0,  0,],
 
-                          [0, 0,  4, 20, 4,  0,],
+        #                  [0, 0,  4, 20, 4,  0,],
 
-                          [0, 0, 0, 4,  20,  4,],
+        #                  [0, 0, 0, 4,  20,  4,],
 
-                          [0, 0, 0, 0,  4,  20,]]
+        #                  [0, 0, 0, 0,  4,  20,]]
 
-
+        n_classes = 6
+        penalty_matrix = np.array([[abs(i - j) for j in range(n_classes)] for i in range(n_classes)])
         #penalty_matrix = [[100, 4, 3, 2, 1,  0,],
                           
         #                  [5, 30, 10, 0, 0,  0,] ,
