@@ -12,6 +12,8 @@ class Plotting:
         remove_threshold_values=True,
         threshold_mces=20,
     ):
+
+        flat_pred_test2= np.round(flat_pred_test2)
         if remove_threshold_values:
             x = similarities_test2[similarities_test2 != threshold_mces]
             y = flat_pred_test2[similarities_test2 != threshold_mces]

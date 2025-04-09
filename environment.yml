@@ -1,9 +1,5 @@
 name: simba
 channels:
-  - pytorch
-  - anaconda
-  - nvidia
-  - conda-forge
   - defaults
 dependencies:
   - anyio=4.2.0=py311hca03da5_0
@@ -138,12 +134,11 @@ dependencies:
   - websocket-client=0.58.0=py311hca03da5_4
   - wheel=0.41.2=py311hca03da5_0
   - widgetsnbextension=4.0.5=py311hca03da5_0
-  #- xz=5.4.5=h80987f9_0
+  - xz=5.4.5=h80987f9_0
   - yaml=0.2.5=h1a28f6b_0
   - zeromq=4.3.5=h313beb8_0
   - zlib=1.2.13=h5a0b063_0
   - zstd=1.5.5=hd90d995_0
-  - xz=5.4.5=h80987f9_0
   - pip:
       - absl-py==2.1.0
       - aiohttp==3.9.3
@@ -199,7 +194,7 @@ dependencies:
       - ms2deepscore==2.5.0
       - multidict==6.0.5
       - multiprocess==0.70.16
-      - myopic-mces==1.0.0
+      - myopic-mces==1.0.1
       - mypy-extensions==1.0.0
       - networkx==3.2.1
       - numba==0.57.1
@@ -261,5 +256,4 @@ dependencies:
       - xgboost==2.0.3
       - xxhash==3.4.1
       - yarl==1.9.4
-      
 prefix: /Users/sebas/miniconda3/envs/simba
