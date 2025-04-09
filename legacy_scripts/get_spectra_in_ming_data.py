@@ -1,6 +1,4 @@
-
-
-import os 
+import os
 
 # In[268]:
 
@@ -11,34 +9,36 @@ from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 
 from pytorch_lightning.callbacks import ProgressBar
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.config import Config
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import os
-from src.parser import Parser
+from simba.parser import Parser
 import random
-from src.weight_sampling import WeightSampling
-from src.losscallback import LossCallback
-from src.molecular_pairs_set import MolecularPairsSet
-from src.sanity_checks import SanityChecks
-from src.transformers.postprocessing import Postprocessing
+from simba.weight_sampling import WeightSampling
+from simba.losscallback import LossCallback
+from simba.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
+from simba.transformers.postprocessing import Postprocessing
 from scipy.stats import spearmanr
 import seaborn as sns
-from src.ordinal_classification.load_data_multitasking import LoadDataMultitasking
-from src.ordinal_classification.embedder_multitask import EmbedderMultitask
+from simba.ordinal_classification.load_data_multitasking import LoadDataMultitasking
+from simba.ordinal_classification.embedder_multitask import EmbedderMultitask
 from sklearn.metrics import confusion_matrix
-from src.load_mces.load_mces import LoadMCES
-from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
+from simba.load_mces.load_mces import LoadMCES
+from simba.weight_sampling_tools.custom_weighted_random_sampler import (
+    CustomWeightedRandomSampler,
+)
 
 # parameters
 config = Config()
 parser = Parser()
 config = parser.update_config(config)
-config.USE_GUMBEL=False
-config.N_CLASSES=6
-config.bins_uniformise_INFERENCE=config.N_CLASSES-1
+config.USE_GUMBEL = False
+config.N_CLASSES = 6
+config.bins_uniformise_INFERENCE = config.N_CLASSES - 1
 config.use_uniform_data_INFERENCE = True
 
 # In[281]:
@@ -55,7 +55,6 @@ fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
 
 
-
 print("loading file")
 # Load the dataset from the pickle file
 with open(dataset_path, "rb") as file:
@@ -68,20 +67,39 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 
 # In[283]:
-print('Loading pairs data ...')
-indexes_tani_multitasking_train= LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
-indexes_tani_multitasking_val  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
-indexes_tani_multitasking_test  =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_test', use_edit_distance=config.USE_EDIT_DISTANCE, use_multitask=config.USE_MULTITASK)
+print("Loading pairs data ...")
+indexes_tani_multitasking_train = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR,
+    prefix="indexes_tani_incremental_train",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+    use_multitask=config.USE_MULTITASK,
+)
+indexes_tani_multitasking_val = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR,
+    prefix="indexes_tani_incremental_val",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+    use_multitask=config.USE_MULTITASK,
+)
+indexes_tani_multitasking_test = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR,
+    prefix="indexes_tani_incremental_test",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+    use_multitask=config.USE_MULTITASK,
+)
 
-print('Which spectra is in ming data?')
-indexes_tani= np.concatenate([indexes_tani_multitasking_train, indexes_tani_multitasking_val, indexes_tani_multitasking_test])
+print("Which spectra is in ming data?")
+indexes_tani = np.concatenate(
+    [
+        indexes_tani_multitasking_train,
+        indexes_tani_multitasking_val,
+        indexes_tani_multitasking_test,
+    ]
+)
 
 
-total_indexes = np.concatenate([indexes_tani[:,0],indexes_tani[:,1]])
+total_indexes = np.concatenate([indexes_tani[:, 0], indexes_tani[:, 1]])
 
 
-unique_indexes= np.unique(total_indexes)
-print(f'Total indexes {unique_indexes}')
-print(f'length: {unique_indexes.shape}')
-
-
+unique_indexes = np.unique(total_indexes)
+print(f"Total indexes {unique_indexes}")
+print(f"length: {unique_indexes.shape}")

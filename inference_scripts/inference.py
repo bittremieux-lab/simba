@@ -1,22 +1,22 @@
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data_unique import LoadDataUnique
+from simba.transformers.load_data_unique import LoadDataUnique
 import lightning.pytorch as pl
-from src.transformers.embedder import Embedder
-from src.transformers.postprocessing import Postprocessing
+from simba.transformers.embedder import Embedder
+from simba.transformers.postprocessing import Postprocessing
 from sklearn.metrics import r2_score
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.deterministic_similarity import DetSimilarity
-from src.plotting import Plotting
-from src.config import Config
+from simba.deterministic_similarity import DetSimilarity
+from simba.plotting import Plotting
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader
 import argparse
 import sys
 import os
-from src.parser import Parser
+from simba.parser import Parser
 from scipy.stats import spearmanr
 
 # parse arguments
@@ -126,14 +126,14 @@ x = np.array([c[0] for c in combinations_test])
 y = np.array([c[1] for c in combinations_test])
 y = np.clip(y, 0, 1)
 
-corr_model, p_value_model= spearmanr(x, y)
+corr_model, p_value_model = spearmanr(x, y)
 
 # plot scatter
 plt.xlabel("tanimoto similarity")
 plt.ylabel("prediction similarity")
 plt.scatter(x, y, label="test", alpha=0.01)
 # plt.scatter(similarities_test,cosine_similarity_test, label='test')
-plt.title(f'Spearman Correlation: {corr_model}')
+plt.title(f"Spearman Correlation: {corr_model}")
 plt.legend()
 plt.grid()
 plt.savefig(fig_path)
@@ -151,7 +151,5 @@ plt.savefig(config.CHECKPOINT_DIR + f"hexbin_plot_{config.MODEL_CODE}.png")
 
 
 # comparison with
-DetSimilarity.compute_all_scores(
-    m_test, model_file=best_model_path, config=config
-)
-#Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)
+DetSimilarity.compute_all_scores(m_test, model_file=best_model_path, config=config)
+# Plotting.plot_similarity_graphs(similarities, similarities_tanimoto, config=config)

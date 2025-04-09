@@ -1,17 +1,17 @@
 import dill
 import torch
 from torch.utils.data import DataLoader
-from src.transformers.load_data import LoadData
+from simba.transformers.load_data import LoadData
 import lightning.pytorch as pl
-from src.transformers.embedder_fingerprint import EmbedderFingerprint
+from simba.transformers.embedder_fingerprint import EmbedderFingerprint
 from pytorch_lightning.callbacks import ProgressBar
-from src.transformers.postprocessing import Postprocessing
+from simba.transformers.postprocessing import Postprocessing
 from sklearn.metrics import r2_score
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.deterministic_similarity import DetSimilarity
-from src.plotting import Plotting
-from src.config import Config
+from simba.deterministic_similarity import DetSimilarity
+from simba.plotting import Plotting
+from simba.config import Config
 
 # parameters
 dataset_path = "/scratch/antwerpen/209/vsc20939/data/dataset_processed_augmented_20231207_fingerprints.pkl"

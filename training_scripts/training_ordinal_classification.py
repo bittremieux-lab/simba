@@ -1,6 +1,4 @@
-
-
-import os 
+import os
 
 # In[268]:
 
@@ -11,34 +9,36 @@ from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 
 from pytorch_lightning.callbacks import ProgressBar
-from src.train_utils import TrainUtils
+from simba.train_utils import TrainUtils
 import matplotlib.pyplot as plt
-from src.config import Config
+from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import os
-from src.parser import Parser
+from simba.parser import Parser
 import random
-from src.weight_sampling import WeightSampling
-from src.losscallback import LossCallback
-from src.molecular_pairs_set import MolecularPairsSet
-from src.sanity_checks import SanityChecks
-from src.transformers.postprocessing import Postprocessing
+from simba.weight_sampling import WeightSampling
+from simba.losscallback import LossCallback
+from simba.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
+from simba.transformers.postprocessing import Postprocessing
 from scipy.stats import spearmanr
 import seaborn as sns
-from src.ordinal_classification.load_data_ordinal import LoadDataOrdinal
-from src.ordinal_classification.embedder_ordinal import EmbedderOrdinal
+from simba.ordinal_classification.load_data_ordinal import LoadDataOrdinal
+from simba.ordinal_classification.embedder_ordinal import EmbedderOrdinal
 from sklearn.metrics import confusion_matrix
-from src.load_mces.load_mces import LoadMCES
-from src.weight_sampling_tools.custom_weighted_random_sampler import CustomWeightedRandomSampler
+from simba.load_mces.load_mces import LoadMCES
+from simba.weight_sampling_tools.custom_weighted_random_sampler import (
+    CustomWeightedRandomSampler,
+)
 
 # parameters
 config = Config()
 parser = Parser()
 config = parser.update_config(config)
-config.USE_GUMBEL=False
-config.N_CLASSES=6
-config.bins_uniformise_INFERENCE=config.N_CLASSES-1
+config.USE_GUMBEL = False
+config.N_CLASSES = 6
+config.bins_uniformise_INFERENCE = config.N_CLASSES - 1
 config.use_uniform_data_INFERENCE = True
 
 # In[281]:
@@ -55,7 +55,6 @@ fig_path = config.CHECKPOINT_DIR + f"scatter_plot_{config.MODEL_CODE}.png"
 model_code = config.MODEL_CODE
 
 
-
 print("loading file")
 # Load the dataset from the pickle file
 with open(dataset_path, "rb") as file:
@@ -68,25 +67,36 @@ uniformed_molecule_pairs_test = dataset["uniformed_molecule_pairs_test"]
 
 
 # In[283]:
-print('Loading pairs data ...')
-molecule_pairs_train.indexes_tani = LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_train', use_edit_distance=config.USE_EDIT_DISTANCE)
-molecule_pairs_val.indexes_tani =   LoadMCES.merge_numpy_arrays(config.PREPROCESSING_DIR, prefix='indexes_tani_incremental_val', use_edit_distance=config.USE_EDIT_DISTANCE)
+print("Loading pairs data ...")
+molecule_pairs_train.indexes_tani = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR,
+    prefix="indexes_tani_incremental_train",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+)
+molecule_pairs_val.indexes_tani = LoadMCES.merge_numpy_arrays(
+    config.PREPROCESSING_DIR,
+    prefix="indexes_tani_incremental_val",
+    use_edit_distance=config.USE_EDIT_DISTANCE,
+)
 
 ## Add the identitiy pairs
-USE_IDENTITY_PAIRS=True
+USE_IDENTITY_PAIRS = True
 if USE_IDENTITY_PAIRS:
     # remove to avoid duplicates
-    molecule_pairs_train.indexes_tani = molecule_pairs_train.indexes_tani[\
-                                    molecule_pairs_train.indexes_tani[:,0]!= molecule_pairs_train.indexes_tani[:,1]]
+    molecule_pairs_train.indexes_tani = molecule_pairs_train.indexes_tani[
+        molecule_pairs_train.indexes_tani[:, 0]
+        != molecule_pairs_train.indexes_tani[:, 1]
+    ]
 
-    molecule_pairs_val.indexes_tani = molecule_pairs_val.indexes_tani[\
-                                    molecule_pairs_val.indexes_tani[:,0]!= molecule_pairs_val.indexes_tani[:,1]]
-    # create identity 
-    #identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),3))
-    #identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
-    #identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
-    #identity_pairs[:,2]=1.0
-    #molecule_pairs_train.indexes_tani  = np.concatenate((molecule_pairs_train.indexes_tani, identity_pairs ))
+    molecule_pairs_val.indexes_tani = molecule_pairs_val.indexes_tani[
+        molecule_pairs_val.indexes_tani[:, 0] != molecule_pairs_val.indexes_tani[:, 1]
+    ]
+    # create identity
+    # identity_pairs = np.zeros((len(molecule_pairs_train.spectrums),3))
+    # identity_pairs[:,0]=np.arange(0,identity_pairs.shape[0])
+    # identity_pairs[:,1]=np.arange(0,identity_pairs.shape[0])
+    # identity_pairs[:,2]=1.0
+    # molecule_pairs_train.indexes_tani  = np.concatenate((molecule_pairs_train.indexes_tani, identity_pairs ))
 
 
 print(f"Number of pairs for train: {len(molecule_pairs_train)}")
@@ -107,7 +117,6 @@ sanity_check_bms = SanityChecks.sanity_checks_bms(
 )
 
 
-
 print(f"Sanity check ids. Passed? {sanity_check_ids}")
 print(f"Sanity check bms. Passed? {sanity_check_bms}")
 
@@ -115,14 +124,14 @@ print(f"Sanity check bms. Passed? {sanity_check_bms}")
 ## CALCULATION OF WEIGHTS
 train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
     molecule_pairs_train,
-    config.N_CLASSES-1,
-        bin_sim_1=True, 
+    config.N_CLASSES - 1,
+    bin_sim_1=True,
 )
 
 # check distribution of similarities
 print("SAMPLES PER RANGE:")
-for lista in (train_binned_list):
-    print(f"samples: {len(lista)}") 
+for lista in train_binned_list:
+    print(f"samples: {len(lista)}")
 
 train_binned_list[1].indexes_tani.shape
 
@@ -130,7 +139,12 @@ train_binned_list[1].indexes_tani.shape
 # In[286]:
 
 
-plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2]>0][:,2], bins=20)
+plt.hist(
+    molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:, 2] > 0][
+        :, 2
+    ],
+    bins=20,
+)
 
 
 # In[287]:
@@ -143,7 +157,7 @@ plt.hist(molecule_pairs_train.indexes_tani[molecule_pairs_train.indexes_tani[:,2
 
 
 weights, range_weights = WeightSampling.compute_weights_categories(train_binned_list)
-#weights, range_weights = WeightSampling.compute_weights(train_binned_list)
+# weights, range_weights = WeightSampling.compute_weights(train_binned_list)
 
 
 # In[289]:
@@ -161,40 +175,49 @@ range_weights
 # In[291]:
 
 
-weights_tr = WeightSampling.compute_sample_weights_categories(molecule_pairs_train, weights)
-weights_val = WeightSampling.compute_sample_weights_categories(molecule_pairs_val, weights)
+weights_tr = WeightSampling.compute_sample_weights_categories(
+    molecule_pairs_train, weights
+)
+weights_val = WeightSampling.compute_sample_weights_categories(
+    molecule_pairs_val, weights
+)
 
 
 # In[292]:
 
 
-weights_val[(molecule_pairs_val.indexes_tani[:,2]<0.1)]
+weights_val[(molecule_pairs_val.indexes_tani[:, 2] < 0.1)]
 
 
 # In[293]:
 
 
-weights_val[(molecule_pairs_val.indexes_tani[:,2]<0.21) & (molecule_pairs_val.indexes_tani[:,2]>0.19)]
+weights_val[
+    (molecule_pairs_val.indexes_tani[:, 2] < 0.21)
+    & (molecule_pairs_val.indexes_tani[:, 2] > 0.19)
+]
 
 
 # In[294]:
 
 
-plt.hist(molecule_pairs_val.indexes_tani[:,2], bins=100)
-plt.yscale('log')
+plt.hist(molecule_pairs_val.indexes_tani[:, 2], bins=100)
+plt.yscale("log")
 
 
 # In[295]:
 
 
 plt.hist(weights_val)
-plt.yscale('log')
+plt.yscale("log")
 
 
 # In[296]:
 
 
-dataset_train = LoadDataOrdinal.from_molecule_pairs_to_dataset(molecule_pairs_train, training=True)
+dataset_train = LoadDataOrdinal.from_molecule_pairs_to_dataset(
+    molecule_pairs_train, training=True
+)
 # dataset_test = LoadData.from_molecule_pairs_to_dataset(m_test)
 dataset_val = LoadDataOrdinal.from_molecule_pairs_to_dataset(molecule_pairs_val)
 
@@ -209,15 +232,12 @@ dataset_train
 
 
 # delete variables that are not useful for memory savings
-#del molecule_pairs_val
-#del molecule_pairs_test
-#del uniformed_molecule_pairs_test
+# del molecule_pairs_val
+# del molecule_pairs_test
+# del uniformed_molecule_pairs_test
 
 
 # In[299]:
-
-
-
 
 
 train_sampler = CustomWeightedRandomSampler(
@@ -237,7 +257,7 @@ weights_tr
 # In[301]:
 
 
-dataset['molecule_pairs_train'].indexes_tani
+dataset["molecule_pairs_train"].indexes_tani
 
 
 # In[302]:
@@ -256,18 +276,18 @@ dataloader_train
 
 
 ## check that the distribution of the loader is balanced
-similarities_sampled=[]
-for i,batch in enumerate(dataloader_train):
-    sim = batch['similarity']
+similarities_sampled = []
+for i, batch in enumerate(dataloader_train):
+    sim = batch["similarity"]
     sim = np.array(sim).reshape(-1)
     similarities_sampled = similarities_sampled + list(sim)
-    if i==100:
+    if i == 100:
         break
 
-counting, bins, patches =plt.hist(similarities_sampled, bins=6)
+counting, bins, patches = plt.hist(similarities_sampled, bins=6)
 
-print(f'Distribution of similarity for dataset train: {counting}')
-print(f'Ranges of similarity for dataset train: {bins}')
+print(f"Distribution of similarity for dataset train: {counting}")
+print(f"Ranges of similarity for dataset train: {bins}")
 # In[304]:
 
 
@@ -289,7 +309,6 @@ dataloader_val = DataLoader(
     worker_init_fn=worker_init_fn,
     num_workers=10,
 )
-
 
 
 # Define the ModelCheckpoint callback
@@ -334,7 +353,7 @@ model = EmbedderOrdinal(
     weights=None,
     lr=config.LR,
     use_cosine_distance=config.use_cosine_distance,
-    use_gumbel = config.USE_GUMBEL,
+    use_gumbel=config.USE_GUMBEL,
 )
 
 
@@ -342,7 +361,7 @@ model = EmbedderOrdinal(
 
 
 trainer = pl.Trainer(
-    #max_steps=100000,
+    # max_steps=100000,
     val_check_interval=10000,
     max_epochs=10,
     callbacks=[checkpoint_callback, checkpoint_n_steps_callback, losscallback],

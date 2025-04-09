@@ -1,6 +1,6 @@
 import dill
-from src.sanity_checks import SanityChecks
-from src.molecular_pairs_set import MolecularPairsSet
+from simba.sanity_checks import SanityChecks
+from simba.molecular_pairs_set import MolecularPairsSet
 
 
 def write_data(
