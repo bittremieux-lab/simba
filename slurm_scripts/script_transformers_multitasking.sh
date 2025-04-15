@@ -17,8 +17,11 @@ nvidia-smi
 
 
 ## Running 5 layers
-srun python training_multitasking_generated_data.py --enable_progress_bar=0   --ADD_HIGH_SIMILARITY_PAIRS=0 --extra_info=_generated_data_logloss  --load_pretrained=1 --LR=0.00001
- 
+#srun python training_multitasking_generated_data.py --enable_progress_bar=0    --extra_info=_smooth_penalty_matrix  --load_pretrained=1 --pretrained_path=/scratch/antwerpen/209/vsc20939/data/model_checkpoints/pretrained_model_256n/best_model.ckpt --LR=0.00001
+
+
+python training_multitasking_generated_data.py --enable_progress_bar=0    --extra_info=_smooth_penalty_matrix  --load_pretrained=1 --pretrained_path=/scratch/antwerpen/209/vsc20939/data/model_checkpoints/pretrained_model_256n/best_model.ckpt --LR=0.00001  --CHECKPOINT_DIR=/scratch/antwerpen/209/vsc20939/data/model_checkpoints/model_256n_smooth_penalty_matrix/ 
+
 ### Aditional commands
 #srun python training_multitasking.py --enable_progress_bar=0   --extra_info=_multitasking_2024115 --USE_MCES20_LOG_LOSS=1 --use_cosine_distance=1 --USE_LOSS_WEIGHTS_SECOND_SIMILARITY=0 --USE_EDIT_DISTANCE_REGRESSION=0 
 #--enable_progress_bar=0 --PREPROCESSING_DIR=/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/ --extra_info=_multitasking_mces20raw_newdata

@@ -88,15 +88,22 @@ class Config:
         self.PREPROCESSING_DIR_VAL_TEST = f"/scratch/antwerpen/209/vsc20939/data/preprocessing_mces_threshold20_newdata_20240925/"
         self.PREPROCESSING_PICKLE_FILE = f"edit_distance_neurips_nist_exhaustive.pkl"
         self.CHECKPOINT_DIR = None
+        self.pretrained_path=None
+        self.BEST_MODEL_NAME = f"best_model.ckpt"
+        self.PRETRAINED_MODEL_NAME = f"pretrained_model.ckpt"
         self.derived_variables()
+        
 
     def derived_variables(self):
         self.MODEL_CODE = f"{self.D_MODEL}_units_{self.N_LAYERS}_layers_{self.epochs}_epochs_{self.LR}_lr_{self.BATCH_SIZE}_bs{self.extra_info}"
 
+        
         if self.CHECKPOINT_DIR is None:
             self.CHECKPOINT_DIR = f"/scratch/antwerpen/209/vsc20939/data/model_checkpoints/model_checkpoints_{self.MODEL_CODE}/"
 
-        self.BEST_MODEL_NAME = f"best_model.ckpt"
-        self.PRETRAINED_MODEL_NAME = f"pretrained_model.ckpt"
-        self.pretrained_path = self.CHECKPOINT_DIR + self.PRETRAINED_MODEL_NAME
+        
+        
+
+        if self.pretrained_path is None:
+            self.pretrained_path = self.CHECKPOINT_DIR + self.PRETRAINED_MODEL_NAME
         self.best_model_path = self.CHECKPOINT_DIR + self.BEST_MODEL_NAME

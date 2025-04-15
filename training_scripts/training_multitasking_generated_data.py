@@ -42,6 +42,8 @@ parser = Parser()
 config = parser.update_config(config)
 config.bins_uniformise_INFERENCE = config.EDIT_DISTANCE_N_CLASSES - 1
 config.use_uniform_data_INFERENCE = True
+TRAINING_SUBSET= None  #or None if not debugging
+
 
 # In[281]:
 if not os.path.exists(config.CHECKPOINT_DIR):
@@ -109,6 +111,12 @@ indexes_tani_multitasking_train_uc = LoadMCES.merge_numpy_arrays(
 indexes_tani_multitasking_train = np.concatenate(
     (indexes_tani_multitasking_train, indexes_tani_multitasking_train_uc), axis=0
 )
+
+
+if TRAINING_SUBSET is not None:
+    random_indexes= np.random.randint(0, indexes_tani_multitasking_train.shape[0], TRAINING_SUBSET)
+    indexes_tani_multitasking_train =indexes_tani_multitasking_train[random_indexes]
+
 indexes_tani_multitasking_train = remove_duplicates_array(
     indexes_tani_multitasking_train
 )

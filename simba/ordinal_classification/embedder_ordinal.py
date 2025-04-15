@@ -30,56 +30,10 @@ from simba.ordinal_classification.ordinal_classification import OrdinalClassific
 class CustomizedCrossEntropyLoss(nn.Module):
     def __init__(self, n_classes=6):
         super(CustomizedCrossEntropyLoss, self).__init__()
-        penalty_matrix = [
-            [
-                20,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            [
-                0,
-                20,
-                4,
-                3,
-                2,
-                1,
-            ],
-            [
-                0,
-                4,
-                20,
-                4,
-                3,
-                2,
-            ],
-            [
-                0,
-                3,
-                4,
-                20,
-                4,
-                3,
-            ],
-            [
-                0,
-                2,
-                3,
-                4,
-                20,
-                4,
-            ],
-            [
-                0,
-                1,
-                2,
-                3,
-                4,
-                20,
-            ],
-        ]
+
+        n_classes = 6
+        penalty_matrix = np.array([[abs(i - j) for j in range(n_classes)] for i in range(n_classes)])
+        
 
         # normalize:
         # penalty_matrix = penalty_matrix/(np.sum(penalty_matrix, axis=0))
@@ -93,7 +47,7 @@ class CustomizedCrossEntropyLoss(nn.Module):
 
         self.n_classes = n_classes
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device) / 20
+        self.penalty_matrix = torch.tensor(penalty_matrix).to(self.device) / np.max(penalty_matrix)
 
     def forward(self, logits, target):
         batch_size = logits.size(0)

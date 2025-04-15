@@ -38,6 +38,7 @@ class Parser:
                 "CHECKPOINT_DIR",
                 "PREPROCESSING_DIR_TRAIN",
                 "PREPROCESSING_DIR_TEST",
+                "pretrained_path",
             ]
             if is_integer_attribute:
                 self.parser.add_argument(f"--{at}", type=int, help=at, default=None)

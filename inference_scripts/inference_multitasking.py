@@ -31,7 +31,9 @@ from simba.ordinal_classification.embedder_multitask import EmbedderMultitask
 from sklearn.metrics import confusion_matrix, accuracy_score
 from simba.load_mces.load_mces import LoadMCES   
 from simba.performance_metrics.performance_metrics import PerformanceMetrics
-
+import sys
+import simba
+sys.modules["src"] = simba
 
 def remove_duplicates_array(array):
     seen = set()
@@ -307,10 +309,10 @@ print(f'Min value of similarities 1: {min(similarities_test1)}')
 #bad_indexes =  PerformanceMetrics.get_bad_predictions(similarities_test1_ed, flat_pred_test1, similarities_test2_ed, flat_pred_test2_ed,)
 
 #PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
-                                            flat_pred_test1,flat_pred_test2_ed,  good_indexes, config, prefix='good')
+#                                            flat_pred_test1,flat_pred_test2_ed,  good_indexes, config, prefix='good')
 
 #PerformanceMetrics.plot_molecules(uniformed_molecule_pairs_test_ed, similarities_test1_ed, similarities_test2_ed,
- #                                           flat_pred_test1,flat_pred_test2_ed,  bad_indexes, config, prefix='bad')
+#                                           flat_pred_test1,flat_pred_test2_ed,  bad_indexes, config, prefix='bad')
 # In[ ]:
 
 
