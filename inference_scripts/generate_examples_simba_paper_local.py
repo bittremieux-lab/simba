@@ -9,6 +9,8 @@ sys.path.insert(0, project_root)
 os.chdir(project_root)
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
+import simba 
+sys.modules['src']=simba
 import dill
 import torch
 from torch.utils.data import DataLoader
@@ -20,7 +22,7 @@ import matplotlib.pyplot as plt
 from simba.config import Config
 import numpy as np
 from torch.utils.data import DataLoader, WeightedRandomSampler
-
+import pickle
 from simba.parser import Parser
 import random
 from simba.weight_sampling import WeightSampling
@@ -464,7 +466,14 @@ def filter_good_examples(
     # equal_edit_distance= (sim_np_1==pred_np_1)
     equal_mces = np.abs(sim_np_2 - pred_np_2) < 0.2
 
-    low_mces = (sim_np_2 > 0.8) & (sim_np_2 != 1)
+    bad_mces = np.abs(sim_np_2 - pred_np_2) > 0.5 
+
+
+
+    low_mces =  (sim_np_2 > 0.8) & (sim_np_2 != 1)
+    high_mces = (sim_np_2 < 0.2) 
+
+
     # low_mces =  (sim_np_2>0.8)
     low_mod_cos = pred_mod_cos < 0.2
     high_mod_cos = pred_mod_cos > 0.7
@@ -490,6 +499,9 @@ def filter_good_examples(
     )
     condition_5 = (equal_edit_distance & equal_mces & low_mces) & low_ms2
 
+    condition_6 = bad_mces & low_mces
+    condition_7 = bad_mces & high_mces
+     
     good_indexes_dict = {}
 
     good_indexes_dict["bad_ms2"] = np.argwhere(condition_5)
@@ -499,6 +511,14 @@ def filter_good_examples(
 
     good_indexes_dict["bad_ms2_high_tani_low_mod"] = np.argwhere(
         condition_5 & condition_3
+    )
+
+    good_indexes_dict["bad_simba_low_mces"] = np.argwhere(
+        condition_6
+    )
+
+    good_indexes_dict["bad_simba_high_mces"] = np.argwhere(
+        condition_7
     )
 
     # return np.argwhere(condition_1|condition_2 |condition_3 )
@@ -519,6 +539,18 @@ good_indexes_dict = filter_good_examples(
     pred_ms2,
     tanimotos,
 )
+
+with open('/Users/sebas/projects/data/good_indexes_dict.pkl','wb') as f:
+    data={}
+    data['good_indexes_dict']=good_indexes_dict
+    data['similarities_ed']=similarities_test1
+    data["similarities_mces"] = similarities_test2
+    data["predictions_ed"] = flat_pred_test1
+    data["predictions_mces"] = flat_pred_test2
+    data["pred_mod_cos"] = pred_mod_cos
+    data["pred_ms2"] = pred_ms2
+    data['uniformed_molecule_pairs_test_ed']=uniformed_molecule_pairs_test_ed
+    dill.dump(data, f)
 
 
 for k in good_indexes_dict:
