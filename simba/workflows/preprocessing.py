@@ -4,12 +4,18 @@ This module contains the main preprocessing logic for MS/MS spectral data.
 It computes structural similarity metrics and prepares data for training.
 """
 
+import contextlib
+import multiprocessing
 import os
 import pickle
 from pathlib import Path
 
 import numpy as np
 from omegaconf import DictConfig
+
+
+with contextlib.suppress(RuntimeError):
+    multiprocessing.set_start_method("spawn", force=True)
 
 from simba.core.chemistry.mces.mces_computation import MCES
 from simba.core.data.preprocessing_simba import PreprocessingSimba
@@ -154,6 +160,47 @@ def preprocess(cfg: DictConfig) -> None:
         f"Val: {len(all_spectra_val)}, Test: {len(all_spectra_test)}"
     )
 
+    logger.info("Pre-computing SMILES mappings for early save...")
+    molecule_pairs_metadata = {}
+    for type_data, spectra in [
+        ("_train", all_spectra_train),
+        ("_val", all_spectra_val),
+        ("_test", all_spectra_test),
+    ]:
+        spectra_unique, df_smiles = TrainUtils.get_unique_spectra(spectra)
+        molecule_pairs_metadata[type_data] = {
+            "df_smiles": df_smiles,
+            "spectra_unique": spectra_unique,
+            "original_spectra": spectra,
+        }
+
+    output_file = workspace / cfg.paths.preprocessing_pickle_file
+    logger.info(f"Saving mapping file early to {output_file}...")
+
+    use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
+    if use_lightweight_format:
+        logger.info("Saving in lightweight format (early save)")
+        dataset = {
+            "df_smiles_train": molecule_pairs_metadata["_train"]["df_smiles"],
+            "df_smiles_val": molecule_pairs_metadata["_val"]["df_smiles"],
+            "df_smiles_test": molecule_pairs_metadata["_test"]["df_smiles"],
+            "spectrum_indexes_train": [
+                s.mgf_index
+                for s in molecule_pairs_metadata["_train"]["original_spectra"]
+            ],
+            "spectrum_indexes_val": [
+                s.mgf_index for s in molecule_pairs_metadata["_val"]["original_spectra"]
+            ],
+            "spectrum_indexes_test": [
+                s.mgf_index
+                for s in molecule_pairs_metadata["_test"]["original_spectra"]
+            ],
+            "mgf_path": str(cfg.paths.spectra_path),
+            "format_version": "lightweight",
+        }
+        with open(output_file, "wb") as file:
+            pickle.dump(dataset, file)
+
     # Compute distances for each partition
     molecule_pairs = {}
     for type_data, spectra in [
@@ -240,24 +287,19 @@ def preprocess(cfg: DictConfig) -> None:
                     f"  Combined {partition} partition identifier '{identifier}': {all_distance_data.shape[0]} pairs"
                 )
 
-    # Save mapping file
+    # Save/update mapping file (final save for full format, update for lightweight)
     output_file = workspace / cfg.paths.preprocessing_pickle_file
-    logger.info(f"Saving mapping to {output_file}...")
-
     use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
-    if use_lightweight_format:
-        logger.info("Saving in lightweight format")
-    else:
-        logger.info("Saving in full format")
-
-    write_data(
-        file_path=str(output_file),
-        molecule_pairs_train=molecule_pairs["_train"],
-        molecule_pairs_val=molecule_pairs["_val"],
-        molecule_pairs_test=molecule_pairs["_test"],
-        uniformed_molecule_pairs_test=None,
-        use_lightweight_format=use_lightweight_format,
-        mgf_path=cfg.paths.spectra_path,
-    )
+    if not use_lightweight_format:
+        logger.info(f"Saving mapping to {output_file}...")
+        write_data(
+            file_path=str(output_file),
+            molecule_pairs_train=molecule_pairs["_train"],
+            molecule_pairs_val=molecule_pairs["_val"],
+            molecule_pairs_test=molecule_pairs["_test"],
+            uniformed_molecule_pairs_test=None,
+            use_lightweight_format=use_lightweight_format,
+            mgf_path=cfg.paths.spectra_path,
+        )
 
     logger.info("✅ Preprocessing completed successfully!")

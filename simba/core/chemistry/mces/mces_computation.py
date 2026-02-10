@@ -415,8 +415,16 @@ class MCES:
 
                 # Check if we should compute both metrics in single pass
                 if compute_both_metrics:
-                    results = [
-                        pool.apply_async(
+                    worker_files = []
+                    results = []
+                    for sub_index, sampled_index in enumerate(chunk):
+                        worker_output = (
+                            f"{preprocessing_dir}"
+                            + f"worker_node{current_node}_chunk{chunk_idx}_sub{sub_index}.npy"
+                        )
+                        worker_files.append(worker_output)
+
+                        result = pool.apply_async(
                             edit_distance.compute_ed_and_mces_both,
                             args=(
                                 all_smiles,
@@ -429,19 +437,35 @@ class MCES:
                                 threshold_mces,
                                 fps,
                                 mols,
+                                worker_output,
+                                sub_index,
+                                f"Node {current_node} Chunk {chunk_idx} Worker {sub_index}",
                             ),
                         )
-                        for sub_index, sampled_index in enumerate(chunk)
-                    ]
+                        results.append(result)
 
                     # Close the pool and wait for all processes to finish
                     pool.close()
                     pool.join()
 
-                    # Get results from async objects
-                    computed_pair_distances_both = np.concatenate(
-                        [result.get() for result in results], axis=0
+                    # Collect metadata from workers.
+                    logger.info(f"Collecting results from {len(results)} workers...")
+                    metadata_list = []
+                    for result in results:
+                        metadata = result.get()
+                        metadata_list.append(metadata)
+
+                    # Load worker result files from disk and concatenate
+                    logger.info(
+                        f"Loading and concatenating {len(worker_files)} worker files..."
                     )
+                    worker_arrays = [np.load(f) for f in worker_files]
+                    computed_pair_distances_both = np.concatenate(worker_arrays, axis=0)
+
+                    # Clean up temporary worker files
+                    for f in worker_files:
+                        if os.path.exists(f):
+                            os.remove(f)
 
                     # Save combined ED+MCES file (4 columns: idx1, idx2, ED, MCES)
                     if num_nodes > 1 and current_node is not None:
@@ -510,8 +534,16 @@ class MCES:
                     sub_arrays = np.array_split(chunk, num_workers)
                     logger.info(f"Size of each sub-array {sub_arrays[0].shape[0]}")
 
-                    results = [
-                        pool.apply_async(
+                    worker_files = []
+                    results = []
+                    for sub_index, _sampled_array in enumerate(sub_arrays):
+                        worker_output = (
+                            f"{preprocessing_dir}"
+                            + f"worker_node{current_node}_chunk{chunk_idx}_sub{sub_index}.npy"
+                        )
+                        worker_files.append(worker_output)
+
+                        result = pool.apply_async(
                             edit_distance.compute_ed_or_mces,  # TODO: fix this
                             args=(
                                 all_smiles,
@@ -525,13 +557,23 @@ class MCES:
                                 fps,
                                 mols,
                                 use_edit_distance,
+                                worker_output,
+                                sub_index,
+                                f"Node {current_node} Chunk {chunk_idx} Worker {sub_index}",  # progress_desc
                             ),
                         )
-                        for sub_index, sampled_array in enumerate(sub_arrays)
-                    ]
+                        results.append(result)
                 else:
-                    results = [
-                        pool.apply_async(
+                    worker_files = []
+                    results = []
+                    for sub_index, sampled_index in enumerate(chunk):
+                        worker_output = (
+                            f"{preprocessing_dir}"
+                            + f"worker_node{current_node}_chunk{chunk_idx}_sub{sub_index}.npy"
+                        )
+                        worker_files.append(worker_output)
+
+                        result = pool.apply_async(
                             edit_distance.compute_ed_or_mces,
                             args=(
                                 all_smiles,
@@ -545,10 +587,12 @@ class MCES:
                                 fps,
                                 mols,
                                 use_edit_distance,
+                                worker_output,
+                                sub_index,
+                                f"Node {current_node} Chunk {chunk_idx} Worker {sub_index}",  # progress_desc
                             ),
                         )
-                        for sub_index, sampled_index in enumerate(chunk)
-                    ]
+                        results.append(result)
 
                 # Close the pool and wait for all processes to finish
                 pool.close()
@@ -556,9 +600,24 @@ class MCES:
 
                 # Get results from async objects (for non-compute_both_metrics cases)
                 if not compute_both_metrics:
-                    computed_pair_distances = np.concatenate(
-                        [result.get() for result in results], axis=0
+                    logger.info(f"Collecting results from {len(results)} workers...")
+                    metadata_list = []
+                    for result in results:
+                        metadata = result.get()
+                        metadata_list.append(metadata)
+
+                    # Load worker result files from disk and concatenate
+                    logger.info(
+                        f"Loading and concatenating {len(worker_files)} worker files..."
                     )
+                    worker_arrays = [np.load(f) for f in worker_files]
+                    computed_pair_distances = np.concatenate(worker_arrays, axis=0)
+
+                    # Clean up temporary worker files
+                    for f in worker_files:
+                        if os.path.exists(f):
+                            os.remove(f)
+
                     # create parent directory if it does not exist
                     os.makedirs(os.path.dirname(filename), exist_ok=True)
                     # save distances per chunk

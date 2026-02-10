@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 import numpy as np
@@ -7,6 +8,7 @@ from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFMCS
 from rdkit.Chem.rdchem import Mol
 from rdkit.DataStructs.cDataStructs import ExplicitBitVect
+from tqdm import tqdm
 
 import simba.core.chemistry.edit_distance.mol_utils as mu
 from simba.utils.logger_setup import logger
@@ -37,7 +39,10 @@ def compute_ed_and_mces_both(
     threshold_mces: int,
     fps: list[ExplicitBitVect],
     mols: list[Mol],
-) -> np.ndarray:
+    output_file: str = None,
+    progress_position: int = 0,
+    progress_desc: str = "Computing",
+) -> np.ndarray | dict:
     """
     Compute BOTH edit distance AND MCES for a batch of molecule pairs in a single pass.
 
@@ -69,11 +74,18 @@ def compute_ed_and_mces_both(
         List of fingerprints corresponding to the smiles.
     mols : List[Mol]
         List of RDKit Mol objects corresponding to the smiles.
+    output_file : str, optional
+        If provided, saves results directly to this file instead of returning data.
+    progress_position : int, optional
+        Position for the tqdm progress bar (default: 0). Used for stacking multiple progress bars.
+    progress_desc : str, optional
+        Description text for the tqdm progress bar (default: "Computing").
 
     Returns
     -------
-    np.ndarray
-        A 2D numpy array with each row containing (index1, index2, ed_distance, mces_distance).
+    np.ndarray | dict
+        If output_file is None: A 2D numpy array with each row containing (index1, index2, ed_distance, mces_distance).
+        If output_file is provided: A dict with metadata {"rows": int, "output_file": str}.
     """
     # 2D array to store the indexes and BOTH distances
     pair_distances = np.zeros((int(batch_size), 4))  # 4 columns: idx1, idx2, ED, MCES
@@ -94,7 +106,14 @@ def compute_ed_and_mces_both(
     ed_distances = []
     mces_distances = []
 
-    for index in range(pair_distances.shape[0]):
+    for index in tqdm(
+        range(pair_distances.shape[0]),
+        desc=progress_desc,
+        position=progress_position,
+        leave=False,
+        unit="pair",
+        bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+    ):
         pair = pair_distances[index]
 
         s0 = smiles[int(pair[0])]
@@ -116,6 +135,11 @@ def compute_ed_and_mces_both(
     pair_distances[:, 2] = ed_distances
     pair_distances[:, 3] = mces_distances
 
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        np.save(output_file, pair_distances)
+        return {"rows": pair_distances.shape[0], "output_file": output_file}
+
     return pair_distances
 
 
@@ -131,7 +155,10 @@ def compute_ed_or_mces(
     fps: list[ExplicitBitVect],
     mols: list[Mol],
     use_edit_distance: bool,
-) -> np.ndarray:
+    output_file: str = None,
+    progress_position: int = 0,
+    progress_desc: str = "Computing",
+) -> np.ndarray | dict:
     """
     Compute the edit distance or MCES for a batch of molecule pairs.
 
@@ -159,11 +186,18 @@ def compute_ed_or_mces(
         List of RDKit Mol objects corresponding to the smiles.
     use_edit_distance : bool
         Whether to compute edit distance (True) or MCES (False).
+    output_file : str, optional
+        If provided, saves results to this file and returns metadata dict instead of array.
+    progress_position : int, optional
+        Position for the tqdm progress bar (default: 0). Used for stacking multiple progress bars.
+    progress_desc : str, optional
+        Description text for the tqdm progress bar (default: "Computing").
 
     Returns
     -------
-    np.ndarray
-        A 2D numpy array with each row containing (index1, index2, distance).
+    np.ndarray or dict
+        If output_file is None: A 2D numpy array with each row containing (index1, index2, distance).
+        If output_file is provided: A dict with keys 'rows' (int) and 'output_file' (str).
     """
     # 2D array to store the indexes and distances
     pair_distances = np.zeros(
@@ -184,7 +218,14 @@ def compute_ed_or_mces(
 
     distances = []
 
-    for index in range(0, pair_distances.shape[0]):
+    for index in tqdm(
+        range(0, pair_distances.shape[0]),
+        desc=progress_desc,
+        position=progress_position,
+        leave=False,
+        unit="pair",
+        bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+    ):
         pair = pair_distances[index]
 
         s0 = smiles[int(pair[0])]
@@ -202,6 +243,12 @@ def compute_ed_or_mces(
         distances.append(dist)
 
     pair_distances[:, 2] = distances
+
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        np.save(output_file, pair_distances)
+        return {"rows": pair_distances.shape[0], "output_file": output_file}
+
     return pair_distances
 
 
@@ -277,7 +324,7 @@ def simba_solve_pair_edit_distance(s0, s1, fp0, fp1, mol0, mol1):
     if tanimoto < 0.2:
         distance = VERY_HIGH_DISTANCE
     else:
-        if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
+        if (mol0.GetNumAtoms() > 40) or (mol1.GetNumAtoms() > 40):
             return np.nan, tanimoto
         else:
             distance = simba_get_edit_distance(mol0, mol1)
@@ -300,7 +347,7 @@ def simba_solve_pair_mces(
     if tanimoto < 0.2:
         distance = VERY_HIGH_DISTANCE
     else:
-        if (mol0.GetNumAtoms() > 60) or (mol1.GetNumAtoms() > 60):
+        if (mol0.GetNumAtoms() > 40) or (mol1.GetNumAtoms() > 40):
             return np.nan, tanimoto
         else:
             result = MCES2(
