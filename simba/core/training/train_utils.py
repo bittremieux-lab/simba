@@ -12,9 +12,7 @@ from simba.core.data.molecular_pairs import MolecularPairsSet
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.preprocessing import PreprocessingUtils
 from simba.core.data.spectrum import SpectrumExt
-from simba.core.models.ordinal.ordinal_classification import (
-    OrdinalClassification,
-)
+from simba.utils.binning import round_to_ordinal
 from simba.utils.logger_setup import logger
 
 
@@ -647,9 +645,7 @@ class TrainUtils:
         # convert it to an integer
         bin_size = 1 / number_bins
         # target = np.ceil(molecule_pairs.pair_distances[:, 2]/bin_size)
-        target = OrdinalClassification.custom_random(
-            molecule_pairs.pair_distances[:, 2] / bin_size
-        )
+        target = round_to_ordinal(molecule_pairs.pair_distances[:, 2] / bin_size)
         for p in range(int(number_bins_effective)):
             # low = p * (1 / number_bins)
 

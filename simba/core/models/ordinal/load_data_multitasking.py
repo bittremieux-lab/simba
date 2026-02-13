@@ -16,9 +16,7 @@ from simba.core.data.encoding import (
 )
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.preprocessor import Preprocessor
-from simba.core.models.ordinal.ordinal_classification import (
-    OrdinalClassification,
-)
+from simba.utils.binning import float_to_ordinal_class
 from simba.utils.logger_setup import logger
 
 
@@ -179,7 +177,7 @@ class LoadDataMultitasking:
         # intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
 
         # Adjust ED towards a N classification problem
-        ed = OrdinalClassification.from_float_to_class(
+        ed = float_to_ordinal_class(
             molecule_pairs_input.pair_distances[:, 2].reshape(-1, 1),
             n_classes=n_classes,
         )

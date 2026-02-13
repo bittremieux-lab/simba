@@ -1,8 +1,6 @@
 import numpy as np
 
-from simba.core.models.ordinal.ordinal_classification import (
-    OrdinalClassification,
-)
+from simba.utils.binning import round_to_ordinal
 
 
 class WeightSampling:
@@ -117,9 +115,7 @@ class WeightSampling:
 
         # Calculate the index using vectorized operations
         # indices = np.ceil(sim * (len(weights)-1)).astype(int)
-        indices = OrdinalClassification.custom_random(sim * (len(weights) - 1)).astype(
-            int
-        )
+        indices = round_to_ordinal(sim * (len(weights) - 1)).astype(int)
         indices[indices == len(weights)] = len(weights) - 1
 
         # Map the indices to weights and normalize
