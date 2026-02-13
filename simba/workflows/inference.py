@@ -20,7 +20,6 @@ from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
 from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
-from simba.core.models.transformers.postprocessing import Postprocessing
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 
@@ -277,8 +276,8 @@ def evaluate_predictions(
         raise ValueError("Empty predictions received")
 
     # Get ground truth
-    ed_true, _ = Postprocessing.get_similarities_multitasking(dataloader_ed)
-    _, mces_true = Postprocessing.get_similarities_multitasking(dataloader_mces)
+    ed_true, _ = _get_ground_truth(dataloader_ed)
+    _, mces_true = _get_ground_truth(dataloader_mces)
 
     # Flatten MCES predictions
     # pred_mces is list of batches, each batch is (emb, emb_sim_2)
@@ -408,6 +407,23 @@ def inference(cfg: DictConfig) -> dict:
 
 
 # Helper functions
+def _get_ground_truth(dataloader) -> tuple[list[float], list[float]]:
+    """Extract ground truth edit distance and MCES values from dataloader.
+
+    Args:
+        dataloader: DataLoader containing batches with 'ed' and 'mces' keys
+
+    Returns:
+        tuple: (ed_values, mces_values) as lists of floats
+    """
+    ed = [[float(b) for b in batch["ed"]] for batch in dataloader]
+    mces = [[float(b) for b in batch["mces"]] for batch in dataloader]
+
+    ed = [item for sublist in ed for item in sublist]
+    mces = [item for sublist in mces for item in sublist]
+    return ed, mces
+
+
 def _remove_duplicate_pairs(array):
     """Remove duplicate pairs from array."""
     seen = set()
