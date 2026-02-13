@@ -1,4 +1,4 @@
-from simba.core.models.transformers.CustomDatasetEncoder import CustomDatasetEncoder
+from simba.core.data.datasets.encoder_dataset import CustomDatasetEncoder
 from simba.core.models.transformers.load_data_base import LoadDataBase
 
 

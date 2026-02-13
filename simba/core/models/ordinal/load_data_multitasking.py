@@ -4,6 +4,9 @@ import numpy as np
 
 from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
 from simba.core.chemistry.tanimoto import Tanimoto
+from simba.core.data.datasets.multitask_dataset import (
+    CustomDatasetMultitasking,
+)
 from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
@@ -15,9 +18,6 @@ from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.models.ordinal.ordinal_classification import (
     OrdinalClassification,
-)
-from simba.core.models.transformers.CustomDatasetMultitasking import (
-    CustomDatasetMultitasking,
 )
 from simba.utils.logger_setup import logger
 
