@@ -424,6 +424,14 @@ class MCES:
                         )
                         worker_files.append(worker_output)
 
+                        # Skip if worker file already exists
+                        if os.path.exists(worker_output):
+                            logger.info(
+                                f"Skipping existing worker file: {worker_output}"
+                            )
+                            results.append(None)
+                            continue
+
                         result = pool.apply_async(
                             edit_distance.compute_ed_and_mces_both,
                             args=(
@@ -452,8 +460,9 @@ class MCES:
                     logger.info(f"Collecting results from {len(results)} workers...")
                     metadata_list = []
                     for result in results:
-                        metadata = result.get()
-                        metadata_list.append(metadata)
+                        if result is not None:
+                            metadata = result.get()
+                            metadata_list.append(metadata)
 
                     # Load worker result files from disk and concatenate
                     logger.info(
@@ -573,6 +582,14 @@ class MCES:
                         )
                         worker_files.append(worker_output)
 
+                        # Skip if worker file already exists
+                        if os.path.exists(worker_output):
+                            logger.info(
+                                f"Skipping existing worker file: {worker_output}"
+                            )
+                            results.append(None)
+                            continue
+
                         result = pool.apply_async(
                             edit_distance.compute_ed_or_mces,
                             args=(
@@ -603,8 +620,9 @@ class MCES:
                     logger.info(f"Collecting results from {len(results)} workers...")
                     metadata_list = []
                     for result in results:
-                        metadata = result.get()
-                        metadata_list.append(metadata)
+                        if result is not None:
+                            metadata = result.get()
+                            metadata_list.append(metadata)
 
                     # Load worker result files from disk and concatenate
                     logger.info(
