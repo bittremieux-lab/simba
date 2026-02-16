@@ -19,7 +19,7 @@ from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.data.spectrum import SpectrumExt
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
+from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
 from simba.core.training.train_utils import TrainUtils
 
@@ -342,7 +342,7 @@ class TestTrainingSmoke:
         assert hasattr(model, "spectrum_encoder")
 
     @patch(
-        "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint"
+        "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint"
     )
     def test_checkpoint_loading(self, mock_load):
         """Test that checkpoint loading interface works."""
@@ -385,7 +385,7 @@ class TestInferenceOnTrainedModel:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
             return_value=model,
         )
 
@@ -430,7 +430,7 @@ class TestInferenceOnTrainedModel:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
             return_value=model,
         )
 

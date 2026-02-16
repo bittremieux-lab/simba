@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from simba.core.data.preprocessing_simba import PreprocessingSimba
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
+from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
 
 
@@ -79,7 +79,7 @@ class TestInferencePipeline:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
             return_value=model,
         )
 
@@ -112,7 +112,7 @@ class TestInferencePipeline:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
             return_value=model,
         )
 

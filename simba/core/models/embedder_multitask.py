@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from simba.core.data.sampling.weight_sampling import WeightSampling
-from simba.core.models.transformers.embedder import Embedder
+from simba.core.models.embedder import Embedder
 
 
 class CustomizedCrossEntropyLoss(nn.Module):

@@ -19,7 +19,7 @@ from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
 from simba.core.data.multitask_loader import MultitaskDataLoader
 from simba.core.data.preprocessing_simba import PreprocessingSimba
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
+from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 

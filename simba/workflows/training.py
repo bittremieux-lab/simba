@@ -25,7 +25,7 @@ from simba.core.data.sampling.custom_weighted_random_sampler import (
     CustomWeightedRandomSampler,
 )
 from simba.core.data.sampling.weight_sampling import WeightSampling
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
+from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.training.losscallback import LossCallback
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger

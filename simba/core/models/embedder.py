@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from simba.core.models.transformers.spectrum_transformer_encoder_custom import (
+from simba.core.models.spectrum_transformer_encoder_custom import (
     SpectrumTransformerEncoderCustom,
 )
 from simba.utils.logger_setup import logger

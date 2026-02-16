@@ -2,8 +2,8 @@ import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.transformers.embedder import Embedder
+from simba.core.models.embedder import Embedder
+from simba.core.models.embedder_multitask import EmbedderMultitask
 
 
 class Encoder(pl.LightningModule):

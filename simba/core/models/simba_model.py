@@ -8,8 +8,8 @@ from simba.analog_discovery.fc_layers_analog_discovery import (
     FcLayerAnalogDiscovery,
 )
 from simba.core.data.encoder_loader import prepare_encoder_dataset
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.transformers.encoder import Encoder
+from simba.core.models.embedder_multitask import EmbedderMultitask
+from simba.core.models.encoder import Encoder
 
 
 class Simba:
