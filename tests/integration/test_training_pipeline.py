@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.data.spectrum import SpectrumExt
 from simba.core.models.embedder_multitask import EmbedderMultitask

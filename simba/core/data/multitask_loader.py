@@ -14,7 +14,7 @@ from simba.core.data.encoding import (
     encode_ion_activation,
     encode_ionization_method,
 )
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.preprocessor import Preprocessor
 from simba.utils.binning import float_to_ordinal_class
 from simba.utils.logger_setup import logger

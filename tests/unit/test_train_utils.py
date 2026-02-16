@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.training.train_utils import TrainUtils
 
 

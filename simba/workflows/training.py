@@ -14,11 +14,10 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-import simba.core.data.molecular_pairs
-import simba.core.data.molecule_pairs_opt
+import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.multitask_loader import MultitaskDataLoader
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.data.sampling.custom_weighted_random_sampler import (
@@ -34,8 +33,8 @@ from simba.utils.sanity_checks import SanityChecks
 
 # Backward compatibility: Support loading old pickle files with old module paths
 # These modules were refactored from simba.* to simba.core.* hierarchy
-sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs_opt
-sys.modules["simba.molecular_pairs"] = simba.core.data.molecular_pairs
+sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs
+sys.modules["simba.molecular_pairs"] = simba.core.data.molecule_pairs
 sys.modules["simba.spectrum"] = simba.core.data.spectrum
 sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
