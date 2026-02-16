@@ -17,9 +17,9 @@ import simba.core.data.molecule_pairs_opt
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.multitask_loader import MultitaskDataLoader
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 
@@ -151,7 +151,7 @@ def prepare_inference_dataloaders(
 
     # Create dataloaders
     logger.info("Creating dataloaders...")
-    dataset_ed = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_ed = MultitaskDataLoader.from_molecule_pairs_to_dataset(
         molecule_pairs_ed_uniform,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,
@@ -163,7 +163,7 @@ def prepare_inference_dataloaders(
         dataset_ed, batch_size=cfg.inference.batch_size, shuffle=False
     )
 
-    dataset_mces = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_mces = MultitaskDataLoader.from_molecule_pairs_to_dataset(
         molecule_pairs_mces_uniform,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,

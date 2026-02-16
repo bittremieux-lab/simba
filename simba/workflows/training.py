@@ -19,13 +19,13 @@ import simba.core.data.molecule_pairs_opt
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.multitask_loader import MultitaskDataLoader
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.data.sampling.custom_weighted_random_sampler import (
     CustomWeightedRandomSampler,
 )
 from simba.core.data.sampling.weight_sampling import WeightSampling
 from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
 from simba.core.training.losscallback import LossCallback
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
@@ -253,7 +253,7 @@ def prepare_data(
     )
 
     # Create datasets from molecule pairs
-    dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_train = MultitaskDataLoader.from_molecule_pairs_to_dataset(
         molecule_pairs_train,
         max_num_peaks=int(cfg.model.transformer.context_length),
         training=True,
@@ -263,7 +263,7 @@ def prepare_data(
         use_ion_method=cfg.model.features.use_ion_method,
     )
 
-    dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_val = MultitaskDataLoader.from_molecule_pairs_to_dataset(
         molecule_pairs_val,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,

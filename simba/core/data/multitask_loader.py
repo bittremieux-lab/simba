@@ -20,7 +20,7 @@ from simba.utils.binning import float_to_ordinal_class
 from simba.utils.logger_setup import logger
 
 
-class LoadDataMultitasking:
+class MultitaskDataLoader:
     """
     using unique identifiers
     """
