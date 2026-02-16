@@ -25,7 +25,7 @@ def create_test_spectrum():
             "inchi": "test_inchi",
             "smiles": smiles,
             "ionmode": "positive",
-            "adduct_mass": 18.01,
+            "adduct": "[M+H]+",
             "ce": 20.0,
             "ion_activation": "CID",
             "ionization_method": "ESI",

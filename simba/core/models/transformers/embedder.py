@@ -46,8 +46,6 @@ class Embedder(pl.LightningModule):
         use_element_wise=True,
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
         use_adduct=False,
-        categorical_adducts=False,
-        adduct_mass_map="",
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
@@ -73,8 +71,6 @@ class Embedder(pl.LightningModule):
             n_layers=n_layers,
             dropout=dropout,
             use_adduct=use_adduct,
-            categorical_adducts=categorical_adducts,
-            adduct_mass_map=adduct_mass_map,
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
@@ -120,8 +116,8 @@ class Embedder(pl.LightningModule):
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct_mass"] = batch["adduct_mass_0"].float()
-            kwargs_1["adduct_mass"] = batch["adduct_mass_1"].float()
+            kwargs_0["adduct"] = batch["adduct_0"].float()
+            kwargs_1["adduct"] = batch["adduct_1"].float()
 
         if self.use_ce:
             logger.info("Using CE in the model")
@@ -135,6 +131,16 @@ class Embedder(pl.LightningModule):
         if self.use_ion_method:
             kwargs_0["ion_method"] = batch["ion_method_0"].float()
             kwargs_1["ion_method"] = batch["ion_method_1"].float()
+
+        # ensure there are no nans
+        batch["mz_0"] = torch.nan_to_num(batch["mz_0"], nan=0.0, posinf=0.0, neginf=0.0)
+        batch["mz_1"] = torch.nan_to_num(batch["mz_1"], nan=0.0, posinf=0.0, neginf=0.0)
+        batch["intensity_0"] = torch.nan_to_num(
+            batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["intensity_1"] = torch.nan_to_num(
+            batch["intensity_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
 
         emb0, _ = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),

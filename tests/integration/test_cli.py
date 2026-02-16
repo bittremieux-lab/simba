@@ -131,10 +131,10 @@ class TestCLI:
         result = runner.invoke(cli, ["inference", "--help"])
         assert result.exit_code == 0
         assert "inference" in result.output.lower()
-        assert "--checkpoint-dir" in result.output
-        assert "--preprocessing-dir" in result.output
         # With Hydra migration, these are now Hydra overrides, not CLI flags
         assert "OVERRIDES" in result.output
+        assert "paths.checkpoint_dir" in result.output
+        assert "paths.preprocessing_dir" in result.output
 
     def test_inference_command_missing_required_args(self):
         """Test that inference command fails without required arguments."""
@@ -150,28 +150,25 @@ class TestCLI:
             cli,
             [
                 "inference",
-                "--checkpoint-dir",
-                "/nonexistent/checkpoints",
-                "--preprocessing-dir",
-                "/tmp/test_preprocessing",
+                "paths.checkpoint_dir=/nonexistent/checkpoints",
+                "paths.preprocessing_dir=/tmp/test_preprocessing",
             ],
         )
         assert result.exit_code != 0
 
     @pytest.mark.parametrize(
-        "option",
+        "config_key",
         [
-            "--checkpoint-dir",
-            "--preprocessing-dir",
-            "--output-dir",
+            "paths.checkpoint_dir",
+            "paths.preprocessing_dir",
         ],
     )
-    def test_inference_command_has_expected_options(self, option):
-        """Test that inference command has expected CLI options."""
+    def test_inference_command_has_expected_options(self, config_key):
+        """Test that inference command has expected Hydra configuration keys."""
         runner = CliRunner()
         result = runner.invoke(cli, ["inference", "--help"])
         assert result.exit_code == 0
-        assert option in result.output
+        assert config_key in result.output
 
     def test_analog_discovery_command_help(self):
         """Test that the analog-discovery command shows help message."""

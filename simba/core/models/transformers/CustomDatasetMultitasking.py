@@ -4,6 +4,11 @@ import numpy as np
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+from simba.core.data.encoding import (
+    ION_ACTIVATION,
+    IONIZATION_METHODS,
+)
 from simba.core.models.transformers.augmentation import Augmentation
 
 
@@ -24,9 +29,13 @@ class CustomDatasetMultitasking(Dataset):
         max_num_peaks=None,
         use_adduct=False,
         ionmode=None,
-        adduct_mass=None,
+        adduct=None,
         use_ce=False,
         ce=None,
+        use_ion_activation=False,
+        ion_activation=None,
+        use_ion_method=False,
+        ion_method=None,
     ):
         self.data = your_dict
         self.keys = list(your_dict.keys())
@@ -41,6 +50,8 @@ class CustomDatasetMultitasking(Dataset):
         self.use_fingerprints = use_fingerprints
         self.use_adduct = use_adduct
         self.use_ce = use_ce
+        self.use_ion_activation = use_ion_activation
+        self.use_ion_method = use_ion_method
 
         if self.use_fingerprints:
             self.fingerprint_0 = fingerprint_0
@@ -48,10 +59,16 @@ class CustomDatasetMultitasking(Dataset):
 
         if self.use_adduct:
             self.ionmode = ionmode
-            self.adduct_mass = adduct_mass
+            self.adduct_mass = adduct
 
         if self.use_ce:
             self.ce = ce
+
+        if self.use_ion_activation:
+            self.ion_activation = ion_activation
+
+        if self.use_ion_method:
+            self.ion_method = ion_method
 
     def __len__(self):
         return len(self.data[self.keys[0]])
@@ -84,12 +101,32 @@ class CustomDatasetMultitasking(Dataset):
         if self.use_adduct:
             dictionary["ionmode_0"] = np.zeros((len_data, 1), dtype=np.float32)
             dictionary["ionmode_1"] = np.zeros((len_data, 1), dtype=np.float32)
-            dictionary["adduct_mass_0"] = np.zeros((len_data, 1), dtype=np.float32)
-            dictionary["adduct_mass_1"] = np.zeros((len_data, 1), dtype=np.float32)
+            dictionary["adduct_0"] = np.zeros(
+                (len_data, len(ADDUCT_TO_MASS.keys())), dtype=np.float32
+            )
+            dictionary["adduct_1"] = np.zeros(
+                (len_data, len(ADDUCT_TO_MASS.keys())), dtype=np.float32
+            )
 
         if self.use_ce:
             dictionary["ce_0"] = np.zeros((len_data, 1), dtype=np.float32)
             dictionary["ce_1"] = np.zeros((len_data, 1), dtype=np.float32)
+
+        if self.use_ion_activation:
+            dictionary["ion_activation_0"] = np.zeros(
+                (len_data, len(ION_ACTIVATION)), dtype=np.float32
+            )
+            dictionary["ion_activation_1"] = np.zeros(
+                (len_data, len(ION_ACTIVATION)), dtype=np.float32
+            )
+
+        if self.use_ion_method:
+            dictionary["ion_method_0"] = np.zeros(
+                (len_data, len(IONIZATION_METHODS)), dtype=np.float32
+            )
+            dictionary["ion_method_1"] = np.zeros(
+                (len_data, len(IONIZATION_METHODS)), dtype=np.float32
+            )
 
         if self.use_fingerprints:
             print("Defining fingerprints ...")
@@ -137,16 +174,32 @@ class CustomDatasetMultitasking(Dataset):
                     np.float32
                 )
 
-                dictionary["adduct_mass_0"][idx] = self.adduct_mass[
+                dictionary["adduct_0"][idx] = self.adduct_mass[
                     indexes_original_0
                 ].astype(np.float32)
-                dictionary["adduct_mass_1"][idx] = self.adduct_mass[
+                dictionary["adduct_1"][idx] = self.adduct_mass[
                     indexes_original_1
                 ].astype(np.float32)
 
             if self.use_ce:
-                dictionary["ce_0"][idx] = self.ce[indexes_original_0]
-                dictionary["ce_1"][idx] = self.ce[indexes_original_1]
+                dictionary["ce_0"][idx] = self.ce[indexes_original_0].astype(np.float32)
+                dictionary["ce_1"][idx] = self.ce[indexes_original_1].astype(np.float32)
+
+            if self.use_ion_activation:
+                dictionary["ion_activation_0"][idx] = self.ion_activation[
+                    indexes_original_0
+                ].astype(np.float32)
+                dictionary["ion_activation_1"][idx] = self.ion_activation[
+                    indexes_original_1
+                ].astype(np.float32)
+
+            if self.use_ion_method:
+                dictionary["ion_method_0"][idx] = self.ion_method[
+                    indexes_original_0
+                ].astype(np.float32)
+                dictionary["ion_method_1"][idx] = self.ion_method[
+                    indexes_original_1
+                ].astype(np.float32)
 
             if self.use_fingerprints:
                 dictionary["fingerprint_0"][idx] = self.fingerprint_0[
@@ -221,16 +274,32 @@ class CustomDatasetMultitasking(Dataset):
                 np.float32
             )
 
-            spectrum_sample["adduct_mass_0"] = self.adduct_mass[idx_0_original].astype(
+            spectrum_sample["adduct_0"] = self.adduct_mass[idx_0_original].astype(
                 np.float32
             )
-            spectrum_sample["adduct_mass_1"] = self.adduct_mass[idx_1_original].astype(
+            spectrum_sample["adduct_1"] = self.adduct_mass[idx_1_original].astype(
                 np.float32
             )
 
         if self.use_ce:
             spectrum_sample["ce_0"] = self.ce[idx_0_original].astype(np.float32)
             spectrum_sample["ce_1"] = self.ce[idx_1_original].astype(np.float32)
+
+        if self.use_ion_activation:
+            spectrum_sample["ion_activation_0"] = self.ion_activation[
+                idx_0_original
+            ].astype(np.float32)
+            spectrum_sample["ion_activation_1"] = self.ion_activation[
+                idx_1_original
+            ].astype(np.float32)
+
+        if self.use_ion_method:
+            spectrum_sample["ion_method_0"] = self.ion_method[idx_0_original].astype(
+                np.float32
+            )
+            spectrum_sample["ion_method_1"] = self.ion_method[idx_1_original].astype(
+                np.float32
+            )
 
         if self.training and random.random() < self.prob_aug:
             # augmentation

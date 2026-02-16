@@ -88,8 +88,6 @@ class TestEmbedderMultitask:
             "gumbel_reg_weight": 0.1,
             "USE_LEARNABLE_MULTITASK": True,
             "use_adduct": True,
-            "categorical_adducts": False,
-            "adduct_mass_map": {},
             "use_ce": False,
             "use_ion_activation": False,
             "use_ion_method": False,
@@ -103,6 +101,7 @@ class TestEmbedderMultitask:
     def sample_batch(self):
         batch_size = 2
         n_peaks = 10
+        n_adducts = 48  # Length of ADDUCT_TO_MASS dictionary
 
         return {
             "mz_0": torch.randn(batch_size, n_peaks),
@@ -113,10 +112,8 @@ class TestEmbedderMultitask:
             "precursor_charge_0": torch.ones(batch_size, 1),
             "precursor_mass_1": torch.randn(batch_size, 1),
             "precursor_charge_1": torch.ones(batch_size, 1),
-            "adduct_0": torch.randn(batch_size, 1),
-            "adduct_1": torch.randn(batch_size, 1),
-            "adduct_mass_0": torch.randn(batch_size, 1),
-            "adduct_mass_1": torch.randn(batch_size, 1),
+            "adduct_0": torch.zeros(batch_size, n_adducts),  # One-hot encoded
+            "adduct_1": torch.zeros(batch_size, n_adducts),  # One-hot encoded
             "ionmode_0": torch.ones(batch_size, 1),
             "ionmode_1": torch.ones(batch_size, 1),
             "similarity": torch.tensor([0.8, 0.6]),

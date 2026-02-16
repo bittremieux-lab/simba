@@ -29,7 +29,7 @@ class SpectrumExt(MsmsSpectrum):
         inchi: str,
         smiles: str,
         ionmode: str,
-        adduct_mass: float,
+        adduct: float,
         ce: float,
         ion_activation: str,
         ionization_method: str,
@@ -39,6 +39,7 @@ class SpectrumExt(MsmsSpectrum):
         subclass: str,
         inchi_key: str = None,
         spectrum_hash: str = None,
+        mgf_index: int = None,
     ):
 
         super().__init__(
@@ -61,7 +62,7 @@ class SpectrumExt(MsmsSpectrum):
         self.library = library
         self.inchi = inchi
         self.ionmode = ionmode
-        self.adduct_mass = adduct_mass
+        self.adduct = adduct
         self.ce = ce
         self.ion_activation = ion_activation
         self.ionization_method = ionization_method
@@ -74,6 +75,7 @@ class SpectrumExt(MsmsSpectrum):
         self.murcko_scaffold = bms
         self.inchi_key = inchi_key
         self.spectrum_hash = spectrum_hash
+        self.mgf_index = mgf_index  # Original index in MGF file before filtering
 
     def set_params(self, params):
         self.params = params
@@ -97,7 +99,7 @@ class SpectrumExt(MsmsSpectrum):
                 "library": self.library,
                 "inchi": self.inchi,
                 "ionmode": self.ionmode,
-                "adduct_mass": self.adduct_mass,
+                "adduct": self.adduct,
                 "ce": self.ce,
                 "ion_activation": self.ion_activation,
                 "ionization_method": self.ionization_method,
@@ -108,6 +110,7 @@ class SpectrumExt(MsmsSpectrum):
                 "murcko_scaffold": self.murcko_scaffold,
                 "inchi_key": self.inchi_key,
                 "spectrum_hash": self.spectrum_hash,
+                "mgf_index": self.mgf_index,
             }
         )
         return state
@@ -126,7 +129,7 @@ class SpectrumExt(MsmsSpectrum):
         self.library = state["library"]
         self.inchi = state["inchi"]
         self.ionmode = state["ionmode"]
-        self.adduct_mass = state["adduct_mass"]
+        self.adduct = state["adduct"] if "adduct" in state.keys() else None
         try:
             self.ce = state["ce"]
         except KeyError:
@@ -153,6 +156,11 @@ class SpectrumExt(MsmsSpectrum):
             self.spectrum_hash = state["spectrum_hash"]
         except:
             self.spectrum_hash = None
+
+        try:
+            self.mgf_index = state["mgf_index"]
+        except:
+            self.mgf_index = None
 
     # def set_intesity_array(self, intensity_array):
     #    self.intensity_array = intensity_array

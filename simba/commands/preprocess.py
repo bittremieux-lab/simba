@@ -99,7 +99,7 @@ def _preprocess_with_hydra(cfg: DictConfig):
     click.echo(f"Input spectra: {cfg.paths.spectra_path}")
     click.echo(f"Output workspace: {cfg.paths.preprocessing_dir}")
     click.echo(f"Max training spectra: {cfg.preprocessing.max_spectra_train}")
-    click.echo(f"Number of workers: {cfg.hardware.num_workers}")
+    click.echo(f"Number of workers: {cfg.preprocessing.num_workers}")
 
     # Validate splits
     if cfg.preprocessing.val_split + cfg.preprocessing.test_split >= 1.0:

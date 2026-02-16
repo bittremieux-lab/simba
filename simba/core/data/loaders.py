@@ -57,16 +57,17 @@ class LoadData:
                 def spectrum_it():
                     for scan_nr, spectrum_dict in enumerate(f_in):
                         if scan_nr in scan_nrs:
-                            yield spectrum_dict
+                            yield scan_nr, spectrum_dict
 
             # Or iterate over all MS/MS spectra.
             else:
 
                 def spectrum_it():
-                    yield from f_in
+                    for scan_nr, spectrum_dict in enumerate(f_in):
+                        yield scan_nr, spectrum_dict
 
             total_results = []
-            for spectrum in spectrum_it():
+            for mgf_index, spectrum in spectrum_it():
                 # try:
                 if use_only_protonized_adducts:
                     if use_gnps_format:
@@ -88,7 +89,18 @@ class LoadData:
                         compute_classes=compute_classes,
                         use_gnps_format=use_gnps_format,
                     )
+                    if spec and (
+                        np.isnan(spec.mz).any()
+                        or np.isnan(spec.intensity).any()
+                        or not np.isfinite(spec.mz).all()
+                        or not np.isfinite(spec.intensity).all()
+                        or not np.all(spec.mz >= 0)
+                        or not np.all(spec.intensity >= 0)
+                    ):
+                        spec = None
                     if spec is not None:
+                        # Assign the original MGF index before filtering
+                        spec.mgf_index = mgf_index
                         yield spec
             # except ValueError as e:
             #    pass
@@ -348,20 +360,17 @@ class LoadData:
 
         ionmode = params["ionmode"].lower() if "ionmode" in params else "none"
 
+        # Extract adduct as string (no mass conversion)
         if "adduct" in params:
             adduct = params["adduct"].replace(" ", "")
-            adduct_mass = chem_utils.ion_to_mass(adduct)
-            if adduct_mass is None:
-                logger.warning(f"Adduct {adduct} not supported.")
-                adduct = ""
-                adduct_mass = 0.0
         else:
-            adduct = ""
-            adduct_mass = 0.0
+            adduct = None
 
         ce = params["ce"] if "ce" in params else None
         ia = params["ion_activation"] if "ion_activation" in params else None
         im = params["ionization_method"] if "ionization_method" in params else None
+
+        inchi_key = params["inchikey"] if "inchikey" in params else None
 
         # compute hash id value
         spectrum_hash_result = spectrum_hash(
@@ -395,7 +404,7 @@ class LoadData:
             inchi=inchi,
             smiles=smiles,
             ionmode=ionmode,
-            adduct_mass=adduct_mass,
+            adduct=adduct,
             ce=ce,
             ion_activation=ia,
             ionization_method=im,
@@ -403,7 +412,7 @@ class LoadData:
             superclass=superclass,
             classe=classe,
             subclass=subclass,
-            inchi_key=params["inchikey"] if "inchikey" in params else None,
+            inchi_key=inchi_key,
             spectrum_hash=spectrum_hash_result,
         )
 

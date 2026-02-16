@@ -16,6 +16,7 @@ class Simba:
     def __init__(self, file_path, config, device="gpu", cache_embeddings=True):
         self.file_path = file_path
         self.config = config
+        self.device = device
         self.trainer = pl.Trainer(
             max_epochs=2,
             enable_progress_bar=True,
@@ -24,7 +25,6 @@ class Simba:
         self.encoder = self.load_encoder(file_path)
         self.model = self.load_model(file_path)
         self.cache_embeddings = cache_embeddings
-        self.device = device
         self._embedding_cache = {}
 
     def load_encoder(self, filepath):
@@ -70,6 +70,12 @@ class Simba:
             strict=False,
         )
         model.eval()
+
+        if self.device == "cpu":
+            model = model.cpu()
+        elif self.device == "gpu":
+            model = model.cuda()
+
         return model
 
     def get_dataloader_key(self, dataloader):

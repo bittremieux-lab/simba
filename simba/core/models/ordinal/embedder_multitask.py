@@ -75,8 +75,6 @@ class EmbedderMultitask(Embedder):
         gumbel_reg_weight=0.1,
         USE_LEARNABLE_MULTITASK=True,
         use_adduct=False,
-        categorical_adducts=False,
-        adduct_mass_map="",
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
@@ -91,8 +89,6 @@ class EmbedderMultitask(Embedder):
             use_element_wise=use_element_wise,
             use_cosine_distance=use_cosine_distance,
             use_adduct=use_adduct,
-            categorical_adducts=categorical_adducts,
-            adduct_mass_map=adduct_mass_map,
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
@@ -157,6 +153,21 @@ class EmbedderMultitask(Embedder):
 
     def forward(self, batch, return_spectrum_output=False):
         # … compute raw emb0, emb1, apply relu, fingerprints, etc. …
+
+        # nans to zeros
+        batch["precursor_mass_0"] = torch.nan_to_num(
+            batch["precursor_mass_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["precursor_mass_1"] = torch.nan_to_num(
+            batch["precursor_mass_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["precursor_charge_0"] = torch.nan_to_num(
+            batch["precursor_charge_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["precursor_charge_1"] = torch.nan_to_num(
+            batch["precursor_charge_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+
         """The inference pass"""
         if self.use_precursor_mz_for_model:
             mz_0 = batch["precursor_mass_0"].float()
@@ -173,23 +184,65 @@ class EmbedderMultitask(Embedder):
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
-        if self.use_extra_metadata:
+        if self.use_adduct:
+            batch["ionmode_0"] = torch.nan_to_num(
+                batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ionmode_1"] = torch.nan_to_num(
+                batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["adduct_0"] = torch.nan_to_num(
+                batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["adduct_1"] = torch.nan_to_num(
+                batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct_mass"] = batch["adduct_mass_0"].float()
-            kwargs_1["adduct_mass"] = batch["adduct_mass_1"].float()
+            kwargs_0["adduct"] = batch["adduct_0"].float()
+            kwargs_1["adduct"] = batch["adduct_1"].float()
 
         if self.use_ce:
+            batch["ce_0"] = torch.nan_to_num(
+                batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ce_1"] = torch.nan_to_num(
+                batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
             kwargs_0["ce"] = batch["ce_0"].float()
             kwargs_1["ce"] = batch["ce_1"].float()
 
         if self.use_ion_activation:
+            batch["ion_activation_0"] = torch.nan_to_num(
+                batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_activation_1"] = torch.nan_to_num(
+                batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
             kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
             kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
         if self.use_ion_method:
+            batch["ion_method_0"] = torch.nan_to_num(
+                batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_method_1"] = torch.nan_to_num(
+                batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+
             kwargs_0["ion_method"] = batch["ion_method_0"].float()
             kwargs_1["ion_method"] = batch["ion_method_1"].float()
+
+        # intensity and mz
+        batch["intensity_0"] = torch.nan_to_num(
+            batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["intensity_1"] = torch.nan_to_num(
+            batch["intensity_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["mz_0"] = torch.nan_to_num(batch["mz_0"], nan=0.0, posinf=0.0, neginf=0.0)
+        batch["mz_1"] = torch.nan_to_num(batch["mz_1"], nan=0.0, posinf=0.0, neginf=0.0)
 
         emb0, _ = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),

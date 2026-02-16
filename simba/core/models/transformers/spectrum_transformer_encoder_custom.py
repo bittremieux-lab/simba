@@ -3,16 +3,12 @@ from depthcharge.transformers import (
     SpectrumTransformerEncoder,
 )  # PeptideTransformerEncoder,
 
-from simba.core.data.encoding import OneHotEncoding
-
 
 class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
     def __init__(
         self,
         *args,
         use_adduct: bool = False,
-        categorical_adducts: bool = False,
-        adduct_mass_map: str = "",
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
@@ -24,22 +20,16 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         Attributes
         ----------
         use_adduct: bool
-            use adduct info during training
-        categorical_adduct: bool
-            convert adduct mass to vector
-        adduct_mass_map: str
-            file that maps adduct masses to vectors
+            Whether to include adduct information in the encoding (default: False).
         use_ce: bool
-            use collision energy during training
+            Whether to include collision energy in the encoding (default: False).
         use_ion_activation: bool
-            use ion activation info during training
+            Whether to include ion activation information in the encoding (default: False).
         use_ion_method: bool
-            use ionization method during training
+            Whether to include ionization method in the encoding (default: False).
         """
         super().__init__(*args, **kwargs)
         self.use_adduct = use_adduct
-        self.categorical_adducts = categorical_adducts
-        self.adduct_mass_map = adduct_mass_map
         self.use_ce = use_ce
         self.use_ion_activation = use_ion_activation
         self.use_ion_method = use_ion_method
@@ -66,40 +56,15 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         placeholder[:, 1] = precursor_charge
 
         current_idx = 2  # keep track of where to insert metadata
-
-        # Initialize metadata encoder if any metadata features are used
-        metadata_encoder = None
-        if (
-            self.use_adduct or self.use_ion_activation or self.use_ion_method
-        ) and self.adduct_mass_map:
-            metadata_encoder = OneHotEncoding(self.adduct_mass_map)
-
         if self.use_adduct:
             ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
             placeholder[:, current_idx] = ionmode
             current_idx += 1
 
-            adduct_mass = kwargs["adduct_mass"].float().to(device).view(batch_size)
-            placeholder[:, current_idx] = adduct_mass
-            current_idx += 1
-
-            if self.categorical_adducts:
-                ion_mode_str_list = [
-                    ("positive" if ionmode[i].item() > 0 else "negative")
-                    for i in range(batch_size)
-                ]
-                adduct_vectors = []
-                for i in range(batch_size):
-                    adduct_list = metadata_encoder.encode_adduct(
-                        adduct_mass=float(adduct_mass[i].item()),
-                        ion_mode=ion_mode_str_list[i],
-                    )
-                    adduct_vectors.append(adduct_list)
-                # Convert list[list] → tensor B × F
-                adduct_tensor = torch.tensor(adduct_vectors, dtype=dtype, device=device)
-                stop_idx = current_idx + adduct_tensor.shape[1]
-                placeholder[:, current_idx:stop_idx] = adduct_tensor
-                current_idx = stop_idx
+            adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + adduct.shape[1]
+            placeholder[:, current_idx:stop_idx] = adduct
+            current_idx = stop_idx
 
         if self.use_ce:
             ce = kwargs["ce"].float().to(device).view(batch_size)
@@ -107,17 +72,18 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             current_idx += 1
 
         if self.use_ion_activation:
-            ia = kwargs["ion_activation"].float().to(device).view(batch_size)
-            ia_encoded = metadata_encoder.encode_ion_activation(ia)
-            stop_idx = current_idx + len(ia_encoded)
+            ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + ia.shape[1]
             placeholder[:, current_idx:stop_idx] = ia
             current_idx = stop_idx
 
         if self.use_ion_method:
-            im = kwargs["ion_method"].float().to(device).view(batch_size)
-            im_encoded = metadata_encoder.encode_ionization_method(im)
-            stop_idx = current_idx + len(im_encoded)
+            im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + im.shape[1]
             placeholder[:, current_idx:stop_idx] = im
             current_idx = stop_idx
+
+        # ensure there are no nans
+        placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)
 
         return placeholder

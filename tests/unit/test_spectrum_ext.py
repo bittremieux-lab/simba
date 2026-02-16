@@ -97,7 +97,7 @@ class TestSpectrumExtSerialization:
         assert new_spectrum.library == "test_library"
         assert new_spectrum.inchi == "InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3"
         assert new_spectrum.ionmode == "positive"
-        assert new_spectrum.adduct_mass == 18.01
+        assert new_spectrum.adduct == "[M+H]+"
         assert new_spectrum.ce == 20.0
         assert new_spectrum.ion_activation == "CID"
         assert new_spectrum.ionization_method == "ESI"
@@ -140,7 +140,7 @@ class TestSpectrumExtSerialization:
             "library": "test",
             "inchi": "test_inchi",
             "ionmode": "positive",
-            "adduct_mass": 18.01,
+            "adduct": "[M+H]+",
             "ce": 20.0,
             "retention_time": 1.5,
             "superclass": "test",
@@ -168,7 +168,7 @@ class TestSpectrumExtSerialization:
             "library": "test",
             "inchi": "test_inchi",
             "ionmode": "positive",
-            "adduct_mass": 18.01,
+            "adduct": "[M+H]+",
             "ce": 20.0,
             "ion_activation": "CID",
             "retention_time": 1.5,
@@ -202,7 +202,7 @@ class TestSpectrumExtSerialization:
             "library": "test",
             "inchi": "test_inchi",
             "ionmode": "positive",
-            "adduct_mass": 18.01,
+            "adduct": "[M+H]+",
             "ce": 20.0,
             "ion_activation": "CID",
             "ionization_method": "ESI",
@@ -237,7 +237,7 @@ class TestSpectrumExtSerialization:
             "library": "test",
             "inchi": "test_inchi",
             "ionmode": "positive",
-            "adduct_mass": 18.01,
+            "adduct": "[M+H]+",
             "ce": 20.0,
             "ion_activation": "CID",
             "ionization_method": "ESI",

@@ -25,6 +25,8 @@ class Augmentation:
         new_sample = Augmentation.random_peak_dropout(new_sample)
         # normalize
         # new_sample = Augmentation.normalize_intensities(new_sample)
+
+        new_sample = Augmentation.masking_metadata(new_sample)
         return new_sample
 
     @staticmethod
@@ -208,4 +210,28 @@ class Augmentation:
 
                 data_sample[int_key] = intensity_array
                 data_sample[mz_key] = mz_array
+        return data_sample
+
+    @staticmethod
+    def masking_metadata(data_sample, p_aug=0.5):
+        """
+        Randomly mask metadata fields for augmentation.
+        """
+        keys_found = list(data_sample.keys())
+        if random.random() < p_aug:
+            if "ionmode_0" in keys_found:
+                data_sample["ionmode_0"] = 0 * data_sample["ionmode_0"]
+                data_sample["ionmode_1"] = 0 * data_sample["ionmode_1"]
+
+            if "adduct_0" in keys_found:
+                data_sample["adduct_0"] = 0 * data_sample["adduct_0"]
+                data_sample["adduct_1"] = 0 * data_sample["adduct_1"]
+
+            if "ce_0" in keys_found:
+                data_sample["ce_0"] = 0 * data_sample["ce_0"]
+                data_sample["ce_1"] = 0 * data_sample["ce_1"]
+
+            if "ion_activation_0" in keys_found:
+                data_sample["ion_activation_0"] = 0 * data_sample["ion_activation_0"]
+                data_sample["ion_activation_1"] = 0 * data_sample["ion_activation_1"]
         return data_sample

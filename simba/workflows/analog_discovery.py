@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from simba.analog_discovery.simba_analog_discovery import AnalogDiscovery
 from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.simba_model import Simba
-from simba.logger_setup import logger
+from simba.utils.logger_setup import logger
 
 
 def run_analog_discovery(cfg: DictConfig) -> dict:
