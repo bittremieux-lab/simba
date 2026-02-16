@@ -205,6 +205,6 @@ class NistLoader:
                 no_smiles_count = no_smiles_count + 1
         if verbose != 0:
             print(
-                f"Percentage of N/A smiles in current block: {100* no_smiles_count/len(all_spectrums_dict)}%"
+                f"Percentage of N/A smiles in current block: {100 * no_smiles_count / len(all_spectrums_dict)}%"
             )
         return all_spectrums_dict

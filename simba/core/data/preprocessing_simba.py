@@ -1,7 +1,6 @@
 import copy
 
-from simba.core.data.loader_saver import LoaderSaver
-from simba.core.data.loaders import LoadData
+from simba.core.data.loaders import LoadData, LoaderSaver
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
 from simba.utils.logger_setup import logger
@@ -80,7 +79,9 @@ class PreprocessingSimba:
         # remove spectra that does not have at least min peaks
         filtered_spectra = [
             s_original
-            for s_original, s_processed in zip(all_spectra, all_spectra_processed, strict=False)
+            for s_original, s_processed in zip(
+                all_spectra, all_spectra_processed, strict=False
+            )
             if len(s_processed.mz) >= min_peaks
         ]
         logger.info(f"{len(filtered_spectra)} spectra remaining after filtering.")
