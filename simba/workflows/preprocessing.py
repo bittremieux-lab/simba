@@ -18,9 +18,9 @@ with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method("spawn", force=True)
 
 from simba.core.chemistry.mces.mces_computation import MCES
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
+from simba.workflows.utils import load_spectra
 
 
 def write_data(
@@ -130,7 +130,7 @@ def preprocess(cfg: DictConfig) -> None:
     logger.info(
         f"Loading up to {n_samples if n_samples > 0 else 'all'} spectra from MGF file..."
     )
-    all_spectra = PreprocessingSimba.load_spectra(
+    all_spectra = load_spectra(
         str(cfg.paths.spectra_path),
         cfg,
         n_samples=n_samples,

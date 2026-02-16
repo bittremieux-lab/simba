@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.molecule_pairs import MolecularPairsSet, MoleculePairsOpt
-from simba.core.data.preprocessing import PreprocessingUtils
+from simba.core.data.preprocessor import PreprocessingUtils
 from simba.core.data.spectrum import SpectrumExt
 from simba.utils.binning import round_to_ordinal
 from simba.utils.logger_setup import logger

@@ -8,9 +8,9 @@ import numpy as np
 from omegaconf import DictConfig
 
 from simba.analog_discovery.simba_analog_discovery import AnalogDiscovery
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.simba_model import Simba
 from simba.utils.logger_setup import logger
+from simba.workflows.utils import load_spectra
 
 
 def run_analog_discovery(cfg: DictConfig) -> dict:
@@ -31,11 +31,11 @@ def run_analog_discovery(cfg: DictConfig) -> dict:
     output_path = str(output_dir) + os.sep
 
     # Load spectra using Hydra config
-    all_spectrums_query = PreprocessingSimba.load_spectra(
+    all_spectrums_query = load_spectra(
         str(query_spectra), cfg, use_gnps_format=cfg.analog_discovery.use_gnps_format
     )
 
-    all_spectrums_reference = PreprocessingSimba.load_spectra(
+    all_spectrums_reference = load_spectra(
         str(reference_spectra),
         cfg,
         use_gnps_format=cfg.analog_discovery.use_gnps_format,

@@ -1,10 +1,9 @@
 """Data loading and preprocessing utilities for SIMBA."""
 
-from simba.core.data import loaders, preprocessing, preprocessing_simba, spectrum
+from simba.core.data import loaders, preprocessor, spectrum
 
 __all__ = [
     "loaders",
-    "preprocessing",
-    "preprocessing_simba",
+    "preprocessor",
     "spectrum",
 ]

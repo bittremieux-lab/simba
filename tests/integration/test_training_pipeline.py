@@ -17,11 +17,11 @@ import pandas as pd
 
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.data.spectrum import SpectrumExt
 from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
 from simba.core.training.train_utils import TrainUtils
+from simba.workflows.utils import load_spectra
 
 
 class TestDataPreprocessing:
@@ -30,7 +30,7 @@ class TestDataPreprocessing:
     def test_train_val_test_split(self, sample_training_spectra, hydra_config):
         """Test that train/val/test split works correctly."""
         # Load spectra
-        all_spectra = PreprocessingSimba.load_spectra(
+        all_spectra = load_spectra(
             str(sample_training_spectra),
             hydra_config,
             n_samples=100,
@@ -75,7 +75,7 @@ class TestDataPreprocessing:
         self, sample_training_spectra, tmp_path, hydra_config
     ):
         """Test that preprocessing creates the expected mapping file structure."""
-        all_spectra = PreprocessingSimba.load_spectra(
+        all_spectra = load_spectra(
             str(sample_training_spectra),
             hydra_config,
             n_samples=100,
@@ -362,7 +362,7 @@ class TestInferenceOnTrainedModel:
 
     def test_embedding_generation_shape(self, sample_mgf, mocker, hydra_config):
         """Test that model produces embeddings of expected shape."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             str(sample_mgf),
             hydra_config,
             n_samples=5,
@@ -407,7 +407,7 @@ class TestInferenceOnTrainedModel:
         self, sample_mgf_casmi, mocker, hydra_config
     ):
         """Test that similarity computation works with trained model."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             str(sample_mgf_casmi),
             hydra_config,
             n_samples=10,

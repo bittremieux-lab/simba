@@ -17,10 +17,10 @@ import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.multitask_dataset_builder import MultitaskDataLoader
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
+from simba.workflows.utils import load_spectra
 
 
 # Backward compatibility: Support loading old pickle files with old module paths
@@ -54,7 +54,7 @@ def load_inference_data(cfg: DictConfig):
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
         mgf_path = dataset["mgf_path"]
-        all_spectra = PreprocessingSimba.load_spectra(mgf_path, cfg)
+        all_spectra = load_spectra(mgf_path, cfg)
 
         # Create spectrum lookup by MGF index
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}

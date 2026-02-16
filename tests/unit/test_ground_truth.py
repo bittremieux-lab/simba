@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from simba.core.data.ground_truth import GroundTruth
-from simba.core.data.preprocessing_simba import PreprocessingSimba
+from simba.workflows.utils import load_spectra
 
 
 pytestmark = pytest.mark.unit
@@ -17,7 +17,7 @@ class TestGroundTruthTanimoto:
         self, sample_mgf_casmi, hydra_config, mocker
     ):
         """Test Tanimoto computation for identical molecules returns 1.0."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -34,7 +34,7 @@ class TestGroundTruthTanimoto:
 
     def test_compute_tanimoto_different_molecules(self, sample_mgf_casmi, hydra_config):
         """Test Tanimoto computation for different molecules."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -59,7 +59,7 @@ class TestGroundTruthEditDistance:
     ):
         """Test Edit Distance computation for identical molecules returns 0.0."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -80,7 +80,7 @@ class TestGroundTruthEditDistance:
     ):
         """Test Edit Distance computation for different molecules."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -101,7 +101,7 @@ class TestGroundTruthEditDistance:
     ):
         """Test Edit Distance computation with default max_value=5."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -124,7 +124,7 @@ class TestGroundTruthEditDistance:
     ):
         """Test Edit Distance computation with custom max_value=10."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -145,7 +145,7 @@ class TestGroundTruthEditDistance:
     def test_compute_edit_distance_multiple_pairs(self, sample_mgf_casmi, hydra_config):
         """Test Edit Distance computation for multiple molecule pairs."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -170,7 +170,7 @@ class TestGroundTruthMCES:
     def test_compute_mces_identical_molecules(self, sample_mgf_casmi, hydra_config):
         """Test MCES computation for identical molecules returns 0.0."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -189,7 +189,7 @@ class TestGroundTruthMCES:
     def test_compute_mces_different_molecules(self, sample_mgf_casmi, hydra_config):
         """Test MCES computation for different molecules."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -208,7 +208,7 @@ class TestGroundTruthMCES:
     def test_compute_mces_threshold_handling(self, sample_mgf_casmi, hydra_config):
         """Test MCES computation with custom threshold."""
         # config removed - using hydra_config
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,

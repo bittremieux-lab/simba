@@ -6,9 +6,9 @@ Based on notebooks/final_tutorials/run_inference.ipynb
 import numpy as np
 import pytest
 
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
+from simba.workflows.utils import load_spectra
 
 
 pytestmark = pytest.mark.integration
@@ -19,7 +19,7 @@ class TestInferencePipeline:
 
     def test_load_spectra_from_mgf_standard_format(self, sample_mgf, hydra_config):
         """Test loading spectra from standard MGF format."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf,
             hydra_config,
             min_peaks=5,
@@ -38,7 +38,7 @@ class TestInferencePipeline:
 
     def test_load_spectra_from_mgf_casmi_format(self, sample_mgf_casmi, hydra_config):
         """Test loading spectra from CASMI2022 format with SMILES."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -54,7 +54,7 @@ class TestInferencePipeline:
 
     def test_inference_end_to_end(self, sample_mgf, mocker, hydra_config):
         """Test complete inference pipeline with model."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf,
             hydra_config,
             min_peaks=5,

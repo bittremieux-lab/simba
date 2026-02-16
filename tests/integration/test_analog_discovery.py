@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 
 from simba.analog_discovery.simba_analog_discovery import AnalogDiscovery
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.simba_model import Simba
+from simba.workflows.utils import load_spectra
 
 
 pytestmark = pytest.mark.integration
@@ -25,7 +25,7 @@ class TestAnalogDiscovery:
 
     def test_compute_distance_matrix(self, sample_mgf_casmi, mock_model, hydra_config):
         """Test computing distance matrices between query and library spectra."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -51,7 +51,7 @@ class TestAnalogDiscovery:
 
     def test_ranking_combined_metrics(self, sample_mgf_casmi, mock_model, hydra_config):
         """Test ranking using combined MCES and edit distance metrics."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,
@@ -77,7 +77,7 @@ class TestAnalogDiscovery:
 
     def test_find_top_k_analogs(self, sample_mgf_casmi, mock_model, hydra_config):
         """Test extracting top-k analog matches."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             sample_mgf_casmi,
             hydra_config,
             min_peaks=5,

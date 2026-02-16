@@ -9,7 +9,7 @@ from tqdm import tqdm
 from simba.core.chemistry import chem_utils
 from simba.core.chemistry.scaffolds import MurckoScaffold
 from simba.core.data.loaders.nist_loader import NistLoader
-from simba.core.data.preprocessing import PreprocessingUtils
+from simba.core.data.preprocessor import PreprocessingUtils
 from simba.core.data.spectrum import SpectrumExt
 from simba.core.data.spectrum_processing import spectrum_hash
 from simba.utils.logger_setup import logger
