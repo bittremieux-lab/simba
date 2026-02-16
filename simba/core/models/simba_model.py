@@ -7,9 +7,9 @@ from torch.utils.data import DataLoader
 from simba.analog_discovery.fc_layers_analog_discovery import (
     FcLayerAnalogDiscovery,
 )
+from simba.core.data.encoder_loader import prepare_encoder_dataset
 from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
 from simba.core.models.transformers.encoder import Encoder
-from simba.core.models.transformers.load_data_encoder import LoadDataEncoder
 
 
 class Simba:
@@ -153,7 +153,7 @@ class Simba:
         transformer_context = int(self.config.model.transformer.context_length)
         batch_size = self.config.training.batch_size
 
-        dataset = LoadDataEncoder.from_spectrums_to_dataset(
+        dataset = prepare_encoder_dataset(
             spectrums,
             max_num_peaks=transformer_context,
         )
