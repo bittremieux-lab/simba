@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from simba.core.data.ground_truth import GroundTruth
+from simba.core.chemistry.similarity_metrics import MolecularSimilarityMetrics
 from simba.workflows.utils import load_spectra
 
 
@@ -27,7 +27,7 @@ class TestGroundTruthTanimoto:
 
         assert len(spectra) >= 1
 
-        result = GroundTruth.compute_tanimoto([spectra[0]], [spectra[0]])
+        result = MolecularSimilarityMetrics.compute_tanimoto([spectra[0]], [spectra[0]])
 
         assert result.shape == (1, 1)
         assert result[0, 0] == pytest.approx(1.0, abs=0.01)
@@ -44,7 +44,7 @@ class TestGroundTruthTanimoto:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_tanimoto([spectra[0]], [spectra[1]])
+        result = MolecularSimilarityMetrics.compute_tanimoto([spectra[0]], [spectra[1]])
 
         assert result.shape == (1, 1)
         assert 0.0 <= result[0, 0] <= 1.0
@@ -69,7 +69,9 @@ class TestGroundTruthEditDistance:
 
         assert len(spectra) >= 1
 
-        result = GroundTruth.compute_edit_distance([spectra[0]], [spectra[0]])
+        result = MolecularSimilarityMetrics.compute_edit_distance(
+            [spectra[0]], [spectra[0]]
+        )
 
         assert result.shape == (1, 1)
         assert result[0, 0] == pytest.approx(0.0, abs=0.01)
@@ -90,7 +92,9 @@ class TestGroundTruthEditDistance:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_edit_distance([spectra[0]], [spectra[1]])
+        result = MolecularSimilarityMetrics.compute_edit_distance(
+            [spectra[0]], [spectra[1]]
+        )
 
         assert result.shape == (1, 1)
         assert result[0, 0] >= 0.0
@@ -111,7 +115,7 @@ class TestGroundTruthEditDistance:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_edit_distance(
+        result = MolecularSimilarityMetrics.compute_edit_distance(
             [spectra[0]], [spectra[1]], max_value=5
         )
 
@@ -134,7 +138,7 @@ class TestGroundTruthEditDistance:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_edit_distance(
+        result = MolecularSimilarityMetrics.compute_edit_distance(
             [spectra[0]], [spectra[1]], max_value=10
         )
 
@@ -155,7 +159,7 @@ class TestGroundTruthEditDistance:
 
         assert len(spectra) >= 3
 
-        result = GroundTruth.compute_edit_distance(
+        result = MolecularSimilarityMetrics.compute_edit_distance(
             [spectra[0], spectra[1]], [spectra[1], spectra[2]]
         )
 
@@ -180,7 +184,9 @@ class TestGroundTruthMCES:
 
         assert len(spectra) >= 1
 
-        result = GroundTruth.compute_mces([spectra[0]], [spectra[0]], threshold=20)
+        result = MolecularSimilarityMetrics.compute_mces(
+            [spectra[0]], [spectra[0]], threshold=20
+        )
 
         assert result.shape == (1, 1)
         assert result[0, 0] == pytest.approx(0.0, abs=0.01)
@@ -199,7 +205,9 @@ class TestGroundTruthMCES:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_mces([spectra[0]], [spectra[1]], threshold=20)
+        result = MolecularSimilarityMetrics.compute_mces(
+            [spectra[0]], [spectra[1]], threshold=20
+        )
 
         assert result.shape == (1, 1)
         assert result[0, 0] >= 0.0
@@ -218,7 +226,9 @@ class TestGroundTruthMCES:
 
         assert len(spectra) >= 2
 
-        result = GroundTruth.compute_mces([spectra[0]], [spectra[1]], threshold=30)
+        result = MolecularSimilarityMetrics.compute_mces(
+            [spectra[0]], [spectra[1]], threshold=30
+        )
 
         assert result.shape == (1, 1)
         assert result[0, 0] >= 0.0
