@@ -1,12 +1,18 @@
 """Neural network models for SIMBA."""
 
-from simba.core.models.embedder import Embedder
-from simba.core.models.spectrum_transformer_encoder_custom import (
+from simba.core.models.similarity_models import (
+    EmbeddingExtractor,
+    SimilarityModel,
+    SimilarityModelMultitask,
+)
+from simba.core.models.spectrum_encoder import (
     SpectrumTransformerEncoderCustom,
 )
 
 
 __all__ = [
-    "Embedder",
+    "SimilarityModel",
+    "SimilarityModelMultitask",
+    "EmbeddingExtractor",
     "SpectrumTransformerEncoderCustom",
 ]

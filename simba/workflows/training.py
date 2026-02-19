@@ -23,7 +23,7 @@ from simba.core.data.weighted_sampling import (
     CustomWeightedRandomSampler,
     SimilarityWeightSampler,
 )
-from simba.core.models.embedder_multitask import EmbedderMultitask
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.losscallback import LossCallback
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
@@ -364,13 +364,13 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     return checkpoint_callback, checkpoint_n_steps_callback, loss_callback
 
 
-def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> EmbedderMultitask:
+def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMultitask:
     """Setup the SIMBA model.
     Args:
         cfg: Hydra configuration
         weights_mces: MCES weights for loss calculation
     Returns:
-        Initialized EmbedderMultitask model
+        Initialized SimilarityModelMultitask model
     """
     model_kwargs = {
         "d_model": cfg.model.transformer.d_model,
@@ -402,19 +402,19 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> EmbedderMultitask:
         pretrained_path = paths["pretrained_path"]
 
         if pretrained_path.exists():
-            model = EmbedderMultitask.load_from_checkpoint(
+            model = SimilarityModelMultitask.load_from_checkpoint(
                 str(pretrained_path), **model_kwargs
             )
         else:
-            model = EmbedderMultitask(**model_kwargs)
+            model = SimilarityModelMultitask(**model_kwargs)
     else:
-        model = EmbedderMultitask(**model_kwargs)
+        model = SimilarityModelMultitask(**model_kwargs)
 
     return model
 
 
 def train(
-    model: EmbedderMultitask,
+    model: SimilarityModelMultitask,
     dataloader_train: DataLoader,
     dataloader_val: DataLoader,
     cfg: DictConfig,

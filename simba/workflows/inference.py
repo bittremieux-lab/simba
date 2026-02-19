@@ -17,7 +17,7 @@ import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.models.embedder_multitask import EmbedderMultitask
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.workflows.utils import load_spectra
@@ -185,7 +185,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         checkpoint_path: Path to model checkpoint
 
     Returns:
-        EmbedderMultitask: Loaded model in eval mode
+        SimilarityModelMultitask: Loaded model in eval mode
     """
     logger.info(f"Loading model from {checkpoint_path}...")
 
@@ -204,7 +204,9 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         "use_ion_method": cfg.model.features.use_ion_method,
     }
 
-    model = EmbedderMultitask.load_from_checkpoint(checkpoint_path, **load_kwargs)
+    model = SimilarityModelMultitask.load_from_checkpoint(
+        checkpoint_path, **load_kwargs
+    )
     model.eval()
 
     return model
@@ -212,7 +214,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
 
 def run_inference(
     cfg: DictConfig,
-    model: EmbedderMultitask,
+    model: SimilarityModelMultitask,
     dataloader_ed,
     dataloader_mces,
 ):

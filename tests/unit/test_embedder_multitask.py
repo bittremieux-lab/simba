@@ -4,9 +4,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-from simba.core.models.embedder_multitask import (
+from simba.core.models.similarity_models import (
     CustomizedCrossEntropyLoss,
-    EmbedderMultitask,
+    SimilarityModelMultitask,
 )
 
 
@@ -95,7 +95,7 @@ class TestEmbedderMultitask:
 
     @pytest.fixture
     def embedder(self, embedder_config):
-        return EmbedderMultitask(**embedder_config)
+        return SimilarityModelMultitask(**embedder_config)
 
     @pytest.fixture
     def sample_batch(self):
@@ -121,7 +121,7 @@ class TestEmbedderMultitask:
         }
 
     def test_init_basic(self, embedder_config):
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         assert embedder.classifier is not None
         assert isinstance(embedder.classifier, nn.Linear)
@@ -130,7 +130,7 @@ class TestEmbedderMultitask:
 
     def test_init_with_gumbel(self, embedder_config):
         embedder_config["use_gumbel"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         assert embedder.use_gumbel is True
         assert embedder.tau_gumbel_softmax == 10
@@ -138,7 +138,7 @@ class TestEmbedderMultitask:
 
     def test_init_with_fingerprints(self, embedder_config):
         embedder_config["use_fingerprints"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         assert embedder.use_fingerprints is True
         assert embedder.linear_fingerprint_0 is not None
@@ -146,21 +146,21 @@ class TestEmbedderMultitask:
 
     def test_init_with_edit_distance(self, embedder_config):
         embedder_config["use_edit_distance_regresion"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         assert embedder.use_edit_distance_regresion is True
         assert embedder.linear1_cossim is not None
 
     def test_calculate_weight_loss2_with_edit_distance(self, embedder_config):
         embedder_config["use_edit_distance_regresion"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         weight = embedder.calculate_weight_loss2()
         assert weight == 1
 
     def test_calculate_weight_loss2_without_edit_distance(self, embedder_config):
         embedder_config["use_edit_distance_regresion"] = False
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         weight = embedder.calculate_weight_loss2()
         assert weight == 200
@@ -252,7 +252,7 @@ class TestEmbedderMultitask:
 
     def test_forward_with_fingerprints(self, embedder_config, sample_batch):
         embedder_config["use_fingerprints"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         # Add fingerprints to batch
         batch_size = sample_batch["mz_0"].shape[0]
@@ -270,7 +270,7 @@ class TestEmbedderMultitask:
     def test_forward_without_adduct(self, embedder_config, sample_batch):
         # Test with use_adduct=False but keep USE_LEARNABLE_MULTITASK=True
         embedder_config["use_adduct"] = False
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         embedder.eval()
         with torch.no_grad():
@@ -292,7 +292,7 @@ class TestEmbedderMultitask:
 
     def test_training_step_with_gumbel(self, embedder_config, sample_batch):
         embedder_config["use_gumbel"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         # Add required fields
         sample_batch["ed"] = torch.tensor([2, 3])
@@ -308,7 +308,7 @@ class TestEmbedderMultitask:
         self, embedder_config, sample_batch
     ):
         embedder_config["use_edit_distance_regresion"] = True
-        embedder = EmbedderMultitask(**embedder_config)
+        embedder = SimilarityModelMultitask(**embedder_config)
 
         # Add required fields
         sample_batch["ed"] = torch.tensor([2, 3])

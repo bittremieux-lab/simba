@@ -6,8 +6,8 @@ Based on notebooks/final_tutorials/run_inference.ipynb
 import numpy as np
 import pytest
 
-from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.workflows.utils import load_spectra
 
 
@@ -65,7 +65,7 @@ class TestInferencePipeline:
         assert len(spectra) >= 2
         n_spectra = len(spectra)
 
-        model = EmbedderMultitask(
+        model = SimilarityModelMultitask(
             d_model=int(hydra_config.model.transformer.d_model),
             n_layers=int(hydra_config.model.transformer.n_layers),
             n_classes=hydra_config.model.tasks.edit_distance.n_classes,
@@ -79,7 +79,7 @@ class TestInferencePipeline:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint",
             return_value=model,
         )
 
@@ -98,7 +98,7 @@ class TestInferencePipeline:
 
     def test_embedding_caching(self, sample_mgf, mocker, hydra_config):
         """Test that embeddings caching works correctly."""
-        model = EmbedderMultitask(
+        model = SimilarityModelMultitask(
             d_model=int(hydra_config.model.transformer.d_model),
             n_layers=int(hydra_config.model.transformer.n_layers),
             n_classes=hydra_config.model.tasks.edit_distance.n_classes,
@@ -112,7 +112,7 @@ class TestInferencePipeline:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint",
             return_value=model,
         )
 

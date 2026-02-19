@@ -8,8 +8,10 @@ from simba.analog_discovery.fc_layers_analog_discovery import (
     FcLayerAnalogDiscovery,
 )
 from simba.core.data.datasets.encoder_dataset_builder import prepare_encoder_dataset
-from simba.core.models.embedder_multitask import EmbedderMultitask
-from simba.core.models.encoder import Encoder
+from simba.core.models.similarity_models import (
+    EmbeddingExtractor,
+    SimilarityModelMultitask,
+)
 
 
 class Simba:
@@ -31,7 +33,7 @@ class Simba:
         d_model = int(self.config.model.transformer.d_model)
         n_layers = int(self.config.model.transformer.n_layers)
 
-        return Encoder(
+        return EmbeddingExtractor(
             filepath,
             D_MODEL=d_model,
             N_LAYERS=n_layers,
@@ -56,7 +58,7 @@ class Simba:
         use_fingerprint = self.config.model.tasks.fingerprints.enabled
         use_learnable_multitask = self.config.model.multitasking.learnable
 
-        model = EmbedderMultitask.load_from_checkpoint(
+        model = SimilarityModelMultitask.load_from_checkpoint(
             file_path,
             d_model=d_model,
             n_layers=n_layers,

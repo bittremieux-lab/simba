@@ -95,11 +95,11 @@ END IONS
 @pytest.fixture
 def mock_model(mocker, hydra_config):
     """Create a mocked SIMBA model with random weights for testing."""
-    from simba.core.models.embedder_multitask import EmbedderMultitask
+    from simba.core.models.similarity_models import SimilarityModelMultitask
 
     cfg = hydra_config
 
-    model = EmbedderMultitask(
+    model = SimilarityModelMultitask(
         d_model=int(cfg.model.transformer.d_model),
         n_layers=int(cfg.model.transformer.n_layers),
         n_classes=cfg.model.tasks.edit_distance.n_classes,
@@ -113,7 +113,7 @@ def mock_model(mocker, hydra_config):
     model.eval()
 
     mocker.patch(
-        "simba.core.models.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+        "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint",
         return_value=model,
     )
 
