@@ -20,9 +20,9 @@ from simba.utils.binning import float_to_ordinal_class
 from simba.utils.logger_setup import logger
 
 
-class MultitaskDataLoader:
+class MultitaskDataBuilder:
     """
-    using unique identifiers
+    Class for building the dataset for multitask learning.
     """
 
     @staticmethod

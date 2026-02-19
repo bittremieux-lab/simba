@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader
 import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
+from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.data.multitask_dataset_builder import MultitaskDataLoader
 from simba.core.data.sampling.custom_weighted_random_sampler import (
     CustomWeightedRandomSampler,
 )
@@ -252,7 +252,7 @@ def prepare_data(
     )
 
     # Create datasets from molecule pairs
-    dataset_train = MultitaskDataLoader.from_molecule_pairs_to_dataset(
+    dataset_train = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_train,
         max_num_peaks=int(cfg.model.transformer.context_length),
         training=True,
@@ -262,7 +262,7 @@ def prepare_data(
         use_ion_method=cfg.model.features.use_ion_method,
     )
 
-    dataset_val = MultitaskDataLoader.from_molecule_pairs_to_dataset(
+    dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_val,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,
