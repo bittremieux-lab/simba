@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from simba.core.data.sampling.weight_sampling import WeightSampling
+from simba.core.data.weighted_sampling import SimilarityWeightSampler
 from simba.core.models.embedder import Embedder
 
 
@@ -353,7 +353,7 @@ class EmbedderMultitask(Embedder):
                 logits2_for_loss.view(-1, 1).float()
                 - target2_for_loss.view(-1, 1).float()
             ) ** 2
-            weight_mask = WeightSampling.compute_sample_weights(
+            weight_mask = SimilarityWeightSampler.compute_sample_weights(
                 molecule_pairs=None,
                 weights=self.weights_sim2,
                 use_molecule_pair_object=False,

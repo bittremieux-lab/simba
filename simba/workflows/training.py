@@ -19,10 +19,10 @@ import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.data.sampling.custom_weighted_random_sampler import (
+from simba.core.data.weighted_sampling import (
     CustomWeightedRandomSampler,
+    SimilarityWeightSampler,
 )
-from simba.core.data.sampling.weight_sampling import WeightSampling
 from simba.core.models.embedder_multitask import EmbedderMultitask
 from simba.core.training.losscallback import LossCallback
 from simba.core.training.train_utils import TrainUtils
@@ -243,11 +243,11 @@ def prepare_data(
         cfg.model.tasks.edit_distance.n_classes - 1,
         bin_sim_1=True,
     )
-    weights_ed, bins_ed = WeightSampling.compute_weights(train_binned_list)
-    weights_tr = WeightSampling.compute_sample_weights_categories(
+    weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
+    weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
         molecule_pairs_train, weights_ed
     )
-    weights_val = WeightSampling.compute_sample_weights_categories(
+    weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
         molecule_pairs_val, weights_ed
     )
 
