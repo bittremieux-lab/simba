@@ -703,8 +703,9 @@ class SimilarityModelMultitask(SimilarityModel):
         """
         Take two activated embeddings (after ReLU, fingerprint fusion, etc.)
         and run all the FC layers + similarity heads to produce:
-          - emb: the class–probability (or regression) output
-          - emb_sim_2: the second similarity score (cosine or regression)
+
+        - emb: the class–probability (or regression) output
+        - emb_sim_2: the second similarity score (cosine or regression)
         """
         # note: assume emb0/emb1 already had model.relu and fingerprint logic applied
         # now do exactly what you had in compute_emb_from_existing_embeddings:
