@@ -3,7 +3,7 @@ from typing import IO
 
 import dill
 
-from simba.core.data.loaders import LoadData
+from simba.core.data.loaders.loaders import LoadData
 from simba.core.data.spectrum import SpectrumExt
 
 

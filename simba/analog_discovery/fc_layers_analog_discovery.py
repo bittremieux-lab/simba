@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
+from simba.core.models.similarity_models import SimilarityModelMultitask
 
 
 class FcLayerAnalogDiscovery:
@@ -20,7 +20,7 @@ class FcLayerAnalogDiscovery:
         use_cosine_distance = config.model.tasks.cosine_similarity.use_cosine_distance
         use_fingerprints = config.model.tasks.fingerprints.enabled
 
-        return EmbedderMultitask.load_from_checkpoint(
+        return SimilarityModelMultitask.load_from_checkpoint(
             model_path,
             d_model=d_model,
             n_layers=n_layers,

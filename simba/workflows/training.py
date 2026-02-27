@@ -14,28 +14,27 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-import simba.core.data.molecular_pairs
-import simba.core.data.molecule_pairs_opt
+import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
-from simba.core.data.preprocessing_simba import PreprocessingSimba
-from simba.core.data.sampling.custom_weighted_random_sampler import (
+from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
+from simba.core.data.molecule_pairs import MoleculePairsOpt
+from simba.core.data.weighted_sampling import (
     CustomWeightedRandomSampler,
+    SimilarityWeightSampler,
 )
-from simba.core.data.sampling.weight_sampling import WeightSampling
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.losscallback import LossCallback
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.utils.sanity_checks import SanityChecks
+from simba.workflows.utils import load_spectra
 
 
 # Backward compatibility: Support loading old pickle files with old module paths
 # These modules were refactored from simba.* to simba.core.* hierarchy
-sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs_opt
-sys.modules["simba.molecular_pairs"] = simba.core.data.molecular_pairs
+sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs
+sys.modules["simba.molecular_pairs"] = simba.core.data.molecule_pairs
 sys.modules["simba.spectrum"] = simba.core.data.spectrum
 sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
@@ -85,7 +84,7 @@ def load_dataset(cfg: DictConfig):
         )
 
         mgf_path = mapping["mgf_path"]
-        all_spectra = PreprocessingSimba.load_spectra(mgf_path, cfg)
+        all_spectra = load_spectra(mgf_path, cfg)
 
         # Create spectrum lookup by MGF index
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}
@@ -244,16 +243,16 @@ def prepare_data(
         cfg.model.tasks.edit_distance.n_classes - 1,
         bin_sim_1=True,
     )
-    weights_ed, bins_ed = WeightSampling.compute_weights(train_binned_list)
-    weights_tr = WeightSampling.compute_sample_weights_categories(
+    weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
+    weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
         molecule_pairs_train, weights_ed
     )
-    weights_val = WeightSampling.compute_sample_weights_categories(
+    weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
         molecule_pairs_val, weights_ed
     )
 
     # Create datasets from molecule pairs
-    dataset_train = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_train = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_train,
         max_num_peaks=int(cfg.model.transformer.context_length),
         training=True,
@@ -263,7 +262,7 @@ def prepare_data(
         use_ion_method=cfg.model.features.use_ion_method,
     )
 
-    dataset_val = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_val,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,
@@ -365,13 +364,13 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     return checkpoint_callback, checkpoint_n_steps_callback, loss_callback
 
 
-def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> EmbedderMultitask:
+def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMultitask:
     """Setup the SIMBA model.
     Args:
         cfg: Hydra configuration
         weights_mces: MCES weights for loss calculation
     Returns:
-        Initialized EmbedderMultitask model
+        Initialized SimilarityModelMultitask model
     """
     model_kwargs = {
         "d_model": cfg.model.transformer.d_model,
@@ -403,19 +402,19 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> EmbedderMultitask:
         pretrained_path = paths["pretrained_path"]
 
         if pretrained_path.exists():
-            model = EmbedderMultitask.load_from_checkpoint(
+            model = SimilarityModelMultitask.load_from_checkpoint(
                 str(pretrained_path), **model_kwargs
             )
         else:
-            model = EmbedderMultitask(**model_kwargs)
+            model = SimilarityModelMultitask(**model_kwargs)
     else:
-        model = EmbedderMultitask(**model_kwargs)
+        model = SimilarityModelMultitask(**model_kwargs)
 
     return model
 
 
 def train(
-    model: EmbedderMultitask,
+    model: SimilarityModelMultitask,
     dataloader_train: DataLoader,
     dataloader_val: DataLoader,
     cfg: DictConfig,

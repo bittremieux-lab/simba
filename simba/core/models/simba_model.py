@@ -7,9 +7,11 @@ from torch.utils.data import DataLoader
 from simba.analog_discovery.fc_layers_analog_discovery import (
     FcLayerAnalogDiscovery,
 )
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.transformers.encoder import Encoder
-from simba.core.models.transformers.load_data_encoder import LoadDataEncoder
+from simba.core.data.datasets.encoder_dataset_builder import prepare_encoder_dataset
+from simba.core.models.similarity_models import (
+    EmbeddingExtractor,
+    SimilarityModelMultitask,
+)
 
 
 class Simba:
@@ -31,7 +33,7 @@ class Simba:
         d_model = int(self.config.model.transformer.d_model)
         n_layers = int(self.config.model.transformer.n_layers)
 
-        return Encoder(
+        return EmbeddingExtractor(
             filepath,
             D_MODEL=d_model,
             N_LAYERS=n_layers,
@@ -56,7 +58,7 @@ class Simba:
         use_fingerprint = self.config.model.tasks.fingerprints.enabled
         use_learnable_multitask = self.config.model.multitasking.learnable
 
-        model = EmbedderMultitask.load_from_checkpoint(
+        model = SimilarityModelMultitask.load_from_checkpoint(
             file_path,
             d_model=d_model,
             n_layers=n_layers,
@@ -153,7 +155,7 @@ class Simba:
         transformer_context = int(self.config.model.transformer.context_length)
         batch_size = self.config.training.batch_size
 
-        dataset = LoadDataEncoder.from_spectrums_to_dataset(
+        dataset = prepare_encoder_dataset(
             spectrums,
             max_num_peaks=transformer_context,
         )

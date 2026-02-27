@@ -12,8 +12,7 @@ from tqdm import tqdm
 
 from simba.core.chemistry.edit_distance import edit_distance
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecular_pairs import MolecularPairsSet
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.molecule_pairs import MolecularPairsSet, MoleculePairsOpt
 from simba.core.data.spectrum import SpectrumExt
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger

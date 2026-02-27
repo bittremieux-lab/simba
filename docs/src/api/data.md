@@ -2,8 +2,28 @@
 
 ## Data Loading
 
+### File Loaders
+
 ```{eval-rst}
-.. automodule:: simba.core.data.loaders
+.. automodule:: simba.core.data.loaders.loaders
+    :members:
+    :undoc-members:
+    :show-inheritance:
+```
+
+### NIST Loader
+
+```{eval-rst}
+.. automodule:: simba.core.data.loaders.nist_loader
+    :members:
+    :undoc-members:
+    :show-inheritance:
+```
+
+### Loader with Caching
+
+```{eval-rst}
+.. automodule:: simba.core.data.loaders.loader_saver
     :members:
     :undoc-members:
     :show-inheritance:
@@ -12,14 +32,7 @@
 ## Data Preprocessing
 
 ```{eval-rst}
-.. automodule:: simba.core.data.preprocessing
-    :members:
-    :undoc-members:
-    :show-inheritance:
-```
-
-```{eval-rst}
-.. automodule:: simba.core.data.preprocessing_simba
+.. automodule:: simba.core.data.preprocessor
     :members:
     :undoc-members:
     :show-inheritance:
@@ -34,39 +47,54 @@
     :show-inheritance:
 ```
 
-## Ground Truth
-
-```{eval-rst}
-.. automodule:: simba.core.data.ground_truth
-    :members:
-    :undoc-members:
-    :show-inheritance:
-```
-
 ## Dataset Classes
 
-### Base Dataset
+### Encoder Dataset
+
+Dataset for single spectrum embedding.
 
 ```{eval-rst}
-.. autoclass:: simba.core.models.transformers.CustomDatasetEncoder.CustomDatasetEncoder
+.. automodule:: simba.core.data.datasets.encoder_dataset
     :members:
     :undoc-members:
     :show-inheritance:
 ```
 
-### Unique Dataset
+### Multitask Dataset
+
+Dataset for spectrum pair comparison with multitask learning.
 
 ```{eval-rst}
-.. autoclass:: simba.core.models.transformers.CustomDatasetUnique.CustomDatasetUnique
+.. automodule:: simba.core.data.datasets.multitask_dataset
     :members:
     :undoc-members:
     :show-inheritance:
 ```
 
-### Multitasking Dataset
+## Dataset Builders
+
+### Encoder Dataset Builder
 
 ```{eval-rst}
-.. autoclass:: simba.core.models.transformers.CustomDatasetMultitasking.CustomDatasetMultitasking
+.. automodule:: simba.core.data.datasets.encoder_dataset_builder
+    :members:
+    :undoc-members:
+    :show-inheritance:
+```
+
+### Multitask Dataset Builder
+
+```{eval-rst}
+.. automodule:: simba.core.data.datasets.multitask_dataset_builder
+    :members:
+    :undoc-members:
+    :show-inheritance:
+```
+
+## Weighted Sampling
+
+```{eval-rst}
+.. automodule:: simba.core.data.weighted_sampling
     :members:
     :undoc-members:
     :show-inheritance:

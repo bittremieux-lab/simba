@@ -12,23 +12,21 @@ from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from torch.utils.data import DataLoader
 
-import simba.core.data.molecular_pairs
-import simba.core.data.molecule_pairs_opt
+import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
-from simba.core.data.preprocessing_simba import PreprocessingSimba
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
-from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
-from simba.core.models.transformers.postprocessing import Postprocessing
+from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
+from simba.core.data.molecule_pairs import MoleculePairsOpt
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
+from simba.workflows.utils import load_spectra
 
 
 # Backward compatibility: Support loading old pickle files with old module paths
 # These modules were refactored from simba.* to simba.core.* hierarchy
-sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs_opt
-sys.modules["simba.molecular_pairs"] = simba.core.data.molecular_pairs
+sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs
+sys.modules["simba.molecular_pairs"] = simba.core.data.molecule_pairs
 sys.modules["simba.spectrum"] = simba.core.data.spectrum
 sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
@@ -56,7 +54,7 @@ def load_inference_data(cfg: DictConfig):
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
         mgf_path = dataset["mgf_path"]
-        all_spectra = PreprocessingSimba.load_spectra(mgf_path, cfg)
+        all_spectra = load_spectra(mgf_path, cfg)
 
         # Create spectrum lookup by MGF index
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}
@@ -152,7 +150,7 @@ def prepare_inference_dataloaders(
 
     # Create dataloaders
     logger.info("Creating dataloaders...")
-    dataset_ed = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_ed = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_ed_uniform,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,
@@ -164,7 +162,7 @@ def prepare_inference_dataloaders(
         dataset_ed, batch_size=cfg.inference.batch_size, shuffle=False
     )
 
-    dataset_mces = LoadDataMultitasking.from_molecule_pairs_to_dataset(
+    dataset_mces = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
         molecule_pairs_mces_uniform,
         max_num_peaks=int(cfg.model.transformer.context_length),
         use_adduct=cfg.model.features.use_adduct,
@@ -187,7 +185,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         checkpoint_path: Path to model checkpoint
 
     Returns:
-        EmbedderMultitask: Loaded model in eval mode
+        SimilarityModelMultitask: Loaded model in eval mode
     """
     logger.info(f"Loading model from {checkpoint_path}...")
 
@@ -206,7 +204,9 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         "use_ion_method": cfg.model.features.use_ion_method,
     }
 
-    model = EmbedderMultitask.load_from_checkpoint(checkpoint_path, **load_kwargs)
+    model = SimilarityModelMultitask.load_from_checkpoint(
+        checkpoint_path, **load_kwargs
+    )
     model.eval()
 
     return model
@@ -214,7 +214,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
 
 def run_inference(
     cfg: DictConfig,
-    model: EmbedderMultitask,
+    model: SimilarityModelMultitask,
     dataloader_ed,
     dataloader_mces,
 ):
@@ -277,8 +277,8 @@ def evaluate_predictions(
         raise ValueError("Empty predictions received")
 
     # Get ground truth
-    ed_true, _ = Postprocessing.get_similarities_multitasking(dataloader_ed)
-    _, mces_true = Postprocessing.get_similarities_multitasking(dataloader_mces)
+    ed_true, _ = _get_ground_truth(dataloader_ed)
+    _, mces_true = _get_ground_truth(dataloader_mces)
 
     # Flatten MCES predictions
     # pred_mces is list of batches, each batch is (emb, emb_sim_2)
@@ -408,6 +408,23 @@ def inference(cfg: DictConfig) -> dict:
 
 
 # Helper functions
+def _get_ground_truth(dataloader) -> tuple[list[float], list[float]]:
+    """Extract ground truth edit distance and MCES values from dataloader.
+
+    Args:
+        dataloader: DataLoader containing batches with 'ed' and 'mces' keys
+
+    Returns:
+        tuple: (ed_values, mces_values) as lists of floats
+    """
+    ed = [[float(b) for b in batch["ed"]] for batch in dataloader]
+    mces = [[float(b) for b in batch["mces"]] for batch in dataloader]
+
+    ed = [item for sublist in ed for item in sublist]
+    mces = [item for sublist in mces for item in sublist]
+    return ed, mces
+
+
 def _remove_duplicate_pairs(array):
     """Remove duplicate pairs from array."""
     seen = set()

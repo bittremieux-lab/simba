@@ -8,8 +8,8 @@ from tqdm import tqdm
 
 from simba.core.chemistry import chem_utils
 from simba.core.chemistry.scaffolds import MurckoScaffold
-from simba.core.data.nist_loader import NistLoader
-from simba.core.data.preprocessing import PreprocessingUtils
+from simba.core.data.loaders.nist_loader import NistLoader
+from simba.core.data.preprocessor import PreprocessingUtils
 from simba.core.data.spectrum import SpectrumExt
 from simba.core.data.spectrum_processing import spectrum_hash
 from simba.utils.logger_setup import logger
@@ -71,9 +71,7 @@ class LoadData:
                 # try:
                 if use_only_protonized_adducts:
                     if use_gnps_format:
-                        condition, res = LoadData.is_valid_spectrum_gnps(
-                            spectrum, cfg
-                        )
+                        condition, res = LoadData.is_valid_spectrum_gnps(spectrum, cfg)
                     else:  # janssen format
                         condition, res = LoadData.is_valid_spectrum_janssen(
                             spectrum, cfg
@@ -174,7 +172,9 @@ class LoadData:
         """
         cond_library = True  # all the library is good
         if "charge" in spectrum["params"]:
-            cond_charge = int(spectrum["params"]["charge"][0]) in cfg.data.ms_parameters.charges
+            cond_charge = (
+                int(spectrum["params"]["charge"][0]) in cfg.data.ms_parameters.charges
+            )
         else:
             cond_charge = True
 
@@ -256,7 +256,9 @@ class LoadData:
             cond_library = True
 
         if "charge" in spectrum["params"]:
-            cond_charge = int(spectrum["params"]["charge"][0]) in cfg.data.ms_parameters.charges
+            cond_charge = (
+                int(spectrum["params"]["charge"][0]) in cfg.data.ms_parameters.charges
+            )
         else:
             cond_charge = True
         # try to convert to float the pep mass

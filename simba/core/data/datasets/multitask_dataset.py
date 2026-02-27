@@ -9,7 +9,7 @@ from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
 )
-from simba.core.models.transformers.augmentation import Augmentation
+from simba.core.data.augmentation import Augmentation
 
 
 class CustomDatasetMultitasking(Dataset):

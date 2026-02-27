@@ -9,13 +9,6 @@ class SpectrumExt(MsmsSpectrum):
     extended spectrum class that incorporates the binned vector
     """
 
-    # def __init__(self, **kwargs):
-    #        super().__init__(**kwargs)  # Call the constructor of the base class
-    #
-    #        # extra variables
-    #        self.spectrum_vector = np.array([])
-    #        self.smiles = ''
-
     def __init__(
         self,
         identifier: str,
@@ -80,12 +73,8 @@ class SpectrumExt(MsmsSpectrum):
     def set_params(self, params):
         self.params = params
 
-    # def set_mz_array(self, mz_array):
-    #    self.mz_array = mz_array
-
     def __getstate__(self):
         # Get the state of the base class
-        # state = super(SpectrumExt, self).__getstate__()
         state = super(SpectrumExt, self).__getstate__()
         # Add state for the derived class
         state.update(
@@ -161,9 +150,6 @@ class SpectrumExt(MsmsSpectrum):
             self.mgf_index = state["mgf_index"]
         except:
             self.mgf_index = None
-
-    # def set_intesity_array(self, intensity_array):
-    #    self.intensity_array = intensity_array
 
     def set_spectrum_vector(self, spectrum_vector):
         self.spectrum_vector = spectrum_vector

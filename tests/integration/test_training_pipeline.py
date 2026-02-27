@@ -16,12 +16,12 @@ import numpy as np
 import pandas as pd
 
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
-from simba.core.data.preprocessing_simba import PreprocessingSimba
+from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.spectrum import SpectrumExt
-from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
 from simba.core.models.simba_model import Simba
+from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.train_utils import TrainUtils
+from simba.workflows.utils import load_spectra
 
 
 class TestDataPreprocessing:
@@ -30,7 +30,7 @@ class TestDataPreprocessing:
     def test_train_val_test_split(self, sample_training_spectra, hydra_config):
         """Test that train/val/test split works correctly."""
         # Load spectra
-        all_spectra = PreprocessingSimba.load_spectra(
+        all_spectra = load_spectra(
             str(sample_training_spectra),
             hydra_config,
             n_samples=100,
@@ -75,7 +75,7 @@ class TestDataPreprocessing:
         self, sample_training_spectra, tmp_path, hydra_config
     ):
         """Test that preprocessing creates the expected mapping file structure."""
-        all_spectra = PreprocessingSimba.load_spectra(
+        all_spectra = load_spectra(
             str(sample_training_spectra),
             hydra_config,
             n_samples=100,
@@ -331,7 +331,7 @@ class TestTrainingSmoke:
         n_classes = hydra_config.model.tasks.edit_distance.n_classes
         use_gumbel = False
 
-        model = EmbedderMultitask(
+        model = SimilarityModelMultitask(
             d_model=d_model,
             n_layers=n_layers,
             n_classes=n_classes,
@@ -342,7 +342,7 @@ class TestTrainingSmoke:
         assert hasattr(model, "spectrum_encoder")
 
     @patch(
-        "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint"
+        "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint"
     )
     def test_checkpoint_loading(self, mock_load):
         """Test that checkpoint loading interface works."""
@@ -351,7 +351,7 @@ class TestTrainingSmoke:
         mock_model = MagicMock()
         mock_load.return_value = mock_model
 
-        model = EmbedderMultitask.load_from_checkpoint(checkpoint_path)
+        model = SimilarityModelMultitask.load_from_checkpoint(checkpoint_path)
 
         assert model is not None
         mock_load.assert_called_once()
@@ -362,7 +362,7 @@ class TestInferenceOnTrainedModel:
 
     def test_embedding_generation_shape(self, sample_mgf, mocker, hydra_config):
         """Test that model produces embeddings of expected shape."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             str(sample_mgf),
             hydra_config,
             n_samples=5,
@@ -371,7 +371,7 @@ class TestInferenceOnTrainedModel:
 
         assert len(spectra) >= 2
 
-        model = EmbedderMultitask(
+        model = SimilarityModelMultitask(
             d_model=int(hydra_config.model.transformer.d_model),
             n_layers=int(hydra_config.model.transformer.n_layers),
             n_classes=hydra_config.model.tasks.edit_distance.n_classes,
@@ -385,7 +385,7 @@ class TestInferenceOnTrainedModel:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint",
             return_value=model,
         )
 
@@ -407,7 +407,7 @@ class TestInferenceOnTrainedModel:
         self, sample_mgf_casmi, mocker, hydra_config
     ):
         """Test that similarity computation works with trained model."""
-        spectra = PreprocessingSimba.load_spectra(
+        spectra = load_spectra(
             str(sample_mgf_casmi),
             hydra_config,
             n_samples=10,
@@ -416,7 +416,7 @@ class TestInferenceOnTrainedModel:
 
         assert len(spectra) >= 2, f"Need at least 2 spectra, got {len(spectra)}"
 
-        model = EmbedderMultitask(
+        model = SimilarityModelMultitask(
             d_model=int(hydra_config.model.transformer.d_model),
             n_layers=int(hydra_config.model.transformer.n_layers),
             n_classes=hydra_config.model.tasks.edit_distance.n_classes,
@@ -430,7 +430,7 @@ class TestInferenceOnTrainedModel:
         model.eval()
 
         mocker.patch(
-            "simba.core.models.ordinal.embedder_multitask.EmbedderMultitask.load_from_checkpoint",
+            "simba.core.models.similarity_models.SimilarityModelMultitask.load_from_checkpoint",
             return_value=model,
         )
 

@@ -8,9 +8,9 @@ import numpy as np
 from omegaconf import DictConfig
 
 from simba.analog_discovery.simba_analog_discovery import AnalogDiscovery
-from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.simba_model import Simba
 from simba.utils.logger_setup import logger
+from simba.workflows.utils import load_spectra
 
 
 def run_analog_discovery(cfg: DictConfig) -> dict:
@@ -31,11 +31,11 @@ def run_analog_discovery(cfg: DictConfig) -> dict:
     output_path = str(output_dir) + os.sep
 
     # Load spectra using Hydra config
-    all_spectrums_query = PreprocessingSimba.load_spectra(
+    all_spectrums_query = load_spectra(
         str(query_spectra), cfg, use_gnps_format=cfg.analog_discovery.use_gnps_format
     )
 
-    all_spectrums_reference = PreprocessingSimba.load_spectra(
+    all_spectrums_reference = load_spectra(
         str(reference_spectra),
         cfg,
         use_gnps_format=cfg.analog_discovery.use_gnps_format,
@@ -145,7 +145,7 @@ def process_single_query(
     save_plots: bool = True,
 ) -> dict:
     """Process a single query spectrum and find its top matches."""
-    from simba.core.data.ground_truth import GroundTruth
+    from simba.core.chemistry.similarity_metrics import MolecularSimilarityMetrics
 
     spectra_query = all_spectrums_query[query_index]
 
@@ -172,10 +172,10 @@ def process_single_query(
 
     if compute_ground_truth and "smiles" in spectra_query.params:
         try:
-            ground_truth_mces = GroundTruth.compute_mces(
+            ground_truth_mces = MolecularSimilarityMetrics.compute_mces(
                 [spectra_query], spectra_matches
             )
-            ground_truth_ed = GroundTruth.compute_edit_distance(
+            ground_truth_ed = MolecularSimilarityMetrics.compute_edit_distance(
                 [spectra_query], spectra_matches
             )
             ground_truth_mces = ground_truth_mces[0]  # Extract first row
