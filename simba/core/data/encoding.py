@@ -7,7 +7,25 @@ ION_ACTIVATION = ["HCD", "CID"]
 IONIZATION_METHODS = ["NSI", "ESI", "APCI"]
 
 
-def encode_adduct(adduct: str):
+def encode_adduct_mass(adduct: str):
+    """Encode adduct as its mass.
+
+    Args:
+        adduct: Adduct string (e.g., '[M+H]+')
+
+    Returns:
+        float: Mass of the adduct, or 0 if adduct is not recognized
+    """
+    # TODO: how encode adduct if not recognized?
+    # Currently returns 0, but might interfere with spectra without adducts
+    adducts = ADDUCT_TO_MASS.keys()
+    response = [0 for a in adducts]
+    if adduct in adducts:
+        response[0] = ADDUCT_TO_MASS[adduct]
+    return response
+
+
+def encode_adduct_one_hot(adduct: str):
     """Encode adduct string as one-hot vector.
 
     Args:
@@ -88,7 +106,9 @@ class OneHotEncoding:
         best_row = df_mode.loc[idx_closest]
 
         # All columns that encode adduct composition (including adduct_M)
-        adduct_cols = [c for c in self.df_adduct.columns if c.startswith("adduct_")]
+        adduct_cols = [
+            c for c in self.df_adduct.columns if c.startswith("adduct_")
+        ]
 
         # Extract their values as a list (you can cast to int if you prefer)
         list_adduct_elements = best_row[adduct_cols].tolist()
@@ -97,8 +117,15 @@ class OneHotEncoding:
 
     def encode_ion_activation(self, ion_activation):
         ion_activation_upper = ion_activation.upper() if ion_activation else ""
-        return [1 if ion_activation_upper == ia else 0 for ia in ION_ACTIVATION]
+        return [
+            1 if ion_activation_upper == ia else 0 for ia in ION_ACTIVATION
+        ]
 
     def encode_ionization_method(self, ionization_method):
-        ionization_method_upper = ionization_method.upper() if ionization_method else ""
-        return [1 if ionization_method_upper == im else 0 for im in IONIZATION_METHODS]
+        ionization_method_upper = (
+            ionization_method.upper() if ionization_method else ""
+        )
+        return [
+            1 if ionization_method_upper == im else 0
+            for im in IONIZATION_METHODS
+        ]

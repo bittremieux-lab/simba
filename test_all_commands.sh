@@ -120,6 +120,7 @@ uv run simba train \
     training=fast_dev \
     paths.preprocessing_dir_train=./test_full_workflow/preprocessed/ \
     paths.checkpoint_dir=./test_full_workflow/checkpoints_metadata/ \
+    model.features.use_adduct=true \
     model.features.use_ce=true \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \
@@ -135,6 +136,7 @@ uv run simba inference \
     paths.checkpoint_dir=./test_full_workflow/checkpoints_metadata/ \
     paths.preprocessing_dir=./test_full_workflow/preprocessed/ \
     inference.preprocessing_pickle=mapping_unique_smiles.pkl \
+    model.features.use_adduct=true \
     model.features.use_ce=true \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \
@@ -150,6 +152,7 @@ uv run simba analog-discovery \
     --reference-spectra data/casmi2022.mgf \
     --output-dir ./test_full_workflow/analog_results_metadata/ \
     analog_discovery.query_index=0 \
+    model.features.use_adduct=true \
     model.features.use_ce=true \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \

@@ -78,6 +78,7 @@ class EmbedderMultitask(Embedder):
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
+        use_ion_mode=False,
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -92,6 +93,7 @@ class EmbedderMultitask(Embedder):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
+            use_ion_mode= use_ion_mode,
         )
         self.weights = weights
 
@@ -139,17 +141,19 @@ class EmbedderMultitask(Embedder):
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
         if USE_LEARNABLE_MULTITASK:
-            initial_log_sigma1 = 1.2490483522415161
-            initial_log_sigma2 = -7.0018157958984375
-            # self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
-            # self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
-            self.log_sigma1 = torch.tensor(
-                float(initial_log_sigma1), dtype=torch.float32
-            )
-            self.log_sigma2 = torch.tensor(
-                float(initial_log_sigma2), dtype=torch.float32
-            )
-            self.use_extra_metadata = use_adduct
+            #initial_log_sigma1 = 1.2490483522415161
+            #initial_log_sigma2 = -7.0018157958984375
+            initial_log_sigma1= 0.0 
+            initial_log_sigma2 = -5.3  
+            self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
+            self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
+            #self.log_sigma1 = torch.tensor(
+            #    float(initial_log_sigma1), dtype=torch.float32
+            #)
+            #self.log_sigma2 = torch.tensor(
+            #    float(initial_log_sigma2), dtype=torch.float32
+            #)
+            #self.use_extra_metadata = use_adduct
 
     def forward(self, batch, return_spectrum_output=False):
         # … compute raw emb0, emb1, apply relu, fingerprints, etc. …
@@ -161,6 +165,8 @@ class EmbedderMultitask(Embedder):
         batch["precursor_mass_1"] = torch.nan_to_num(
             batch["precursor_mass_1"], nan=0.0, posinf=0.0, neginf=0.0
         )
+
+
         batch["precursor_charge_0"] = torch.nan_to_num(
             batch["precursor_charge_0"], nan=0.0, posinf=0.0, neginf=0.0
         )
@@ -183,56 +189,51 @@ class EmbedderMultitask(Embedder):
             "precursor_mass": mz_1,
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
-
-        if self.use_adduct:
-            batch["ionmode_0"] = torch.nan_to_num(
+        batch["ionmode_0"] = torch.nan_to_num(
                 batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["ionmode_1"] = torch.nan_to_num(
+        batch["ionmode_1"] = torch.nan_to_num(
                 batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["adduct_0"] = torch.nan_to_num(
+        kwargs_0["ionmode"] = batch["ionmode_0"].float()
+        kwargs_1["ionmode"] = batch["ionmode_1"].float()
+        batch["adduct_0"] = torch.nan_to_num(
                 batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["adduct_1"] = torch.nan_to_num(
+        batch["adduct_1"] = torch.nan_to_num(
                 batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
             )
 
-            kwargs_0["ionmode"] = batch["ionmode_0"].float()
-            kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct"] = batch["adduct_0"].float()
-            kwargs_1["adduct"] = batch["adduct_1"].float()
+        kwargs_0["adduct"] = batch["adduct_0"].float()
+        kwargs_1["adduct"] = batch["adduct_1"].float()
 
-        if self.use_ce:
-            batch["ce_0"] = torch.nan_to_num(
+        batch["ce_0"] = torch.nan_to_num(
                 batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["ce_1"] = torch.nan_to_num(
+        batch["ce_1"] = torch.nan_to_num(
                 batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            kwargs_0["ce"] = batch["ce_0"].float()
-            kwargs_1["ce"] = batch["ce_1"].float()
+        kwargs_0["ce"] = batch["ce_0"].float()
+        kwargs_1["ce"] = batch["ce_1"].float()
 
-        if self.use_ion_activation:
-            batch["ion_activation_0"] = torch.nan_to_num(
+        batch["ion_activation_0"] = torch.nan_to_num(
                 batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["ion_activation_1"] = torch.nan_to_num(
+        batch["ion_activation_1"] = torch.nan_to_num(
                 batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-            kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+        kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
+        kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
-        if self.use_ion_method:
-            batch["ion_method_0"] = torch.nan_to_num(
+        batch["ion_method_0"] = torch.nan_to_num(
                 batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
             )
-            batch["ion_method_1"] = torch.nan_to_num(
+        batch["ion_method_1"] = torch.nan_to_num(
                 batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
             )
 
-            kwargs_0["ion_method"] = batch["ion_method_0"].float()
-            kwargs_1["ion_method"] = batch["ion_method_1"].float()
+        kwargs_0["ion_method"] = batch["ion_method_0"].float()
+        kwargs_1["ion_method"] = batch["ion_method_1"].float()
 
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(

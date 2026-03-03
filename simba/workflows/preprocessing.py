@@ -50,30 +50,36 @@ def write_data(
         # Lightweight format: save only df_smiles, original MGF indexes, and mgf path
         # Spectra will be loaded at training time from mgf file using absolute indexes
         dataset = {
-            "df_smiles_train": molecule_pairs_train.df_smiles
-            if molecule_pairs_train is not None
-            else None,
-            "df_smiles_val": molecule_pairs_val.df_smiles
-            if molecule_pairs_val is not None
-            else None,
-            "df_smiles_test": molecule_pairs_test.df_smiles
-            if molecule_pairs_test is not None
-            else None,
-            "spectrum_indexes_train": [
-                s.mgf_index for s in molecule_pairs_train.original_spectra
-            ]
-            if molecule_pairs_train is not None
-            else None,
-            "spectrum_indexes_val": [
-                s.mgf_index for s in molecule_pairs_val.original_spectra
-            ]
-            if molecule_pairs_val is not None
-            else None,
-            "spectrum_indexes_test": [
-                s.mgf_index for s in molecule_pairs_test.original_spectra
-            ]
-            if molecule_pairs_test is not None
-            else None,
+            "df_smiles_train": (
+                molecule_pairs_train.df_smiles
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "df_smiles_val": (
+                molecule_pairs_val.df_smiles
+                if molecule_pairs_val is not None
+                else None
+            ),
+            "df_smiles_test": (
+                molecule_pairs_test.df_smiles
+                if molecule_pairs_test is not None
+                else None
+            ),
+            "spectrum_indexes_train": (
+                [s.mgf_index for s in molecule_pairs_train.original_spectra]
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "spectrum_indexes_val": (
+                [s.mgf_index for s in molecule_pairs_val.original_spectra]
+                if molecule_pairs_val is not None
+                else None
+            ),
+            "spectrum_indexes_test": (
+                [s.mgf_index for s in molecule_pairs_test.original_spectra]
+                if molecule_pairs_test is not None
+                else None
+            ),
             "mgf_path": mgf_path,
             "format_version": "lightweight",
         }
@@ -151,7 +157,9 @@ def preprocess(cfg: DictConfig) -> None:
     )
 
     # Limit to max spectra
-    all_spectra_train = all_spectra_train[0 : cfg.preprocessing.max_spectra_train]
+    all_spectra_train = all_spectra_train[
+        0 : cfg.preprocessing.max_spectra_train
+    ]
     all_spectra_val = all_spectra_val[0 : cfg.preprocessing.max_spectra_val]
     all_spectra_test = all_spectra_test[0 : cfg.preprocessing.max_spectra_test]
 
@@ -177,7 +185,9 @@ def preprocess(cfg: DictConfig) -> None:
     output_file = workspace / cfg.paths.preprocessing_pickle_file
     logger.info(f"Saving mapping file early to {output_file}...")
 
-    use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
+    use_lightweight_format = getattr(
+        cfg.preprocessing, "use_lightweight_format", False
+    )
     if use_lightweight_format:
         logger.info("Saving in lightweight format (early save)")
         dataset = {
@@ -189,7 +199,8 @@ def preprocess(cfg: DictConfig) -> None:
                 for s in molecule_pairs_metadata["_train"]["original_spectra"]
             ],
             "spectrum_indexes_val": [
-                s.mgf_index for s in molecule_pairs_metadata["_val"]["original_spectra"]
+                s.mgf_index
+                for s in molecule_pairs_metadata["_val"]["original_spectra"]
             ],
             "spectrum_indexes_test": [
                 s.mgf_index
@@ -248,7 +259,9 @@ def preprocess(cfg: DictConfig) -> None:
             # Extract the suffix after the partition name
             suffix_pattern = f"indexes_tani_incremental_{partition}_"
             if suffix_pattern in file_loaded:
-                suffix_part = file_loaded.split(suffix_pattern)[1].replace(".npy", "")
+                suffix_part = file_loaded.split(suffix_pattern)[1].replace(
+                    ".npy", ""
+                )
                 file_identifiers.add(suffix_part)
 
         for identifier in sorted(file_identifiers):
@@ -289,7 +302,9 @@ def preprocess(cfg: DictConfig) -> None:
 
     # Save/update mapping file (final save for full format, update for lightweight)
     output_file = workspace / cfg.paths.preprocessing_pickle_file
-    use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
+    use_lightweight_format = getattr(
+        cfg.preprocessing, "use_lightweight_format", False
+    )
     if not use_lightweight_format:
         logger.info(f"Saving mapping to {output_file}...")
         write_data(

@@ -12,6 +12,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
+        use_ion_mode:  bool =False,
         **kwargs,
     ):
         """
@@ -34,7 +35,8 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         self.use_ce = use_ce
         self.use_ion_activation = use_ion_activation
         self.use_ion_method = use_ion_method
-        
+        self.use_ion_mode = use_ion_mode
+
         if self.use_encoders:
             if self.use_adduct:
                 self.adduct_encoder = FloatEncoder(self.d_model)
@@ -71,35 +73,42 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             precursor_charge = (
                 kwargs["precursor_charge"].float().to(device).view(batch_size)
         )
-            placeholder[:, 1] = precursor_charge
-
+            # skip the use of the precursor charge field
+            if self.use_ion_mode:
+                placeholder[:, 1] = precursor_charge
+            
             current_idx = 2  # keep track of where to insert metadata
-            if self.use_adduct:
-                ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
+            
+          
+            ionmode = kwargs["ionmode"].float().to(device).view(batch_size) 
+            if self.use_ion_mode:    
                 placeholder[:, current_idx] = ionmode
-                current_idx += 1
+            current_idx += 1          
 
-                adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
-                stop_idx = current_idx + adduct.shape[1]
+
+            adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + adduct.shape[1]
+            if self.use_adduct:
                 placeholder[:, current_idx:stop_idx] = adduct
-                current_idx = stop_idx
-
+            current_idx = stop_idx
+            
+            ce = kwargs["ce"].float().to(device).view(batch_size)
             if self.use_ce:
-                ce = kwargs["ce"].float().to(device).view(batch_size)
-                placeholder[:, current_idx] = ce
-                current_idx += 1
+               placeholder[:, current_idx] = ce
+            current_idx += 1
 
+
+            ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + ia.shape[1]
             if self.use_ion_activation:
-                ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
-                stop_idx = current_idx + ia.shape[1]
                 placeholder[:, current_idx:stop_idx] = ia
-                current_idx = stop_idx
+            current_idx = stop_idx
 
-            if self.use_ion_method:
-                im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
-                stop_idx = current_idx + im.shape[1]
+            im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
+            stop_idx = current_idx + im.shape[1]
+            if self.use_ion_method:   
                 placeholder[:, current_idx:stop_idx] = im
-                current_idx = stop_idx
+            current_idx = stop_idx
 
             # ensure there are no nans
             placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)

@@ -49,6 +49,7 @@ class Embedder(pl.LightningModule):
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
+        use_ion_mode=False,
     ):
         """Initialize the CCSPredictor"""
         super().__init__()
@@ -65,7 +66,7 @@ class Embedder(pl.LightningModule):
         self.use_ce = use_ce
         self.use_ion_activation = use_ion_activation
         self.use_ion_method = use_ion_method
-
+        self.use_ion_mode = use_ion_mode
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
             n_layers=n_layers,
@@ -74,6 +75,7 @@ class Embedder(pl.LightningModule):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
+            use_ion_mode= use_ion_mode,
         )
 
         self.regression_loss = nn.MSELoss()
@@ -106,16 +108,17 @@ class Embedder(pl.LightningModule):
 
         kwargs_0 = {
             "precursor_mass": batch["precursor_mass_0"].float(),
-            "precursor_charge": batch["precursor_charge_0"].float(),
         }
         kwargs_1 = {
             "precursor_mass": batch["precursor_mass_1"].float(),
-            "precursor_charge": batch["precursor_charge_1"].float(),
         }
         # extra data
-        if self.use_adduct:
+        if self.use_ion_mode:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
+            kwargs_0["precursor_charge"]=batch["precursor_charge_0"].float()
+            kwargs_1["precursor_charge"]=batch["precursor_charge_1"].float()
+        if self.use_adduct:
             kwargs_0["adduct"] = batch["adduct_0"].float()
             kwargs_1["adduct"] = batch["adduct_1"].float()
 

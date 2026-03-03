@@ -23,7 +23,7 @@ from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitaskin
 from simba.core.models.transformers.postprocessing import Postprocessing
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
-
+from sklearn.metrics import mean_absolute_error
 
 # Backward compatibility: Support loading old pickle files with old module paths
 # These modules were refactored from simba.* to simba.core.* hierarchy
@@ -159,6 +159,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode = cfg.model.features.use_ion_mode,
     )
     dataloader_ed = DataLoader(
         dataset_ed, batch_size=cfg.inference.batch_size, shuffle=False
@@ -171,6 +172,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode = cfg.model.features.use_ion_mode,
     )
     dataloader_mces = DataLoader(
         dataset_mces, batch_size=cfg.inference.batch_size, shuffle=False
@@ -204,6 +206,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         "use_ce": cfg.model.features.use_ce,
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
+        "use_ion_mode": cfg.model.features.use_ion_mode,
     }
 
     model = EmbedderMultitask.load_from_checkpoint(checkpoint_path, **load_kwargs)
@@ -314,8 +317,10 @@ def evaluate_predictions(
 
     # Edit distance correlation
     corr_model_ed, _ = spearmanr(ed_true_clean, pred_ed_ed_clean)
-    logger.info(f"Edit distance correlation: {corr_model_ed:.4f}")
+    mae_model_ed = mean_absolute_error(ed_true_clean, pred_ed_ed_clean)
 
+    logger.info(f"Edit distance correlation: {corr_model_ed:.4f}")
+    logger.info(f"Edit distance mean absolute error: {mae_model_ed:.4f}")
     # Plot confusion matrix
     _plot_cm(ed_true_clean, pred_ed_ed_clean, cfg, output_dir)
 
@@ -335,12 +340,14 @@ def evaluate_predictions(
 
     if len(mces_true) == 0 or len(pred_mces_mces_flat) == 0:
         logger.warning("No MCES samples after filtering, skipping MCES correlation")
-        corr_model_mces = float("nan")
+        corr_model_mces = float("nan") 
+        mae_model_mces =float("nan")
+
     else:
         corr_model_mces, _ = spearmanr(mces_true, pred_mces_mces_flat)
-
+        mae_model_mces =  mean_absolute_error(mces_true, pred_mces_mces_flat)
     logger.info(f"MCES/Tanimoto correlation: {corr_model_mces:.4f}")
-
+    logger.info(f"MCES/Tanimoto mean absolute error: {cfg.data.mces20_max_value * mae_model_mces:.4f}")
     # Denormalize if using MCES20
     if not cfg.data.use_tanimoto:
         mces_true = cfg.data.mces20_max_value * (1 - mces_true)

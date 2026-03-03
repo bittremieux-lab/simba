@@ -7,7 +7,7 @@ from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
-    encode_adduct,
+    encode_adduct_mass,
     encode_ion_activation,
     encode_ionization_method,
 )
@@ -38,6 +38,7 @@ class LoadDataMultitasking:
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
+        use_ion_mode: bool = False,
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -100,40 +101,43 @@ class LoadDataMultitasking:
         precursor_charge = np.zeros(
             (len(molecule_pairs.original_spectra), 1), dtype=np.int32
         )
-        if use_adduct:
-            ionmode = np.zeros(
-                (len(molecule_pairs.original_spectra), 1), dtype=np.float32
-            )
-            adduct = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(ADDUCT_TO_MASS.keys()),
-                ),
-                dtype=np.float32,
-            )
-        if use_ce:
-            ce = np.zeros((len(molecule_pairs.original_spectra), 1), dtype=np.int32)
-        if use_ion_activation:
-            ia = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(ION_ACTIVATION),
-                ),
-                dtype=np.int32,
-            )
-        if use_ion_method:
-            im = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(IONIZATION_METHODS),
-                ),
-                dtype=np.int32,
-            )
+
+        ionmode = np.zeros(
+            (len(molecule_pairs.original_spectra), 1), dtype=np.float32
+        )
+        adduct = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(ADDUCT_TO_MASS.keys()),
+            ),
+            dtype=np.float32,
+        )
+        ce = np.zeros(
+            (len(molecule_pairs.original_spectra), 1), dtype=np.int32
+        )
+        ia = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(ION_ACTIVATION),
+            ),
+            dtype=np.int32,
+        )
+        im = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(IONIZATION_METHODS),
+            ),
+            dtype=np.int32,
+        )
 
         logger.info("Loading mz, intensity and precursor data ...")
         for i, spec in enumerate(molecule_pairs.original_spectra):
             # check for maximum length
-            length = len(spec.mz) if len(spec.mz) <= max_num_peaks else max_num_peaks
+            length = (
+                len(spec.mz)
+                if len(spec.mz) <= max_num_peaks
+                else max_num_peaks
+            )
 
             # assign the values to the array
             mz[i, 0:length] = np.array(spec.mz[0:length])
@@ -142,14 +146,16 @@ class LoadDataMultitasking:
             precursor_mass[i] = spec.precursor_mz
             precursor_charge[i] = spec.precursor_charge
 
-            if use_adduct:
+            if use_ion_mode:
                 if (spec.ionmode is None) or (
                     spec.ionmode == "None"
                 ):  # TODO: check if the 2nd condition is needed
                     ionmode[i] = 0
                 else:
                     ionmode[i] = 1.0 if spec.ionmode == "positive" else -1.0
-                adduct[i] = encode_adduct(spec.adduct)
+
+            if use_adduct:
+                adduct[i] = encode_adduct_mass(spec.params["adduct"])
 
             if use_ce:
                 if (spec.ce is None) or (spec.ce == "None"):
@@ -158,7 +164,9 @@ class LoadDataMultitasking:
                     ce[i] = spec.ce
 
             if use_ion_activation:
-                if (spec.ion_activation is None) or (spec.ion_activation == "None"):
+                if (spec.ion_activation is None) or (
+                    spec.ion_activation == "None"
+                ):
                     ia[i] = np.zeros(len(ION_ACTIVATION), dtype=np.int32)
                 else:
                     ia[i] = encode_ion_activation(spec.ion_activation)
@@ -173,7 +181,6 @@ class LoadDataMultitasking:
                     )
                 else:
                     im[i] = encode_ionization_method(spec.ionization_method)
-
         # logger.info("Normalizing intensities")
         # Normalize the intensity array
         # intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
@@ -185,7 +192,9 @@ class LoadDataMultitasking:
         )
 
         if molecule_pairs.extra_distances is None:
-            raise ValueError("extra_distances must be provided for multitask training.")
+            raise ValueError(
+                "extra_distances must be provided for multitask training."
+            )
         mces = molecule_pairs.extra_distances.reshape(-1, 1)
 
         if use_fingerprints:
@@ -200,8 +209,12 @@ class LoadDataMultitasking:
             fingerprint_0 = np.array([0 for m in molecule_pairs_input.spectra])
 
         dictionary_data = {
-            "index_unique_0": molecule_pairs_input.pair_distances[:, 0].reshape(-1, 1),
-            "index_unique_1": molecule_pairs_input.pair_distances[:, 1].reshape(-1, 1),
+            "index_unique_0": molecule_pairs_input.pair_distances[
+                :, 0
+            ].reshape(-1, 1),
+            "index_unique_1": molecule_pairs_input.pair_distances[
+                :, 1
+            ].reshape(-1, 1),
             "ed": ed,
             "mces": mces,
             # "fingerprint_0": fingerprint_0,
@@ -219,12 +232,13 @@ class LoadDataMultitasking:
             fingerprint_0=fingerprint_0,
             max_num_peaks=max_num_peaks,
             use_adduct=use_adduct,
-            ionmode=(ionmode if use_adduct else None),
-            adduct=(adduct if use_adduct else None),
+            use_ion_mode=use_ion_mode,
+            ionmode=ionmode,
+            adduct=adduct,
             use_ce=use_ce,
-            ce=(ce if use_ce else None),
+            ce=ce,
             use_ion_activation=use_ion_activation,
-            ion_activation=(ia if use_ion_activation else None),
+            ion_activation=ia,
             use_ion_method=use_ion_method,
-            ion_method=(im if use_ion_method else None),
+            ion_method=im,
         )
