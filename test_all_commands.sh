@@ -58,6 +58,8 @@ uv run simba train \
     training=fast_dev \
     paths.preprocessing_dir_train=./test_full_workflow/preprocessed/ \
     paths.checkpoint_dir=./test_full_workflow/checkpoints/ \
+    training.epochs=3 \
+    checkpoints.save_checkpoints=false \
     hardware.accelerator=$DEVICE
 
 echo ""
@@ -65,10 +67,10 @@ echo "3/9 Testing: simba inference"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
-    --checkpoint-dir ./test_full_workflow/checkpoints/ \
-    --preprocessing-dir ./test_full_workflow/preprocessed/ \
+    paths.checkpoint_dir=./test_full_workflow/checkpoints/ \
+    paths.preprocessing_dir=./test_full_workflow/preprocessed/ \
     inference.preprocessing_pickle=mapping_unique_smiles.pkl \
-    inference.accelerator=$DEVICE
+    hardware.accelerator=$DEVICE
 
 echo ""
 echo "4/9 Testing: simba analog-discovery"
@@ -88,10 +90,10 @@ if [[ "$SKIP_PRETRAINED" == "false" ]]; then
     echo "--------------------------------"
     uv run simba inference \
         inference=fast_dev \
-        --checkpoint-dir "$PRETRAINED_CHECKPOINT_DIR" \
-        --preprocessing-dir ./test_full_workflow/preprocessed/ \
+        paths.checkpoint_dir="$PRETRAINED_CHECKPOINT_DIR" \
+        paths.preprocessing_dir=./test_full_workflow/preprocessed/ \
         inference.preprocessing_pickle=mapping_unique_smiles.pkl \
-        inference.accelerator=$DEVICE
+        hardware.accelerator=$DEVICE
 
     echo ""
     echo "6/9 Testing: simba analog-discovery (pretrained model)"
@@ -121,6 +123,8 @@ uv run simba train \
     model.features.use_ce=true \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \
+    training.epochs=3 \
+    checkpoints.save_checkpoints=false \
     hardware.accelerator=$DEVICE
 
 echo ""
@@ -128,13 +132,13 @@ echo "8/9 Testing: simba inference (with metadata features)"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
-    --checkpoint-dir ./test_full_workflow/checkpoints_metadata/ \
-    --preprocessing-dir ./test_full_workflow/preprocessed/ \
+    paths.checkpoint_dir=./test_full_workflow/checkpoints_metadata/ \
+    paths.preprocessing_dir=./test_full_workflow/preprocessed/ \
     inference.preprocessing_pickle=mapping_unique_smiles.pkl \
     model.features.use_ce=true \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \
-    inference.accelerator=$DEVICE
+    hardware.accelerator=$DEVICE
 
 echo ""
 echo "9/9 Testing: simba analog-discovery (with metadata features)"

@@ -57,16 +57,17 @@ class LoadData:
                 def spectrum_it():
                     for scan_nr, spectrum_dict in enumerate(f_in):
                         if scan_nr in scan_nrs:
-                            yield spectrum_dict
+                            yield scan_nr, spectrum_dict
 
             # Or iterate over all MS/MS spectra.
             else:
 
                 def spectrum_it():
-                    yield from f_in
+                    for scan_nr, spectrum_dict in enumerate(f_in):
+                        yield scan_nr, spectrum_dict
 
             total_results = []
-            for spectrum in spectrum_it():
+            for mgf_index, spectrum in spectrum_it():
                 # try:
                 if use_only_protonized_adducts:
                     if use_gnps_format:
@@ -98,6 +99,8 @@ class LoadData:
                     ):
                         spec = None
                     if spec is not None:
+                        # Assign the original MGF index before filtering
+                        spec.mgf_index = mgf_index
                         yield spec
             # except ValueError as e:
             #    pass

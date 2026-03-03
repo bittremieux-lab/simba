@@ -39,6 +39,7 @@ class SpectrumExt(MsmsSpectrum):
         subclass: str,
         inchi_key: str = None,
         spectrum_hash: str = None,
+        mgf_index: int = None,
     ):
 
         super().__init__(
@@ -74,6 +75,7 @@ class SpectrumExt(MsmsSpectrum):
         self.murcko_scaffold = bms
         self.inchi_key = inchi_key
         self.spectrum_hash = spectrum_hash
+        self.mgf_index = mgf_index  # Original index in MGF file before filtering
 
     def set_params(self, params):
         self.params = params
@@ -108,6 +110,7 @@ class SpectrumExt(MsmsSpectrum):
                 "murcko_scaffold": self.murcko_scaffold,
                 "inchi_key": self.inchi_key,
                 "spectrum_hash": self.spectrum_hash,
+                "mgf_index": self.mgf_index,
             }
         )
         return state
@@ -153,6 +156,11 @@ class SpectrumExt(MsmsSpectrum):
             self.spectrum_hash = state["spectrum_hash"]
         except:
             self.spectrum_hash = None
+
+        try:
+            self.mgf_index = state["mgf_index"]
+        except:
+            self.mgf_index = None
 
     # def set_intesity_array(self, intensity_array):
     #    self.intensity_array = intensity_array

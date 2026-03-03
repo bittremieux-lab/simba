@@ -23,6 +23,7 @@ logging:
 
 # Model checkpoints
 checkpoints:
+  save_checkpoints: true  # Set to false to disable periodic checkpoints (best model always saved)
   best_model_name: "best_model.ckpt"
   pretrained_model_name: "pretrained_model.ckpt"
 

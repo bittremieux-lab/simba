@@ -2,6 +2,7 @@
 
 import copy
 import os
+import sys
 from pathlib import Path
 
 import dill
@@ -11,12 +12,25 @@ from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from torch.utils.data import DataLoader
 
+import simba.core.data.molecular_pairs
+import simba.core.data.molecule_pairs_opt
+import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
+from simba.core.data.molecule_pairs_opt import MoleculePairsOpt
+from simba.core.data.preprocessing_simba import PreprocessingSimba
 from simba.core.models.ordinal.embedder_multitask import EmbedderMultitask
 from simba.core.models.ordinal.load_data_multitasking import LoadDataMultitasking
 from simba.core.models.transformers.postprocessing import Postprocessing
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
+
+
+# Backward compatibility: Support loading old pickle files with old module paths
+# These modules were refactored from simba.* to simba.core.* hierarchy
+sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs_opt
+sys.modules["simba.molecular_pairs"] = simba.core.data.molecular_pairs
+sys.modules["simba.spectrum"] = simba.core.data.spectrum
+sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
 
 def load_inference_data(cfg: DictConfig):
@@ -37,7 +51,45 @@ def load_inference_data(cfg: DictConfig):
     with open(dataset_path, "rb") as file:
         dataset = dill.load(file)
 
-    molecule_pairs = dataset["molecule_pairs_test"]
+    # Check if lightweight format and reconstruct if needed
+    if dataset.get("format_version") == "lightweight":
+        logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
+
+        mgf_path = dataset["mgf_path"]
+        all_spectra = PreprocessingSimba.load_spectra(mgf_path, cfg)
+
+        # Create spectrum lookup by MGF index
+        spectra_by_idx = {s.mgf_index: s for s in all_spectra}
+
+        # Reconstruct test molecule pairs
+        if "df_smiles_test" in dataset and "spectrum_indexes_test" in dataset:
+            df_smiles = dataset["df_smiles_test"]
+            spectrum_indexes = dataset["spectrum_indexes_test"]
+
+            # Load original spectra (all, including duplicates)
+            original_spectra = [spectra_by_idx[idx] for idx in spectrum_indexes]
+
+            # Build unique_spectra from df_smiles indexes
+            # df_smiles['indexes'] contains lists of indexes into original_spectra
+            # We take the first spectrum for each unique SMILES
+            unique_spectra = [
+                original_spectra[df_smiles.loc[i, "indexes"][0]]
+                for i in df_smiles.index
+            ]
+
+            # Create MoleculePairsOpt object
+            molecule_pairs = MoleculePairsOpt(
+                original_spectra=original_spectra,
+                unique_spectra=unique_spectra,
+                df_smiles=df_smiles,
+                pair_distances=None,  # Will be loaded separately
+            )
+        else:
+            raise ValueError("Test split not found in lightweight format dataset")
+    else:
+        # Full format
+        molecule_pairs = dataset["molecule_pairs_test"]
+
     molecule_pairs_ed = copy.deepcopy(molecule_pairs)
     molecule_pairs_mces = copy.deepcopy(molecule_pairs)
 
@@ -327,8 +379,8 @@ def inference(cfg: DictConfig) -> dict:
 
     logger.info(f"Using {model_name}: {checkpoint_path}")
 
-    # Set output directory
-    output_dir = cfg.paths.get("output_dir", checkpoint_dir)
+    # Set output directory (default to checkpoint_dir if not specified)
+    output_dir = cfg.paths.get("output_dir") or checkpoint_dir
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Load data

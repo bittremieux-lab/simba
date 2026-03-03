@@ -224,7 +224,56 @@ simba preprocess \
 * `preprocessing.val_split`: Fraction of data for validation (default: 0.1)
 * `preprocessing.test_split`: Fraction of data for testing (default: 0.1)
 * `preprocessing.overwrite`: Overwrite existing preprocessing files (default: false)
-* `hardware.num_workers`: Number of worker processes for parallel computation (default: 0)
+* `preprocessing.num_workers`: Number of worker processes for parallel computation (default: 0)
+
+**Multi-Node Preprocessing:**
+
+For large datasets, SIMBA supports distributed preprocessing across multiple compute nodes or servers.
+
+**Key Parameters:**
+* `preprocessing.num_nodes`: Total number of nodes participating in preprocessing (default: 1)
+* `preprocessing.current_node`: Zero-indexed ID of this node (0, 1, 2, ..., num_nodes-1)
+* `preprocessing.num_workers`: Number of CPU workers for this node
+
+**Special scenario: Heterogeneous Multi-Node**
+
+Three servers with different CPU counts (64, 32, and 48 cores):
+
+```bash
+# 64 cores node
+simba preprocess \
+  paths.spectra_path=data/spectra.mgf \
+  paths.preprocessing_dir=/shared/output \
+  preprocessing.max_spectra_train=1000000 \
+  preprocessing.num_nodes=3 \
+  preprocessing.current_node=0 \
+  preprocessing.num_workers=64
+
+# 32 cores node
+simba preprocess \
+  paths.spectra_path=data/spectra.mgf \
+  paths.preprocessing_dir=/shared/output \
+  preprocessing.max_spectra_train=1000000 \
+  preprocessing.num_nodes=3 \
+  preprocessing.current_node=1 \
+  preprocessing.num_workers=32
+
+# 48 cores node
+simba preprocess \
+  paths.spectra_path=data/spectra.mgf \
+  paths.preprocessing_dir=/shared/output \
+  preprocessing.max_spectra_train=1000000 \
+  preprocessing.num_nodes=3 \
+  preprocessing.current_node=2 \
+  preprocessing.num_workers=48
+```
+
+**Important Notes:**
+- All nodes should use the **same input spectra file** and configuration parameters
+- Results are saved with unique node identifiers (e.g., `train_node0_chunk0.npy`)
+- Files are automatically combined during training or inference
+
+---
 
 **Quick Testing (Fast Dev Mode):**
 
@@ -243,7 +292,7 @@ simba preprocess \
   paths.spectra_path=data/spectra.mgf \
   paths.preprocessing_dir=./preprocessed_data \
   preprocessing.max_spectra_train=1000000 \
-  hardware.num_workers=4
+  preprocessing.num_workers=4
 
 # Custom splits and overwrite existing data
 simba preprocess \
@@ -342,27 +391,27 @@ Run inference on test data using your trained model:
 
 ```bash
 simba inference \
-  --checkpoint-dir /path/to/checkpoints/ \
-  --preprocessing-dir /path/to/preprocessed_data/
+  paths.checkpoint_dir=/path/to/checkpoints/ \
+  paths.preprocessing_dir=/path/to/preprocessed_data/
 ```
 
 **Common Parameters:**
-* `--checkpoint-dir`: Directory containing the trained model checkpoint - **REQUIRED**
-* `--preprocessing-dir`: Directory where preprocessed data is stored - **REQUIRED**
-* `--output-dir`: Directory to save plots and results (default: checkpoint-dir)
+* `paths.checkpoint_dir`: Directory containing the trained model checkpoint - **REQUIRED**
+* `paths.preprocessing_dir`: Directory where preprocessed data is stored - **REQUIRED**
+* `paths.output_dir`: Directory to save plots and results (optional, defaults to checkpoint-dir)
 * `inference.preprocessing_pickle`: Filename of the dataset pickle file (default: `preprocessed_data.pkl`)
 * `inference.batch_size`: Batch size for inference (default: 64)
-* `inference.accelerator`: Hardware accelerator: `cpu`, `gpu`, or `auto` (default: auto)
+* `hardware.accelerator`: Hardware accelerator: `cpu`, `gpu`, or `auto` (default: auto)
 * `inference.use_last_model`: Use last.ckpt instead of best_model.ckpt (default: false)
-* `inference.uniformize_testing`: Balance edit distance classes during testing (default: true)
+* `inference.uniformize_during_testing`: Balance edit distance classes during testing (default: true)
 
 **Quick Testing (Fast Dev Mode):**
 
 ```bash
 # Use fast_dev preset for quick testing on CPU (batch size 8, no uniformization)
 simba inference inference=fast_dev \
-  --checkpoint-dir ./checkpoints_test/ \
-  --preprocessing-dir ./preprocessed_casmi2022_test/ \
+  paths.checkpoint_dir=./checkpoints_test/ \
+  paths.preprocessing_dir=./preprocessed_casmi2022_test/ \
   inference.preprocessing_pickle=mapping_unique_smiles.pkl
 ```
 
@@ -377,27 +426,27 @@ The `fast_dev` configuration automatically:
 ```bash
 # Standard inference with best model
 simba inference \
-  --checkpoint-dir ./checkpoints \
-  --preprocessing-dir ./preprocessed_data
+  paths.checkpoint_dir=./checkpoints \
+  paths.preprocessing_dir=./preprocessed_data
 
 # Use last checkpoint with custom settings
 simba inference \
-  --checkpoint-dir ./checkpoints \
-  --preprocessing-dir ./preprocessed_data \
+  paths.checkpoint_dir=./checkpoints \
+  paths.preprocessing_dir=./preprocessed_data \
   inference.use_last_model=true \
   inference.batch_size=32
 
 # Disable uniformization for faster inference
 simba inference \
-  --checkpoint-dir ./checkpoints \
-  --preprocessing-dir ./preprocessed_data \
-  inference.uniformize_testing=false
+  paths.checkpoint_dir=./checkpoints \
+  paths.preprocessing_dir=./preprocessed_data \
+  inference.uniformize_during_testing=false
 
 # Custom output directory
 simba inference \
-  --checkpoint-dir ./checkpoints \
-  --preprocessing-dir ./preprocessed_data \
-  --output-dir ./inference_results
+  paths.checkpoint_dir=./checkpoints \
+  paths.preprocessing_dir=./preprocessed_data \
+  paths.output_dir=./inference_results
 ```
 
 **Output:**

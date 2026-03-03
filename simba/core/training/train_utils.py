@@ -71,8 +71,8 @@ class TrainUtils:
         Tuple[List[SpectrumExt], List[SpectrumExt], List[SpectrumExt]]
             Three lists containing the training, validation, and test spectra.
         """
-        random.seed(seed)
-        np.random.seed(seed)
+        # Use a consistent RNG for reproducibility across parallel processes
+        rng = np.random.RandomState(seed)
 
         # get the percentage of training data
         train_split = 1 - val_split - test_split
@@ -90,8 +90,8 @@ class TrainUtils:
         # remove the appearence of not identified bms
         unique_values = unique_values[unique_values != ""]
 
-        # randomize
-        random.shuffle(unique_values)
+        # randomize using numpy's RNG for deterministic shuffling
+        rng.shuffle(unique_values)
 
         # get indexes
         train_index = int((train_split) * (len(unique_values)))

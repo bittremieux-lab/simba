@@ -14,52 +14,33 @@ sys.modules["src"] = simba
 
 
 @click.command()
-@click.option(
-    "--checkpoint-dir",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
-    required=True,
-    help="Directory containing model checkpoints (e.g., best_model.ckpt or last.ckpt).",
-)
-@click.option(
-    "--preprocessing-dir",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
-    required=True,
-    help="Directory containing preprocessed data.",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    default=None,
-    help="Directory to save output plots and results. Defaults to checkpoint-dir.",
-)
 @click.argument("overrides", nargs=-1)
-def inference(
-    checkpoint_dir: Path,
-    preprocessing_dir: Path,
-    output_dir: Path | None,
-    overrides: tuple[str, ...],
-) -> None:
+def inference(overrides: tuple[str, ...]) -> None:
     """Run inference on test data using a trained SIMBA model.
 
-    This command loads a trained model from CHECKPOINT_DIR and runs inference on test data
-    from the preprocessed dataset. It generates correlation metrics and visualization plots.
+    Configuration is loaded from YAML files with Hydra overrides.
+    Required paths can be specified via command line using Hydra syntax.
 
     Examples:
 
-        # Basic inference with best model
-        simba inference --checkpoint-dir ./checkpoints --preprocessing-dir ./preprocessed_data
+    \b
+    # Basic inference with Hydra config overrides
+    simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./preprocessed_data
 
-        # Use last checkpoint instead of best model
-        simba inference --checkpoint-dir ./checkpoints --preprocessing-dir ./preprocessed_data \\
-            inference.use_last_model=true
+    \b
+    # Use last checkpoint instead of best model
+    simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./data \\
+        inference.use_last_model=true
 
-        # Fast dev inference with smaller batch size
-        simba inference --checkpoint-dir ./checkpoints --preprocessing-dir ./preprocessed_data \\
-            inference=fast_dev
+    \b
+    # Fast dev inference with smaller batch size
+    simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./data \\
+        inference=fast_dev
 
-        # Custom batch size and no uniformization
-        simba inference --checkpoint-dir ./checkpoints --preprocessing-dir ./preprocessed_data \\
-            inference.batch_size=32 inference.uniformize_testing=false
+    \b
+    # Custom batch size and no uniformization
+    simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./data \\
+        inference.batch_size=32 inference.uniformize_during_testing=0
     """
     import os
     import platform
@@ -72,9 +53,35 @@ def inference(
     if platform.system() == "Darwin":
         os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
-    # Validate paths
-    checkpoint_dir = checkpoint_dir.resolve()
-    preprocessing_dir = preprocessing_dir.resolve()
+    click.echo("Loading configuration...")
+
+    # Load Hydra config with CLI overrides
+    config_path = get_config_path()
+    with initialize_config_dir(
+        config_dir=str(config_path.absolute()), version_base=None
+    ):
+        cfg = compose(config_name="config", overrides=list(overrides))
+
+    # Validate required paths
+    checkpoint_dir = cfg.paths.checkpoint_dir
+    preprocessing_dir = cfg.paths.preprocessing_dir_train or cfg.paths.preprocessing_dir
+
+    if not checkpoint_dir:
+        raise click.UsageError(
+            "❌ Error: Checkpoint directory is required.\n"
+            "Please specify: paths.checkpoint_dir=<path>\n"
+            "  simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./data"
+        )
+
+    if not preprocessing_dir:
+        raise click.UsageError(
+            "❌ Error: Preprocessing directory is required.\n"
+            "Please specify either paths.preprocessing_dir or paths.preprocessing_dir_train:\n"
+            "  simba inference paths.checkpoint_dir=./checkpoints paths.preprocessing_dir=./data"
+        )
+
+    checkpoint_dir = Path(checkpoint_dir).resolve()
+    preprocessing_dir = Path(preprocessing_dir).resolve()
 
     if not checkpoint_dir.exists():
         raise click.UsageError(f"Checkpoint directory not found: {checkpoint_dir}")
@@ -95,47 +102,33 @@ def inference(
         )
 
     # Set output directory
+    output_dir = cfg.paths.get("output_dir", None)
     if output_dir:
-        output_dir = output_dir.resolve()
+        output_dir = Path(output_dir).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
         output_dir = checkpoint_dir
 
-    click.echo(f"Loading config from: {checkpoint_dir}")
+    click.echo(f"Checkpoint directory: {checkpoint_dir}")
     click.echo(f"Preprocessing data: {preprocessing_dir}")
     click.echo(f"Output directory: {output_dir}")
 
-    # Initialize Hydra with absolute path to config directory
-    config_dir = str(get_config_path().resolve())
+    # Validate dataset exists
+    dataset_path = Path(preprocessing_dir) / cfg.inference.preprocessing_pickle
+    if not dataset_path.exists():
+        raise click.UsageError(
+            f"Dataset file not found: {dataset_path}\n"
+            f"Expected '{cfg.inference.preprocessing_pickle}' in preprocessing directory.\n"
+            f"You can override with: inference.preprocessing_pickle=<filename>"
+        )
 
-    # Build overrides list
-    override_list = [
-        f"paths.checkpoint_dir={checkpoint_dir}",
-        f"paths.preprocessing_dir={preprocessing_dir}",
-        f"paths.preprocessing_dir_train={preprocessing_dir}",
-        f"paths.output_dir={output_dir}",
-    ]
-    override_list.extend(overrides)
+    click.echo(f"\nDataset: {dataset_path}")
+    click.echo(f"Batch size: {cfg.inference.batch_size}")
+    click.echo(f"Accelerator: {cfg.hardware.accelerator}")
+    click.echo(f"Use last model: {cfg.inference.use_last_model}")
+    click.echo(f"Uniformize testing: {cfg.inference.uniformize_testing}\n")
 
     try:
-        with initialize_config_dir(version_base=None, config_dir=config_dir):
-            cfg = compose(config_name="config", overrides=override_list)
-
-        # Validate dataset exists
-        dataset_path = Path(preprocessing_dir) / cfg.inference.preprocessing_pickle
-        if not dataset_path.exists():
-            raise click.UsageError(
-                f"Dataset file not found: {dataset_path}\n"
-                f"Expected '{cfg.inference.preprocessing_pickle}' in preprocessing directory.\n"
-                f"You can override with: inference.preprocessing_pickle=<filename>"
-            )
-
-        click.echo(f"\nDataset: {dataset_path}")
-        click.echo(f"Batch size: {cfg.inference.batch_size}")
-        click.echo(f"Accelerator: {cfg.inference.accelerator}")
-        click.echo(f"Use last model: {cfg.inference.use_last_model}")
-        click.echo(f"Uniformize testing: {cfg.inference.uniformize_testing}\n")
-
         # Run inference workflow
         metrics = run_inference(cfg)
 

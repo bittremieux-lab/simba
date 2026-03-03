@@ -1,5 +1,8 @@
 # Preprocessing configuration
 
+# Storage format options
+use_lightweight_format: false
+
 # Preprocessing batch processing
 batch_size: 1000
 num_workers: 60
@@ -8,6 +11,7 @@ current_node: null  # Set via CLI
 overwrite: false
 
 # Dataset limits
+max_spectra_load: -1  # Maximum spectra to load from MGF (-1 = load all)
 max_spectra_train: 10000  # Maximum training spectra to preprocess
 max_spectra_val: 1000000  # Maximum validation spectra to preprocess
 max_spectra_test: 1000000  # Maximum test spectra to preprocess
