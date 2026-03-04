@@ -47,6 +47,7 @@ class SimilarityModel(pl.LightningModule):
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
+        use_ion_mode=False,
     ):
         """Initialize the CCSPredictor"""
         super().__init__()
@@ -63,6 +64,7 @@ class SimilarityModel(pl.LightningModule):
         self.use_ce = use_ce
         self.use_ion_activation = use_ion_activation
         self.use_ion_method = use_ion_method
+        self.use_ion_mode = use_ion_mode
 
         self.spectrum_encoder = SpectrumTransformerEncoderCustom(
             d_model=d_model,
@@ -72,6 +74,7 @@ class SimilarityModel(pl.LightningModule):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
+            use_ion_mode= use_ion_mode,
         )
 
         self.regression_loss = nn.MSELoss()
@@ -104,13 +107,16 @@ class SimilarityModel(pl.LightningModule):
 
         kwargs_0 = {
             "precursor_mass": batch["precursor_mass_0"].float(),
-            "precursor_charge": batch["precursor_charge_0"].float(),
         }
         kwargs_1 = {
             "precursor_mass": batch["precursor_mass_1"].float(),
-            "precursor_charge": batch["precursor_charge_1"].float(),
         }
         # extra data
+        if self.use_ion_mode:
+            kwargs_0["ionmode"] = batch["ionmode_0"].float()
+            kwargs_1["ionmode"] = batch["ionmode_1"].float()
+            kwargs_0["precursor_charge"]=batch["precursor_charge_0"].float()
+            kwargs_1["precursor_charge"]=batch["precursor_charge_1"].float()
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
@@ -359,6 +365,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ce=False,
         use_ion_activation=False,
         use_ion_method=False,
+        use_ion_mode=False,
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -373,6 +380,7 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
+            use_ion_mode= use_ion_mode,
         )
         self.weights = weights
 
@@ -420,17 +428,10 @@ class SimilarityModelMultitask(SimilarityModel):
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
         if USE_LEARNABLE_MULTITASK:
-            initial_log_sigma1 = 1.2490483522415161
-            initial_log_sigma2 = -7.0018157958984375
-            # self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
-            # self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
-            self.log_sigma1 = torch.tensor(
-                float(initial_log_sigma1), dtype=torch.float32
-            )
-            self.log_sigma2 = torch.tensor(
-                float(initial_log_sigma2), dtype=torch.float32
-            )
-            self.use_extra_metadata = use_adduct
+            initial_log_sigma1= 0.0 
+            initial_log_sigma2 = -5.3  
+            self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
+            self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
 
     def forward(self, batch, return_spectrum_output=False):
         # … compute raw emb0, emb1, apply relu, fingerprints, etc. …
@@ -465,56 +466,51 @@ class SimilarityModelMultitask(SimilarityModel):
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
-        if self.use_adduct:
-            batch["ionmode_0"] = torch.nan_to_num(
-                batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ionmode_1"] = torch.nan_to_num(
-                batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["adduct_0"] = torch.nan_to_num(
-                batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["adduct_1"] = torch.nan_to_num(
-                batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
+        batch["ionmode_0"] = torch.nan_to_num(
+            batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["ionmode_1"] = torch.nan_to_num(
+            batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        kwargs_0["ionmode"] = batch["ionmode_0"].float()
+        kwargs_1["ionmode"] = batch["ionmode_1"].float()
+        batch["adduct_0"] = torch.nan_to_num(
+            batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["adduct_1"] = torch.nan_to_num(
+            batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
 
-            kwargs_0["ionmode"] = batch["ionmode_0"].float()
-            kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct"] = batch["adduct_0"].float()
-            kwargs_1["adduct"] = batch["adduct_1"].float()
+        kwargs_0["adduct"] = batch["adduct_0"].float()
+        kwargs_1["adduct"] = batch["adduct_1"].float()
 
-        if self.use_ce:
-            batch["ce_0"] = torch.nan_to_num(
-                batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ce_1"] = torch.nan_to_num(
-                batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            kwargs_0["ce"] = batch["ce_0"].float()
-            kwargs_1["ce"] = batch["ce_1"].float()
+        batch["ce_0"] = torch.nan_to_num(
+            batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["ce_1"] = torch.nan_to_num(
+            batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        kwargs_0["ce"] = batch["ce_0"].float()
+        kwargs_1["ce"] = batch["ce_1"].float()
 
-        if self.use_ion_activation:
-            batch["ion_activation_0"] = torch.nan_to_num(
-                batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ion_activation_1"] = torch.nan_to_num(
-                batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-            kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+        batch["ion_activation_0"] = torch.nan_to_num(
+            batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["ion_activation_1"] = torch.nan_to_num(
+            batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
+        kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
-        if self.use_ion_method:
-            batch["ion_method_0"] = torch.nan_to_num(
-                batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ion_method_1"] = torch.nan_to_num(
-                batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
+        batch["ion_method_0"] = torch.nan_to_num(
+            batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        batch["ion_method_1"] = torch.nan_to_num(
+            batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
+        )
 
-            kwargs_0["ion_method"] = batch["ion_method_0"].float()
-            kwargs_1["ion_method"] = batch["ion_method_1"].float()
-
+        kwargs_0["ion_method"] = batch["ion_method_0"].float()
+        kwargs_1["ion_method"] = batch["ion_method_1"].float()
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(
             batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
@@ -793,6 +789,18 @@ class EmbeddingExtractor(pl.LightningModule):
             "precursor_mass": batch["precursor_mass"].float(),
             "precursor_charge": batch["precursor_charge"].float(),
         }
+        
+        # Add metadata fields if present in batch
+        if "ionmode" in batch:
+            kwargs["ionmode"] = batch["ionmode"].float()
+        if "adduct" in batch:
+            kwargs["adduct"] = batch["adduct"].float()
+        if "ce" in batch:
+            kwargs["ce"] = batch["ce"].float()
+        if "ion_activation" in batch:
+            kwargs["ion_activation"] = batch["ion_activation"].float()
+        if "ion_method" in batch:
+            kwargs["ion_method"] = batch["ion_method"].float()
 
         emb, _ = self.model(
             mz_array=batch["mz"].float(),

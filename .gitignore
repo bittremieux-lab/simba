@@ -86,6 +86,13 @@ lightning_logs/
 data_temp/
 temp/
 
+# output
+test_full_workflow/
+
+# tfs files
+simba/configs/*/tfs*.yaml
+run_scripts_tfs*
+
 # ============================================================================
 # Code Quality Tools
 # ============================================================================

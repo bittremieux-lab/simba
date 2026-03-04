@@ -50,30 +50,36 @@ def write_data(
         # Lightweight format: save only df_smiles, original MGF indexes, and mgf path
         # Spectra will be loaded at training time from mgf file using absolute indexes
         dataset = {
-            "df_smiles_train": molecule_pairs_train.df_smiles
-            if molecule_pairs_train is not None
-            else None,
-            "df_smiles_val": molecule_pairs_val.df_smiles
-            if molecule_pairs_val is not None
-            else None,
-            "df_smiles_test": molecule_pairs_test.df_smiles
-            if molecule_pairs_test is not None
-            else None,
-            "spectrum_indexes_train": [
-                s.mgf_index for s in molecule_pairs_train.original_spectra
-            ]
-            if molecule_pairs_train is not None
-            else None,
-            "spectrum_indexes_val": [
-                s.mgf_index for s in molecule_pairs_val.original_spectra
-            ]
-            if molecule_pairs_val is not None
-            else None,
-            "spectrum_indexes_test": [
-                s.mgf_index for s in molecule_pairs_test.original_spectra
-            ]
-            if molecule_pairs_test is not None
-            else None,
+            "df_smiles_train": (
+                molecule_pairs_train.df_smiles
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "df_smiles_val": (
+                molecule_pairs_val.df_smiles
+                if molecule_pairs_val is not None
+                else None
+            ),
+            "df_smiles_test": (
+                molecule_pairs_test.df_smiles
+                if molecule_pairs_test is not None
+                else None
+            ),
+            "spectrum_indexes_train": (
+                [s.mgf_index for s in molecule_pairs_train.original_spectra]
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "spectrum_indexes_val": (
+                [s.mgf_index for s in molecule_pairs_val.original_spectra]
+                if molecule_pairs_val is not None
+                else None
+            ),
+            "spectrum_indexes_test": (
+                [s.mgf_index for s in molecule_pairs_test.original_spectra]
+                if molecule_pairs_test is not None
+                else None
+            ),
             "mgf_path": mgf_path,
             "format_version": "lightweight",
         }

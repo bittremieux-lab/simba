@@ -260,6 +260,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode = cfg.model.features.use_ion_mode,
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -269,6 +270,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode = cfg.model.features.use_ion_mode,
     )
 
     # Create samplers
@@ -392,6 +394,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_ce": cfg.model.features.use_ce,
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
+        "use_ion_mode": cfg.model.features.use_ion_mode,
     }
 
     # Load pretrained weights if specified

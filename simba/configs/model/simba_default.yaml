@@ -33,6 +33,7 @@ features:
   use_element_wise: true
   categorical_adducts: false
   use_only_protonized_adducts: false
+  use_ion_mode: false
 
   # Metadata features
   use_ce: false

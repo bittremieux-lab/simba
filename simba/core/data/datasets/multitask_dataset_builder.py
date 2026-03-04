@@ -10,7 +10,7 @@ from simba.core.data.datasets.multitask_dataset import (
 from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
-    encode_adduct,
+    encode_adduct_mass,
     encode_ion_activation,
     encode_ionization_method,
 )
@@ -36,6 +36,7 @@ class MultitaskDataBuilder:
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
+        use_ion_mode: bool = False,
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -98,35 +99,33 @@ class MultitaskDataBuilder:
         precursor_charge = np.zeros(
             (len(molecule_pairs.original_spectra), 1), dtype=np.int32
         )
-        if use_adduct:
-            ionmode = np.zeros(
-                (len(molecule_pairs.original_spectra), 1), dtype=np.float32
-            )
-            adduct = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(ADDUCT_TO_MASS.keys()),
-                ),
-                dtype=np.float32,
-            )
-        if use_ce:
-            ce = np.zeros((len(molecule_pairs.original_spectra), 1), dtype=np.int32)
-        if use_ion_activation:
-            ia = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(ION_ACTIVATION),
-                ),
-                dtype=np.int32,
-            )
-        if use_ion_method:
-            im = np.zeros(
-                (
-                    len(molecule_pairs.original_spectra),
-                    len(IONIZATION_METHODS),
-                ),
-                dtype=np.int32,
-            )
+        ionmode = np.zeros(
+            (len(molecule_pairs.original_spectra), 1), dtype=np.float32
+        )
+        adduct = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(ADDUCT_TO_MASS.keys()),
+            ),
+            dtype=np.float32,
+        )
+        ce = np.zeros(
+            (len(molecule_pairs.original_spectra), 1), dtype=np.int32
+        )
+        ia = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(ION_ACTIVATION),
+            ),
+            dtype=np.int32,
+        )
+        im = np.zeros(
+            (
+                len(molecule_pairs.original_spectra),
+                len(IONIZATION_METHODS),
+            ),
+            dtype=np.int32,
+        )
 
         logger.info("Loading mz, intensity and precursor data ...")
         for i, spec in enumerate(molecule_pairs.original_spectra):
@@ -140,14 +139,15 @@ class MultitaskDataBuilder:
             precursor_mass[i] = spec.precursor_mz
             precursor_charge[i] = spec.precursor_charge
 
-            if use_adduct:
+            if use_ion_mode:
                 if (spec.ionmode is None) or (
                     spec.ionmode == "None"
                 ):  # TODO: check if the 2nd condition is needed
                     ionmode[i] = 0
                 else:
                     ionmode[i] = 1.0 if spec.ionmode == "positive" else -1.0
-                adduct[i] = encode_adduct(spec.adduct)
+            if use_adduct:
+                adduct[i] = encode_adduct_mass(spec.params["adduct"])
 
             if use_ce:
                 if (spec.ce is None) or (spec.ce == "None"):
@@ -217,12 +217,13 @@ class MultitaskDataBuilder:
             fingerprint_0=fingerprint_0,
             max_num_peaks=max_num_peaks,
             use_adduct=use_adduct,
-            ionmode=(ionmode if use_adduct else None),
-            adduct=(adduct if use_adduct else None),
+            use_ion_mode=use_ion_mode,
+            ionmode=ionmode,
+            adduct=adduct,
             use_ce=use_ce,
-            ce=(ce if use_ce else None),
+            ce=ce,
             use_ion_activation=use_ion_activation,
-            ion_activation=(ia if use_ion_activation else None),
+            ion_activation=ia,
             use_ion_method=use_ion_method,
-            ion_method=(im if use_ion_method else None),
+            ion_method=im,
         )
