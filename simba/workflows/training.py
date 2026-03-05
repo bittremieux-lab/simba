@@ -98,12 +98,31 @@ def load_dataset(cfg: DictConfig):
                 df_smiles = mapping[df_smiles_key]
                 spectrum_indexes = mapping[spectrum_indexes_key]
 
-                # Load original spectra (all, including duplicates)
-                original_spectra = [spectra_by_idx[idx] for idx in spectrum_indexes]
+                # Load original spectra, handling missing ones
+                original_spectra = []
+                idx_map = {}  # old_idx -> new_idx
+                missing = []
+                
+                for old_idx, mgf_idx in enumerate(spectrum_indexes):
+                    if mgf_idx in spectra_by_idx:
+                        idx_map[old_idx] = len(original_spectra)
+                        original_spectra.append(spectra_by_idx[mgf_idx])
+                    else:
+                        missing.append(mgf_idx)
+                
+                if missing:
+                    logger.warning(f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})")
+                    # Filter df_smiles to keep only rows with valid spectra
+                    valid_rows = []
+                    for i in df_smiles.index:
+                        old_idxs = df_smiles.loc[i, "indexes"]
+                        if all(idx in idx_map for idx in old_idxs):
+                            # Remap to new positions
+                            df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
+                            valid_rows.append(i)
+                    df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
 
                 # Build unique_spectra from df_smiles indexes
-                # df_smiles['indexes'] contains lists of indexes into original_spectra
-                # We take the first spectrum for each unique SMILES
                 unique_spectra = [
                     original_spectra[df_smiles.loc[i, "indexes"][0]]
                     for i in df_smiles.index
