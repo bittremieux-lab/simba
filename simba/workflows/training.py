@@ -84,7 +84,16 @@ def load_dataset(cfg: DictConfig):
         )
 
         mgf_path = mapping["mgf_path"]
-        all_spectra = load_spectra(mgf_path, cfg)
+        
+        # Use preprocessing config values (if available) to ensure consistent filtering
+        use_only_protonized = getattr(cfg.preprocessing, 'use_only_protonized_adducts', True)
+        
+        all_spectra = load_spectra(
+            mgf_path, 
+            cfg,
+            n_samples=-1,  # Load all spectra during training
+            use_only_protonized_adducts=use_only_protonized,
+        )
 
         # Create spectrum lookup by MGF index
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}
