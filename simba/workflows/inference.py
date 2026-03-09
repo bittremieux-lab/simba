@@ -10,6 +10,7 @@ import lightning.pytorch as pl
 import numpy as np
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
+from sklearn.metrics import mean_absolute_error
 from torch.utils.data import DataLoader
 
 import simba.core.data.molecule_pairs
@@ -21,7 +22,6 @@ from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.workflows.utils import load_spectra
-from sklearn.metrics import mean_absolute_error
 
 
 # Backward compatibility: Support loading old pickle files with old module paths
@@ -55,10 +55,12 @@ def load_inference_data(cfg: DictConfig):
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
         mgf_path = dataset["mgf_path"]
-        
+
         # Use preprocessing config values (if available) to ensure consistent filtering
-        use_only_protonized = getattr(cfg.preprocessing, 'use_only_protonized_adducts', True)
-        
+        use_only_protonized = getattr(
+            cfg.preprocessing, "use_only_protonized_adducts", True
+        )
+
         all_spectra = load_spectra(
             mgf_path,
             cfg,
@@ -78,16 +80,18 @@ def load_inference_data(cfg: DictConfig):
             original_spectra = []
             idx_map = {}  # old_idx -> new_idx
             missing = []
-            
+
             for old_idx, mgf_idx in enumerate(spectrum_indexes):
                 if mgf_idx in spectra_by_idx:
                     idx_map[old_idx] = len(original_spectra)
                     original_spectra.append(spectra_by_idx[mgf_idx])
                 else:
                     missing.append(mgf_idx)
-            
+
             if missing:
-                logger.warning(f"[test] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})")
+                logger.warning(
+                    f"[test] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                )
                 # Filter df_smiles to keep only rows with valid spectra
                 valid_rows = []
                 for i in df_smiles.index:
@@ -96,7 +100,7 @@ def load_inference_data(cfg: DictConfig):
                         # Remap to new positions
                         df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
                         valid_rows.append(i)
-                df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+                df_smiles = df_smiles.loc[valid_rows]
 
             # Build unique_spectra from df_smiles indexes
             # df_smiles['indexes'] contains lists of indexes into original_spectra
@@ -188,7 +192,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
     dataloader_ed = DataLoader(
         dataset_ed, batch_size=cfg.inference.batch_size, shuffle=False
@@ -201,7 +205,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
     dataloader_mces = DataLoader(
         dataset_mces, batch_size=cfg.inference.batch_size, shuffle=False
@@ -372,14 +376,16 @@ def evaluate_predictions(
 
     if len(mces_true) == 0 or len(pred_mces_mces_flat) == 0:
         logger.warning("No MCES samples after filtering, skipping MCES correlation")
-        corr_model_mces = float("nan") 
-        mae_model_mces =float("nan")
+        corr_model_mces = float("nan")
+        mae_model_mces = float("nan")
 
     else:
         corr_model_mces, _ = spearmanr(mces_true, pred_mces_mces_flat)
-        mae_model_mces =  mean_absolute_error(mces_true, pred_mces_mces_flat)
+        mae_model_mces = mean_absolute_error(mces_true, pred_mces_mces_flat)
     logger.info(f"MCES/Tanimoto correlation: {corr_model_mces:.4f}")
-    logger.info(f"MCES/Tanimoto mean absolute error: {cfg.data.mces20_max_value * mae_model_mces:.4f}")
+    logger.info(
+        f"MCES/Tanimoto mean absolute error: {cfg.data.mces20_max_value * mae_model_mces:.4f}"
+    )
 
     # Denormalize if using MCES20
     if not cfg.data.use_tanimoto:

@@ -129,7 +129,7 @@ def load_dataset(cfg: DictConfig):
                             # Remap to new positions
                             df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
                             valid_rows.append(i)
-                    df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+                    df_smiles = df_smiles.loc[valid_rows]
 
                 # Build unique_spectra from df_smiles indexes
                 unique_spectra = [
