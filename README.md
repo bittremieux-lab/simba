@@ -275,6 +275,38 @@ simba preprocess \
 
 ---
 
+**Reusing Precomputed Distances:**
+
+To speed up preprocessing when working with related datasets (e.g., MS2-only, MS3-only, and joint MS2+MS3), you can reuse previously computed molecular distances:
+
+```bash
+# First: preprocess MS2-only data
+simba preprocess \
+  paths.spectra_path=ms2_spectra.mgf \
+  paths.preprocessing_dir=./ms2_preprocessing/
+
+# Then: preprocess MS3-only data
+simba preprocess \
+  paths.spectra_path=ms3_spectra.mgf \
+  paths.preprocessing_dir=./ms3_preprocessing/
+
+# Finally: preprocess joint dataset, reusing distances from both
+simba preprocess \
+  paths.spectra_path=joint_spectra.mgf \
+  paths.preprocessing_dir=./joint_preprocessing/ \
+  'preprocessing.precomputed_distances=[./ms2_preprocessing/, ./ms3_preprocessing/]'
+```
+
+The cache automatically:
+- Finds all distance files (`edit_distance_*.npy`, `mces_*.npy`) in each directory
+- Loads SMILES mappings from `mapping_unique_smiles.pkl`
+- Matches molecules by SMILES strings (robust to different splits/filters)
+- Logs cache hit/miss statistics during computation
+
+**Cache hit rate = % of molecule pairs that were reused instead of recomputed!**
+
+---
+
 **Quick Testing (Fast Dev Mode):**
 
 ```bash

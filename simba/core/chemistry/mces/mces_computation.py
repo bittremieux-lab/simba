@@ -36,6 +36,7 @@ class MCES:
         use_edit_distance: bool = False,
         loaded_molecule_pairs: MolecularPairsSet | None = None,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MoleculePairsOpt:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -72,6 +73,8 @@ class MCES:
             Precomputed molecule pairs to use instead of computing new ones, by default None;
         compute_both_metrics : bool, optional
             Whether to compute both MCES and edit distance metrics, by default False.
+        precomputed_cache : dict, optional
+            Cache of precomputed distances to reuse from previous runs, by default None.
 
         Returns
         -------
@@ -100,6 +103,7 @@ class MCES:
                 identifier=identifier,
                 use_edit_distance=use_edit_distance,
                 compute_both_metrics=compute_both_metrics,
+                precomputed_cache=precomputed_cache,
             )
         else:
             molecular_pairs = loaded_molecule_pairs
@@ -289,6 +293,7 @@ class MCES:
         identifier: str = "",
         use_edit_distance=False,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MolecularPairsSet:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -311,6 +316,8 @@ class MCES:
             If True, compute edit distance instead of MCES, by default False.
         compute_both_metrics : bool, optional
             If True, compute both ED and MCES in single pass (optimized), by default False.
+        precomputed_cache : dict, optional
+            Cache of precomputed distances to reuse from previous runs, by default None.
 
         Returns
         -------
@@ -447,6 +454,7 @@ class MCES:
                                 worker_output,
                                 sub_index,
                                 f"Node {current_node} Chunk {chunk_idx} Worker {sub_index}",
+                                precomputed_cache,
                             ),
                         )
                         results.append(result)
