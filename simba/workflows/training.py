@@ -84,12 +84,14 @@ def load_dataset(cfg: DictConfig):
         )
 
         mgf_path = mapping["mgf_path"]
-        
+
         # Use preprocessing config values (if available) to ensure consistent filtering
-        use_only_protonized = getattr(cfg.preprocessing, 'use_only_protonized_adducts', True)
-        
+        use_only_protonized = getattr(
+            cfg.preprocessing, "use_only_protonized_adducts", True
+        )
+
         all_spectra = load_spectra(
-            mgf_path, 
+            mgf_path,
             cfg,
             n_samples=-1,  # Load all spectra during training
             use_only_protonized_adducts=use_only_protonized,
@@ -111,23 +113,27 @@ def load_dataset(cfg: DictConfig):
                 original_spectra = []
                 idx_map = {}  # old_idx -> new_idx
                 missing = []
-                
+
                 for old_idx, mgf_idx in enumerate(spectrum_indexes):
                     if mgf_idx in spectra_by_idx:
                         idx_map[old_idx] = len(original_spectra)
                         original_spectra.append(spectra_by_idx[mgf_idx])
                     else:
                         missing.append(mgf_idx)
-                
+
                 if missing:
-                    logger.warning(f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})")
+                    logger.warning(
+                        f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                    )
                     # Filter df_smiles to keep only rows with valid spectra
                     valid_rows = []
                     for i in df_smiles.index:
                         old_idxs = df_smiles.loc[i, "indexes"]
                         if all(idx in idx_map for idx in old_idxs):
                             # Remap to new positions
-                            df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
+                            df_smiles.at[i, "indexes"] = [
+                                idx_map[idx] for idx in old_idxs
+                            ]
                             valid_rows.append(i)
                     df_smiles = df_smiles.loc[valid_rows]
 
@@ -288,7 +294,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -298,7 +304,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
 
     # Create samplers

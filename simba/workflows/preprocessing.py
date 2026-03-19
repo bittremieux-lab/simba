@@ -59,9 +59,7 @@ def write_data(
                 else None
             ),
             "df_smiles_val": (
-                molecule_pairs_val.df_smiles
-                if molecule_pairs_val is not None
-                else None
+                molecule_pairs_val.df_smiles if molecule_pairs_val is not None else None
             ),
             "df_smiles_test": (
                 molecule_pairs_test.df_smiles
@@ -212,13 +210,20 @@ def preprocess(cfg: DictConfig) -> None:
 
     # Load precomputed distances cache if configured
     precomputed_cache = {}
-    if hasattr(cfg.preprocessing, 'precomputed_distances') and cfg.preprocessing.precomputed_distances:
+    if (
+        hasattr(cfg.preprocessing, "precomputed_distances")
+        and cfg.preprocessing.precomputed_distances
+    ):
         dirs = cfg.preprocessing.precomputed_distances
         if dirs and len(dirs) > 0:
-            logger.info(f"Loading precomputed distances from {len(dirs)} directory(ies)...")
+            logger.info(
+                f"Loading precomputed distances from {len(dirs)} directory(ies)..."
+            )
             precomputed_cache = load_precomputed_distances_cache(dirs)
         else:
-            logger.info("No precomputed distances configured, computing all from scratch")
+            logger.info(
+                "No precomputed distances configured, computing all from scratch"
+            )
     else:
         logger.info("No precomputed distances configured, computing all from scratch")
 

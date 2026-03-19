@@ -499,10 +499,10 @@ def _plot_cm(
 ) -> None:
     """Plot confusion matrix."""
     import matplotlib.pyplot as plt
-    from sklearn.metrics import accuracy_score, confusion_matrix
+    from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 
     cm = confusion_matrix(true, preds)
-    accuracy = accuracy_score(true, preds)
+    accuracy = balanced_accuracy_score(true, preds)
 
     # Normalize
     cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]

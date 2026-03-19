@@ -116,6 +116,12 @@ class TestEmbedderMultitask:
             "adduct_1": torch.zeros(batch_size, n_adducts),  # One-hot encoded
             "ionmode_0": torch.ones(batch_size, 1),
             "ionmode_1": torch.ones(batch_size, 1),
+            "ce_0": torch.ones(batch_size, 1) * 30.0,
+            "ce_1": torch.ones(batch_size, 1) * 30.0,
+            "ion_activation_0": torch.zeros(batch_size, 1),
+            "ion_activation_1": torch.zeros(batch_size, 1),
+            "ion_method_0": torch.zeros(batch_size, 1),
+            "ion_method_1": torch.zeros(batch_size, 1),
             "similarity": torch.tensor([0.8, 0.6]),
             "similarity_2": torch.tensor([0.7, 0.5]),
         }

@@ -74,7 +74,7 @@ class SimilarityModel(pl.LightningModule):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
-            use_ion_mode= use_ion_mode,
+            use_ion_mode=use_ion_mode,
         )
 
         self.regression_loss = nn.MSELoss()
@@ -115,8 +115,8 @@ class SimilarityModel(pl.LightningModule):
         if self.use_ion_mode:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["precursor_charge"]=batch["precursor_charge_0"].float()
-            kwargs_1["precursor_charge"]=batch["precursor_charge_1"].float()
+            kwargs_0["precursor_charge"] = batch["precursor_charge_0"].float()
+            kwargs_1["precursor_charge"] = batch["precursor_charge_1"].float()
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
@@ -380,7 +380,7 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
-            use_ion_mode= use_ion_mode,
+            use_ion_mode=use_ion_mode,
         )
         self.weights = weights
 
@@ -428,8 +428,8 @@ class SimilarityModelMultitask(SimilarityModel):
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
         if USE_LEARNABLE_MULTITASK:
-            initial_log_sigma1= 0.0 
-            initial_log_sigma2 = -5.3  
+            initial_log_sigma1 = 0.0
+            initial_log_sigma2 = -5.3
             self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
             self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
 
@@ -484,12 +484,8 @@ class SimilarityModelMultitask(SimilarityModel):
         kwargs_0["adduct"] = batch["adduct_0"].float()
         kwargs_1["adduct"] = batch["adduct_1"].float()
 
-        batch["ce_0"] = torch.nan_to_num(
-            batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ce_1"] = torch.nan_to_num(
-            batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
+        batch["ce_0"] = torch.nan_to_num(batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0)
+        batch["ce_1"] = torch.nan_to_num(batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0)
         kwargs_0["ce"] = batch["ce_0"].float()
         kwargs_1["ce"] = batch["ce_1"].float()
 
@@ -789,7 +785,7 @@ class EmbeddingExtractor(pl.LightningModule):
             "precursor_mass": batch["precursor_mass"].float(),
             "precursor_charge": batch["precursor_charge"].float(),
         }
-        
+
         # Add metadata fields if present in batch
         if "ionmode" in batch:
             kwargs["ionmode"] = batch["ionmode"].float()
