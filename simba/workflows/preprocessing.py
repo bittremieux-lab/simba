@@ -220,6 +220,26 @@ def preprocess(cfg: DictConfig) -> None:
                 f"Loading precomputed distances from {len(dirs)} directory(ies)..."
             )
             precomputed_cache = load_precomputed_distances_cache(dirs)
+
+            # Filter cache for SMILES in current dataset
+            if precomputed_cache:
+                all_smiles = set()
+                for spectra_list in [
+                    all_spectra_train,
+                    all_spectra_val,
+                    all_spectra_test,
+                ]:
+                    if spectra_list:
+                        all_smiles.update(s.params["smiles"] for s in spectra_list)
+
+                if all_smiles:
+                    from simba.core.chemistry.edit_distance.edit_distance import (
+                        filter_cache_by_smiles,
+                    )
+
+                    precomputed_cache = filter_cache_by_smiles(
+                        precomputed_cache, list(all_smiles)
+                    )
         else:
             logger.info(
                 "No precomputed distances configured, computing all from scratch"

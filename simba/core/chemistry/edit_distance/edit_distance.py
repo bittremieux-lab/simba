@@ -18,6 +18,38 @@ from simba.utils.logger_setup import logger
 # Sentinel value indicating very dissimilar molecules (Tanimoto < 0.2)
 VERY_HIGH_DISTANCE = 666
 
+# Global cache for precomputed distances (shared across workers via fork)
+_GLOBAL_CACHE = None
+
+
+def set_global_cache(cache: dict) -> None:
+    """Set global cache before forking workers."""
+    global _GLOBAL_CACHE
+    _GLOBAL_CACHE = cache
+
+
+def get_global_cache() -> dict:
+    """Get global cache in worker process."""
+    return _GLOBAL_CACHE
+
+
+def filter_cache_by_smiles(cache: dict, smiles_list: list[str]) -> dict:
+    """Filter cache to only keep entries for given SMILES."""
+    if not cache:
+        return {}
+
+    smiles_set = set(smiles_list)
+    filtered = {
+        key: val
+        for key, val in cache.items()
+        if key[0] in smiles_set and key[1] in smiles_set
+    }
+
+    logger.info(
+        f"Cache: {len(filtered):,} entries kept out of {len(cache):,} ({len(filtered) / len(cache) * 100:.1f}%)"
+    )
+    return filtered
+
 
 def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
     """
@@ -263,7 +295,6 @@ def compute_ed_and_mces_both(
     output_file: str = None,
     progress_position: int = 0,
     progress_desc: str = "Computing",
-    precomputed_cache: dict = None,
 ) -> np.ndarray | dict:
     """
     Compute BOTH edit distance AND MCES for a batch of molecule pairs in a single pass.
@@ -302,8 +333,6 @@ def compute_ed_and_mces_both(
         Position for the tqdm progress bar (default: 0). Used for stacking multiple progress bars.
     progress_desc : str, optional
         Description text for the tqdm progress bar (default: "Computing").
-    precomputed_cache : dict, optional
-        Cache of precomputed distances with (smiles1, smiles2) keys -> [ed, mces] values.
 
     Returns
     -------
@@ -333,6 +362,9 @@ def compute_ed_and_mces_both(
     # Track cache hits/misses
     cache_hits = 0
     cache_misses = 0
+
+    # Get global cache (set before pool creation)
+    precomputed_cache = get_global_cache()
 
     for index in tqdm(
         range(pair_distances.shape[0]),

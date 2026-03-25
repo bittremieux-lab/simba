@@ -73,8 +73,6 @@ class MCES:
             Precomputed molecule pairs to use instead of computing new ones, by default None;
         compute_both_metrics : bool, optional
             Whether to compute both MCES and edit distance metrics, by default False.
-        precomputed_cache : dict, optional
-            Cache of precomputed distances to reuse from previous runs, by default None.
 
         Returns
         -------
@@ -316,8 +314,6 @@ class MCES:
             If True, compute edit distance instead of MCES, by default False.
         compute_both_metrics : bool, optional
             If True, compute both ED and MCES in single pass (optimized), by default False.
-        precomputed_cache : dict, optional
-            Cache of precomputed distances to reuse from previous runs, by default None.
 
         Returns
         -------
@@ -413,6 +409,9 @@ class MCES:
             if not (os.path.exists(filename)):  # do not overwrite existing files
                 logger.info(f"Processing chunk {chunk_idx}/{len(chunks)}")
 
+                # Set global cache before creating pool (inherited via fork)
+                edit_distance.set_global_cache(precomputed_cache)
+
                 pool = multiprocessing.Pool(processes=num_workers)
 
                 mols = [Chem.MolFromSmiles(s) for s in all_smiles]
@@ -454,7 +453,6 @@ class MCES:
                                 worker_output,
                                 sub_index,
                                 f"Node {current_node} Chunk {chunk_idx} Worker {sub_index}",
-                                precomputed_cache,
                             ),
                         )
                         results.append(result)
