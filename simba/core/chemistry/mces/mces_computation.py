@@ -36,6 +36,7 @@ class MCES:
         use_edit_distance: bool = False,
         loaded_molecule_pairs: MolecularPairsSet | None = None,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MoleculePairsOpt:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -100,6 +101,7 @@ class MCES:
                 identifier=identifier,
                 use_edit_distance=use_edit_distance,
                 compute_both_metrics=compute_both_metrics,
+                precomputed_cache=precomputed_cache,
             )
         else:
             molecular_pairs = loaded_molecule_pairs
@@ -289,6 +291,7 @@ class MCES:
         identifier: str = "",
         use_edit_distance=False,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MolecularPairsSet:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -405,6 +408,9 @@ class MCES:
 
             if not (os.path.exists(filename)):  # do not overwrite existing files
                 logger.info(f"Processing chunk {chunk_idx}/{len(chunks)}")
+
+                # Set global cache before creating pool (inherited via fork)
+                edit_distance.set_global_cache(precomputed_cache)
 
                 pool = multiprocessing.Pool(processes=num_workers)
 

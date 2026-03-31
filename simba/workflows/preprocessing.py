@@ -17,6 +17,9 @@ from omegaconf import DictConfig
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method("spawn", force=True)
 
+from simba.core.chemistry.edit_distance.edit_distance import (
+    load_precomputed_distances_cache,
+)
 from simba.core.chemistry.mces.mces_computation import MCES
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
@@ -50,30 +53,34 @@ def write_data(
         # Lightweight format: save only df_smiles, original MGF indexes, and mgf path
         # Spectra will be loaded at training time from mgf file using absolute indexes
         dataset = {
-            "df_smiles_train": molecule_pairs_train.df_smiles
-            if molecule_pairs_train is not None
-            else None,
-            "df_smiles_val": molecule_pairs_val.df_smiles
-            if molecule_pairs_val is not None
-            else None,
-            "df_smiles_test": molecule_pairs_test.df_smiles
-            if molecule_pairs_test is not None
-            else None,
-            "spectrum_indexes_train": [
-                s.mgf_index for s in molecule_pairs_train.original_spectra
-            ]
-            if molecule_pairs_train is not None
-            else None,
-            "spectrum_indexes_val": [
-                s.mgf_index for s in molecule_pairs_val.original_spectra
-            ]
-            if molecule_pairs_val is not None
-            else None,
-            "spectrum_indexes_test": [
-                s.mgf_index for s in molecule_pairs_test.original_spectra
-            ]
-            if molecule_pairs_test is not None
-            else None,
+            "df_smiles_train": (
+                molecule_pairs_train.df_smiles
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "df_smiles_val": (
+                molecule_pairs_val.df_smiles if molecule_pairs_val is not None else None
+            ),
+            "df_smiles_test": (
+                molecule_pairs_test.df_smiles
+                if molecule_pairs_test is not None
+                else None
+            ),
+            "spectrum_indexes_train": (
+                [s.mgf_index for s in molecule_pairs_train.original_spectra]
+                if molecule_pairs_train is not None
+                else None
+            ),
+            "spectrum_indexes_val": (
+                [s.mgf_index for s in molecule_pairs_val.original_spectra]
+                if molecule_pairs_val is not None
+                else None
+            ),
+            "spectrum_indexes_test": (
+                [s.mgf_index for s in molecule_pairs_test.original_spectra]
+                if molecule_pairs_test is not None
+                else None
+            ),
             "mgf_path": mgf_path,
             "format_version": "lightweight",
         }
@@ -201,6 +208,45 @@ def preprocess(cfg: DictConfig) -> None:
         with open(output_file, "wb") as file:
             pickle.dump(dataset, file)
 
+    # Load precomputed distances cache if configured
+    precomputed_cache = {}
+    if (
+        hasattr(cfg.preprocessing, "precomputed_distances")
+        and cfg.preprocessing.precomputed_distances
+    ):
+        dirs = cfg.preprocessing.precomputed_distances
+        if dirs and len(dirs) > 0:
+            logger.info(
+                f"Loading precomputed distances from {len(dirs)} directory(ies)..."
+            )
+            precomputed_cache = load_precomputed_distances_cache(dirs)
+
+            # Filter cache for SMILES in current dataset
+            if precomputed_cache:
+                all_smiles = set()
+                for spectra_list in [
+                    all_spectra_train,
+                    all_spectra_val,
+                    all_spectra_test,
+                ]:
+                    if spectra_list:
+                        all_smiles.update(s.params["smiles"] for s in spectra_list)
+
+                if all_smiles:
+                    from simba.core.chemistry.edit_distance.edit_distance import (
+                        filter_cache_by_smiles,
+                    )
+
+                    precomputed_cache = filter_cache_by_smiles(
+                        precomputed_cache, list(all_smiles)
+                    )
+        else:
+            logger.info(
+                "No precomputed distances configured, computing all from scratch"
+            )
+    else:
+        logger.info("No precomputed distances configured, computing all from scratch")
+
     # Compute distances for each partition
     molecule_pairs = {}
     for type_data, spectra in [
@@ -225,6 +271,7 @@ def preprocess(cfg: DictConfig) -> None:
             use_edit_distance=True,  # Ignored when compute_both_metrics=True
             loaded_molecule_pairs=None,
             compute_both_metrics=True,
+            precomputed_cache=precomputed_cache if len(precomputed_cache) > 0 else None,
         )
 
     # Combine edit distance and MCES files

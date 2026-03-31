@@ -46,6 +46,7 @@ dependencies = [
     "pyteomics>=4.6.0",
     "depthcharge-ms @ git+https://github.com/wfondrie/depthcharge.git@bd2861f",
     "myopic-mces>=1.0.0,<2.0.0",
+    "highspy>=1.13.1",
     # Data processing
     "h5py>=3.10.0",
     "pyarrow>=15.0.0",

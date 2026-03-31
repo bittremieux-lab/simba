@@ -10,6 +10,7 @@ import lightning.pytorch as pl
 import numpy as np
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
+from sklearn.metrics import mean_absolute_error
 from torch.utils.data import DataLoader
 
 import simba.core.data.molecule_pairs
@@ -54,7 +55,18 @@ def load_inference_data(cfg: DictConfig):
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
         mgf_path = dataset["mgf_path"]
-        all_spectra = load_spectra(mgf_path, cfg)
+
+        # Use preprocessing config values (if available) to ensure consistent filtering
+        use_only_protonized = getattr(
+            cfg.preprocessing, "use_only_protonized_adducts", True
+        )
+
+        all_spectra = load_spectra(
+            mgf_path,
+            cfg,
+            n_samples=-1,
+            use_only_protonized_adducts=use_only_protonized,
+        )
 
         # Create spectrum lookup by MGF index
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}
@@ -64,8 +76,31 @@ def load_inference_data(cfg: DictConfig):
             df_smiles = dataset["df_smiles_test"]
             spectrum_indexes = dataset["spectrum_indexes_test"]
 
-            # Load original spectra (all, including duplicates)
-            original_spectra = [spectra_by_idx[idx] for idx in spectrum_indexes]
+            # Load original spectra, handling missing ones
+            original_spectra = []
+            idx_map = {}  # old_idx -> new_idx
+            missing = []
+
+            for old_idx, mgf_idx in enumerate(spectrum_indexes):
+                if mgf_idx in spectra_by_idx:
+                    idx_map[old_idx] = len(original_spectra)
+                    original_spectra.append(spectra_by_idx[mgf_idx])
+                else:
+                    missing.append(mgf_idx)
+
+            if missing:
+                logger.warning(
+                    f"[test] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                )
+                # Filter df_smiles to keep only rows with valid spectra
+                valid_rows = []
+                for i in df_smiles.index:
+                    old_idxs = df_smiles.loc[i, "indexes"]
+                    if all(idx in idx_map for idx in old_idxs):
+                        # Remap to new positions
+                        df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
+                        valid_rows.append(i)
+                df_smiles = df_smiles.loc[valid_rows]
 
             # Build unique_spectra from df_smiles indexes
             # df_smiles['indexes'] contains lists of indexes into original_spectra
@@ -157,6 +192,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
     dataloader_ed = DataLoader(
         dataset_ed, batch_size=cfg.inference.batch_size, shuffle=False
@@ -169,6 +205,7 @@ def prepare_inference_dataloaders(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
     dataloader_mces = DataLoader(
         dataset_mces, batch_size=cfg.inference.batch_size, shuffle=False
@@ -202,6 +239,7 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         "use_ce": cfg.model.features.use_ce,
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
+        "use_ion_mode": cfg.model.features.use_ion_mode,
     }
 
     model = SimilarityModelMultitask.load_from_checkpoint(
@@ -314,7 +352,10 @@ def evaluate_predictions(
 
     # Edit distance correlation
     corr_model_ed, _ = spearmanr(ed_true_clean, pred_ed_ed_clean)
+    mae_model_ed = mean_absolute_error(ed_true_clean, pred_ed_ed_clean)
+
     logger.info(f"Edit distance correlation: {corr_model_ed:.4f}")
+    logger.info(f"Edit distance mean absolute error: {mae_model_ed:.4f}")
 
     # Plot confusion matrix
     _plot_cm(ed_true_clean, pred_ed_ed_clean, cfg, output_dir)
@@ -336,10 +377,15 @@ def evaluate_predictions(
     if len(mces_true) == 0 or len(pred_mces_mces_flat) == 0:
         logger.warning("No MCES samples after filtering, skipping MCES correlation")
         corr_model_mces = float("nan")
+        mae_model_mces = float("nan")
+
     else:
         corr_model_mces, _ = spearmanr(mces_true, pred_mces_mces_flat)
-
+        mae_model_mces = mean_absolute_error(mces_true, pred_mces_mces_flat)
     logger.info(f"MCES/Tanimoto correlation: {corr_model_mces:.4f}")
+    logger.info(
+        f"MCES/Tanimoto mean absolute error: {cfg.data.mces20_max_value * mae_model_mces:.4f}"
+    )
 
     # Denormalize if using MCES20
     if not cfg.data.use_tanimoto:
@@ -453,10 +499,10 @@ def _plot_cm(
 ) -> None:
     """Plot confusion matrix."""
     import matplotlib.pyplot as plt
-    from sklearn.metrics import accuracy_score, confusion_matrix
+    from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 
     cm = confusion_matrix(true, preds)
-    accuracy = accuracy_score(true, preds)
+    accuracy = balanced_accuracy_score(true, preds)
 
     # Normalize
     cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]

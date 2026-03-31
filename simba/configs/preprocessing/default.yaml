@@ -24,5 +24,13 @@ test_split: 0.1  # Test split fraction (0.0-1.0)
 random_mces_sampling: false
 use_only_protonized_adducts: true
 
+# Precomputed distances - reuse distances from previous preprocessing runs
+# Just list preprocessing directories - auto-discovers all distance files
+precomputed_distances:
+  # Examples:
+  # - "./test_precomputed_cache/dataset1/"
+  # - "./ms2_preprocessing/"
+  # - "./ms3_preprocessing/"
+
 # Subsampling
 subsample_preprocessing: false

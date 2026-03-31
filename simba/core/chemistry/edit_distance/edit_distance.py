@@ -1,6 +1,7 @@
 import os
 from functools import lru_cache
 
+import dill
 import numpy as np
 import pandas as pd
 from myopic_mces.myopic_mces import MCES as MCES2
@@ -16,6 +17,258 @@ from simba.utils.logger_setup import logger
 
 # Sentinel value indicating very dissimilar molecules (Tanimoto < 0.2)
 VERY_HIGH_DISTANCE = 666
+
+# Global cache for precomputed distances (shared across workers via fork)
+_GLOBAL_CACHE = None
+
+
+def set_global_cache(cache: dict) -> None:
+    """Set global cache before forking workers."""
+    global _GLOBAL_CACHE
+    _GLOBAL_CACHE = cache
+
+
+def get_global_cache() -> dict:
+    """Get global cache in worker process."""
+    return _GLOBAL_CACHE
+
+
+def filter_cache_by_smiles(cache: dict, smiles_list: list[str]) -> dict:
+    """Filter cache to only keep entries for given SMILES."""
+    if not cache:
+        return {}
+
+    smiles_set = set(smiles_list)
+    filtered = {
+        key: val
+        for key, val in cache.items()
+        if key[0] in smiles_set and key[1] in smiles_set
+    }
+
+    logger.info(
+        f"Cache: {len(filtered):,} entries kept out of {len(cache):,} ({len(filtered) / len(cache) * 100:.1f}%)"
+    )
+    return filtered
+
+
+def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
+    """
+    Load precomputed distances from preprocessing directories.
+
+    Auto-discovers files in each directory:
+    - mapping_unique_smiles.pkl (for SMILES mapping)
+    - edit_distance_*.npy and mces_*.npy files (for distances)
+
+    Parameters
+    ----------
+    preprocessing_dirs : list[str]
+        List of preprocessing directory paths.
+
+    Returns
+    -------
+    dict
+        Cache with (smiles1, smiles2) tuple keys -> [ed_distance, mces_distance] values.
+    """
+    cache = {}
+
+    for prep_dir in preprocessing_dirs:
+        if not os.path.exists(prep_dir):
+            logger.warning(f"Preprocessing directory not found: {prep_dir}")
+            continue
+
+        # Find the pickle file
+        pickle_path = os.path.join(prep_dir, "mapping_unique_smiles.pkl")
+        if not os.path.exists(pickle_path):
+            logger.warning(f"No mapping_unique_smiles.pkl found in {prep_dir}")
+            continue
+
+        # Find distance files by prefix and split
+        distance_files = {}
+        for split in ["train", "val", "test"]:
+            distance_files[split] = {"ed": [], "mces": []}
+
+        for filename in os.listdir(prep_dir):
+            if not filename.endswith(".npy"):
+                continue
+
+            # Determine split
+            split = None
+            for s in ["train", "val", "test"]:
+                if f"_{s}_" in filename or filename.endswith(f"_{s}.npy"):
+                    split = s
+                    break
+
+            if split is None:
+                continue
+
+            # Categorize by type
+            if filename.startswith("edit_distance_"):
+                distance_files[split]["ed"].append(os.path.join(prep_dir, filename))
+            elif filename.startswith("mces_"):
+                distance_files[split]["mces"].append(os.path.join(prep_dir, filename))
+
+        # Count total files
+        total_ed = sum(len(v["ed"]) for v in distance_files.values())
+        total_mces = sum(len(v["mces"]) for v in distance_files.values())
+
+        if total_ed == 0 and total_mces == 0:
+            logger.warning(f"No distance files found in {prep_dir}")
+            continue
+
+        logger.info(
+            f"Auto-discovered in {prep_dir}: {total_ed} ED files, {total_mces} MCES files"
+        )
+
+        # Load SMILES mapping per split
+        try:
+            with open(pickle_path, "rb") as f:
+                data = dill.load(f)
+        except Exception as e:
+            logger.error(f"Error loading pickle {pickle_path}: {e}")
+            continue
+
+        # Process each split separately (indices are per-split)
+        pairs_added = 0
+        for split in ["train", "val", "test"]:
+            # Extract SMILES for this split only
+            split_smiles = []
+            for key_prefix in ["molecule_pairs_", "df_smiles_"]:
+                key = key_prefix + split
+                if key not in data or data[key] is None:
+                    continue
+
+                # Extract DataFrame
+                if key_prefix == "molecule_pairs_":
+                    if not hasattr(data[key], "df_smiles"):
+                        continue
+                    df = data[key].df_smiles
+                else:
+                    df = data[key]
+
+                if df is None or df.empty:
+                    continue
+
+                # Extract SMILES from DataFrame
+                if "canon_smiles" in df.columns:
+                    smiles_list = df["canon_smiles"].tolist()
+                elif "smiles" in df.columns:
+                    smiles_list = df["smiles"].tolist()
+                elif hasattr(df.index, "tolist"):
+                    smiles_list = df.index.tolist()
+                else:
+                    continue
+
+                # Remove duplicates while preserving order
+                seen = set()
+                for s in smiles_list:
+                    if s not in seen:
+                        seen.add(s)
+                        split_smiles.append(s)
+                break  # Only need one match
+
+            if not split_smiles:
+                continue
+
+            # Load distances for this split
+            ed_cache_split = _load_distances_from_files(
+                distance_files[split]["ed"], split_smiles
+            )
+            mces_cache_split = _load_distances_from_files(
+                distance_files[split]["mces"], split_smiles
+            )
+
+            # Combine into final cache (only pairs with both ED and MCES)
+            for key in set(ed_cache_split.keys()) & set(mces_cache_split.keys()):
+                cache[key] = [ed_cache_split[key], mces_cache_split[key]]
+                pairs_added += 1
+
+        logger.info(f"Loaded {pairs_added} valid pairs from {prep_dir}")
+
+    logger.info(f"Total unique pairs in cache: {len(cache)}")
+    return cache
+
+
+def _load_smiles_from_pickle(pickle_path: str) -> list[str]:
+    """Extract unique SMILES list from preprocessing pickle."""
+    try:
+        with open(pickle_path, "rb") as f:
+            data = dill.load(f)
+
+        unique_smiles = []
+
+        # Handle both old format (molecule_pairs_X) and new lightweight format (df_smiles_X)
+        for key_prefix in ["molecule_pairs_", "df_smiles_"]:
+            for split in ["train", "val", "test"]:
+                key = key_prefix + split
+                if key not in data or data[key] is None:
+                    continue
+
+                # Extract DataFrame
+                if key_prefix == "molecule_pairs_":
+                    if not hasattr(data[key], "df_smiles"):
+                        continue
+                    df = data[key].df_smiles
+                else:
+                    df = data[key]
+
+                if df is None or df.empty:
+                    continue
+
+                # Extract SMILES from DataFrame
+                if "canon_smiles" in df.columns:
+                    smiles_list = df["canon_smiles"].tolist()
+                elif "smiles" in df.columns:
+                    smiles_list = df["smiles"].tolist()
+                elif hasattr(df.index, "tolist"):
+                    smiles_list = df.index.tolist()
+                else:
+                    continue
+
+                unique_smiles.extend(smiles_list)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        result = []
+        for s in unique_smiles:
+            if s not in seen:
+                seen.add(s)
+                result.append(s)
+
+        logger.info(f"Extracted {len(result)} unique SMILES from {pickle_path}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error loading SMILES from {pickle_path}: {e}")
+        return []
+
+
+def _load_distances_from_files(
+    distance_files: list[str], smiles_list: list[str]
+) -> dict:
+    """Load distances from multiple .npy files."""
+    distance_cache = {}
+
+    for dist_file in sorted(distance_files):
+        try:
+            distances = np.load(dist_file)
+            for row in distances:
+                idx1, idx2 = int(row[0]), int(row[1])
+
+                # Skip out of bounds
+                if idx1 >= len(smiles_list) or idx2 >= len(smiles_list):
+                    continue
+
+                # Map to SMILES
+                smiles1, smiles2 = smiles_list[idx1], smiles_list[idx2]
+                key = tuple(sorted([smiles1, smiles2]))
+
+                # Store distance (3rd column)
+                distance_cache[key] = float(row[2])
+
+        except Exception as e:
+            logger.warning(f"Error loading {dist_file}: {e}")
+
+    return distance_cache
 
 
 def create_input_df(smiles, indexes_0, indexes_1):
@@ -106,6 +359,13 @@ def compute_ed_and_mces_both(
     ed_distances = []
     mces_distances = []
 
+    # Track cache hits/misses
+    cache_hits = 0
+    cache_misses = 0
+
+    # Get global cache (set before pool creation)
+    precomputed_cache = get_global_cache()
+
     for index in tqdm(
         range(pair_distances.shape[0]),
         desc=progress_desc,
@@ -118,6 +378,21 @@ def compute_ed_and_mces_both(
 
         s0 = smiles[int(pair[0])]
         s1 = smiles[int(pair[1])]
+
+        # Check precomputed cache first
+        if precomputed_cache is not None:
+            cache_key = tuple(sorted([s0, s1]))
+            if cache_key in precomputed_cache:
+                cached_values = precomputed_cache[cache_key]
+                ed_dist = cached_values[0]
+                mces_dist = cached_values[1]
+                cache_hits += 1
+                ed_distances.append(ed_dist)
+                mces_distances.append(mces_dist)
+                continue
+
+        # Not in cache, compute
+        cache_misses += 1
         fp0 = fps[int(pair[0])]
         fp1 = fps[int(pair[1])]
         mol0 = mols[int(pair[0])]
@@ -134,6 +409,14 @@ def compute_ed_and_mces_both(
 
     pair_distances[:, 2] = ed_distances
     pair_distances[:, 3] = mces_distances
+
+    # Log cache statistics
+    if precomputed_cache is not None:
+        total = cache_hits + cache_misses
+        hit_rate = (cache_hits / total * 100) if total > 0 else 0
+        logger.info(
+            f"Cache: {cache_hits} hits, {cache_misses} misses ({hit_rate:.1f}% hit rate)"
+        )
 
     if output_file:
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -356,7 +639,7 @@ def simba_solve_pair_mces(
                 threshold=threshold,
                 i=0,
                 # solver='CPLEX_CMD',       # or another fast solver you have installed
-                solver="PULP_CBC_CMD",
+                solver="HiGHS",
                 solver_options={
                     "threads": 1,
                     "msg": False,

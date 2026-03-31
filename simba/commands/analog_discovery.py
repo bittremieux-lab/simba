@@ -191,5 +191,9 @@ def _analog_discovery_with_hydra(
         click.echo("=" * 70)
 
     except Exception as e:
+        import traceback
+
         click.echo(f"\n❌ Error during analog discovery: {e}", err=True)
+        click.echo("\nFull traceback:", err=True)
+        click.echo(traceback.format_exc(), err=True)
         raise click.Abort() from e
