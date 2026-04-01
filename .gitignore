@@ -98,3 +98,8 @@ run_scripts_tfs*
 # ============================================================================
 .ruff_cache/
 .pre-commit-config.yaml.backup
+
+# Hydra run outputs & sweep artifacts
+outputs/
+sweeps/
+test_full_workflow*/

@@ -458,7 +458,7 @@ def train(
     checkpoint_callback: ModelCheckpoint | None,
     checkpoint_n_steps_callback: ModelCheckpoint | None,
     loss_callback: LossCallback,
-) -> None:
+) -> pl.Trainer:
     """Run the training loop.
     Args:
         model: SIMBA model to train
@@ -468,6 +468,8 @@ def train(
         checkpoint_callback: Best model checkpoint callback (optional, can be None)
         checkpoint_n_steps_callback: Periodic checkpoint callback (optional, can be None)
         loss_callback: Loss tracking callback
+    Returns:
+        The fitted PyTorch Lightning Trainer.
     """
     # Build callbacks list, excluding None values
     callbacks = [
@@ -489,6 +491,7 @@ def train(
     )
 
     trainer.fit(model, dataloader_train, dataloader_val)
+    return trainer
 
 
 def _remove_duplicates_array(arr: np.ndarray) -> np.ndarray:
