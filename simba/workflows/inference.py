@@ -503,7 +503,7 @@ def _plot_cm(
 
     cm = confusion_matrix(true, preds)
     accuracy = accuracy_score(true, preds)
-
+    print(f'Edit distance accuracy calculated: {accuracy}')
     # Normalize
     cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
 
