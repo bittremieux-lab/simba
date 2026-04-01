@@ -19,9 +19,11 @@ def encode_adduct_mass(adduct: str):
     # TODO: how encode adduct if not recognized?
     # Currently returns 0, but might interfere with spectra without adducts
     adducts = ADDUCT_TO_MASS.keys()
-    response = [0 for a in adducts]
-    if adduct in adducts:
-        response[0] = ADDUCT_TO_MASS[adduct]
+    #response = [0 for a in adducts]
+    #if adduct in adducts:
+    #    response[0] = ADDUCT_TO_MASS[adduct]
+         
+    response = [ADDUCT_TO_MASS[adduct] if a==adduct else 0 for a in adducts]
     return response
 
 
