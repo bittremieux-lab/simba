@@ -113,10 +113,10 @@ def _run_trial(base_cfg: DictConfig, trial: optuna.Trial, output_dir: Path,
         [np.sum(counting_mces) / c if c != 0 else 0 for c in counting_mces])
     weights_mces = weights_mces / np.sum(weights_mces)
 
-    chk_cb, chk_n_cb, loss_cb = setup_callbacks(cfg)
+    chk_cb, chk_n_cb, loss_cb, early_stop_cb = setup_callbacks(cfg)
     model = setup_model(cfg, weights_mces)
     trainer = run_training(model, dataloader_train, dataloader_val, cfg,
-                           chk_cb, chk_n_cb, loss_cb)
+                           chk_cb, chk_n_cb, loss_cb, early_stop_cb)
 
     val_loss = float(trainer.callback_metrics.get("validation_loss", math.inf))
     click.echo(f"Trial {trial.number} finished — val_loss={val_loss:.6f}")

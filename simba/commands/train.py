@@ -176,7 +176,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
 
         # Setup model and callbacks
         click.echo("Initializing model...")
-        checkpoint_callback, checkpoint_n_steps_callback, losscallback = (
+        checkpoint_callback, checkpoint_n_steps_callback, losscallback, early_stopping_callback = (
             setup_callbacks(cfg)
         )
 
@@ -219,6 +219,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             checkpoint_callback,
             checkpoint_n_steps_callback,
             losscallback,
+            early_stopping_callback,
         )
 
         click.echo("Training completed successfully!")
