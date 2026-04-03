@@ -408,7 +408,12 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
             verbose=True,
         )
 
-    return checkpoint_callback, checkpoint_n_steps_callback, loss_callback, early_stopping_callback
+    return (
+        checkpoint_callback,
+        checkpoint_n_steps_callback,
+        loss_callback,
+        early_stopping_callback,
+    )
 
 
 def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMultitask:

@@ -5,8 +5,6 @@ can be tested without running training: distribution building, param
 sampling, and config validation.
 """
 
-import math
-
 import optuna
 import pytest
 from omegaconf import OmegaConf
@@ -20,12 +18,17 @@ from simba.commands.sweep_train import (
 @pytest.fixture
 def params_cfg():
     """Minimal sweep.params config covering all four types."""
-    return OmegaConf.create({
-        "optimizer.lr": {"type": "loguniform", "low": 1e-5, "high": 1e-2},
-        "model.transformer.d_model": {"type": "categorical", "choices": [128, 256, 512]},
-        "model.transformer.n_layers": {"type": "int", "low": 2, "high": 6},
-        "training.gradient_clip_val": {"type": "uniform", "low": 0.5, "high": 2.0},
-    })
+    return OmegaConf.create(
+        {
+            "optimizer.lr": {"type": "loguniform", "low": 1e-5, "high": 1e-2},
+            "model.transformer.d_model": {
+                "type": "categorical",
+                "choices": [128, 256, 512],
+            },
+            "model.transformer.n_layers": {"type": "int", "low": 2, "high": 6},
+            "training.gradient_clip_val": {"type": "uniform", "low": 0.5, "high": 2.0},
+        }
+    )
 
 
 class TestBuildDistributions:
@@ -63,7 +66,9 @@ class TestBuildDistributions:
         )
 
     def test_unknown_type_raises(self):
-        bad_cfg = OmegaConf.create({"some.param": {"type": "unknown", "low": 0, "high": 1}})
+        bad_cfg = OmegaConf.create(
+            {"some.param": {"type": "unknown", "low": 0, "high": 1}}
+        )
         with pytest.raises(ValueError, match="Unknown param type"):
             _build_distributions(bad_cfg)
 

@@ -37,15 +37,17 @@ def _make_cfg(tmp_path, n_trials=2, resume=False, extra=None):
     sweep_cfg = OmegaConf.load(_SWEEP_DEFAULT_YAML)
 
     # Base cfg with just the fields sweep_train reads from cfg
-    base = OmegaConf.create({
-        "paths": {
-            "preprocessing_dir_train": str(tmp_path),
-            "preprocessing_dir": None,
-        },
-        "checkpoints": {
-            "save_checkpoints": False,  # skip inference — no compose() needed
-        },
-    })
+    base = OmegaConf.create(
+        {
+            "paths": {
+                "preprocessing_dir_train": str(tmp_path),
+                "preprocessing_dir": None,
+            },
+            "checkpoints": {
+                "save_checkpoints": False,  # skip inference — no compose() needed
+            },
+        }
+    )
     cfg = OmegaConf.merge(base, sweep_cfg)
 
     # Override sweep settings for the test
@@ -63,18 +65,21 @@ def _make_cfg(tmp_path, n_trials=2, resume=False, extra=None):
 
 def _fake_run_trial(return_value=0.5):
     """Mock _run_trial: writes params.json, returns fixed loss, no training."""
+
     def _inner(base_cfg, trial, output_dir, params_cfg):
         trial_dir = output_dir / "checkpoints" / str(trial.number)
         trial_dir.mkdir(parents=True, exist_ok=True)
         sampled = _sample_params(trial, params_cfg)
         (trial_dir / "params.json").write_text(json.dumps(sampled))
         return return_value
+
     return _inner
 
 
 def _run_sweep(cfg):
     """Invoke sweep_train's original body, bypassing @hydra.main."""
     from simba.commands.sweep_train import sweep_train
+
     sweep_train.__wrapped__(cfg)
 
 
@@ -82,12 +87,15 @@ def _run_sweep(cfg):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestSweepOrchestration:
     """Core sweep loop: execution, persistence, resume."""
 
     def test_trials_json_created(self, tmp_path):
         cfg, output_dir = _make_cfg(tmp_path, n_trials=2)
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
         trials = json.loads((output_dir / "trials.json").read_text())
@@ -96,7 +104,9 @@ class TestSweepOrchestration:
 
     def test_each_trial_record_has_params_and_value(self, tmp_path):
         cfg, output_dir = _make_cfg(tmp_path, n_trials=2)
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
         for t in json.loads((output_dir / "trials.json").read_text()):
@@ -105,7 +115,9 @@ class TestSweepOrchestration:
 
     def test_params_json_written_per_checkpoint(self, tmp_path):
         cfg, output_dir = _make_cfg(tmp_path, n_trials=2)
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
         for i in range(2):
@@ -119,7 +131,9 @@ class TestSweepOrchestration:
         stale.mkdir(parents=True)
         (stale / "dummy.txt").write_text("stale")
 
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
         assert not stale.exists()
@@ -128,23 +142,32 @@ class TestSweepOrchestration:
         output_dir = tmp_path / "sweep_out"
         output_dir.mkdir(parents=True)
 
-        prior = [{
-            "trial_number": 0,
-            "params": {
-                "optimizer.lr": 0.001,
-                "model.transformer.d_model": 128,
-                "model.transformer.n_layers": 4,
-                "training.gradient_clip_val": 1.0,
-            },
-            "value": 0.8,
-            "status": "completed",
-            "timestamp": "2026-01-01T00:00:00",
-        }]
+        prior = [
+            {
+                "trial_number": 0,
+                "params": {
+                    "optimizer.lr": 0.001,
+                    "optimizer.weight_decay": 0.000001,
+                    "model.transformer.d_model": 128,
+                    "model.transformer.n_layers": 4,
+                    "model.transformer.dropout": 0.1,
+                },
+                "value": 0.8,
+                "status": "completed",
+                "timestamp": "2026-01-01T00:00:00",
+            }
+        ]
         (output_dir / "trials.json").write_text(json.dumps(prior))
 
-        cfg, _ = _make_cfg(tmp_path, n_trials=1, resume=True,
-                           extra={"sweep.output_dir": str(output_dir)})
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        cfg, _ = _make_cfg(
+            tmp_path,
+            n_trials=1,
+            resume=True,
+            extra={"sweep.output_dir": str(output_dir)},
+        )
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
         trials = json.loads((output_dir / "trials.json").read_text())
@@ -155,51 +178,72 @@ class TestStartingParams:
     """sweep.starting_params: known values run as first trial(s)."""
 
     def test_starting_params_used_for_first_trial(self, tmp_path):
-        starting = [{
-            "optimizer.lr": 0.001,
-            "model.transformer.d_model": 256,
-            "model.transformer.n_layers": 5,
-            "training.gradient_clip_val": 1.0,
-        }]
-        cfg, output_dir = _make_cfg(tmp_path, n_trials=1,
-                                    extra={"sweep.starting_params": starting})
-        with patch("simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()):
+        starting = [
+            {
+                "optimizer.lr": 0.001,
+                "optimizer.weight_decay": 0.000001,
+                "model.transformer.d_model": 256,
+                "model.transformer.n_layers": 5,
+                "model.transformer.dropout": 0.1,
+            }
+        ]
+        cfg, output_dir = _make_cfg(
+            tmp_path, n_trials=1, extra={"sweep.starting_params": starting}
+        )
+        with patch(
+            "simba.commands.sweep_train._run_trial", side_effect=_fake_run_trial()
+        ):
             _run_sweep(cfg)
 
-        params = json.loads((output_dir / "checkpoints" / "0" / "params.json").read_text())
+        params = json.loads(
+            (output_dir / "checkpoints" / "0" / "params.json").read_text()
+        )
         assert params["optimizer.lr"] == pytest.approx(0.001, rel=1e-3)
+        assert params["optimizer.weight_decay"] == pytest.approx(0.000001, rel=1e-3)
         assert params["model.transformer.d_model"] == 256
         assert params["model.transformer.n_layers"] == 5
+        assert params["model.transformer.dropout"] == pytest.approx(0.1, rel=1e-3)
 
     def test_starting_params_ignored_on_resume(self, tmp_path):
         """Enqueued starting values must not apply when resume=true."""
         output_dir = tmp_path / "sweep_out"
         output_dir.mkdir(parents=True)
-        prior = [{
-            "trial_number": 0,
-            "params": {
-                "optimizer.lr": 0.001,
-                "model.transformer.d_model": 128,
-                "model.transformer.n_layers": 3,
-                "training.gradient_clip_val": 0.5,
-            },
-            "value": 0.7,
-            "status": "completed",
-            "timestamp": "2026-01-01T00:00:00",
-        }]
+        prior = [
+            {
+                "trial_number": 0,
+                "params": {
+                    "optimizer.lr": 0.001,
+                    "optimizer.weight_decay": 0.000001,
+                    "model.transformer.d_model": 128,
+                    "model.transformer.n_layers": 3,
+                    "model.transformer.dropout": 0.1,
+                },
+                "value": 0.7,
+                "status": "completed",
+                "timestamp": "2026-01-01T00:00:00",
+            }
+        ]
         (output_dir / "trials.json").write_text(json.dumps(prior))
 
         # lr=99.9 is outside [1e-5, 1e-2] — if it appears, starting_params ran
-        starting = [{
-            "optimizer.lr": 99.9,
-            "model.transformer.d_model": 512,
-            "model.transformer.n_layers": 8,
-            "training.gradient_clip_val": 2.0,
-        }]
-        cfg, _ = _make_cfg(tmp_path, n_trials=1, resume=True, extra={
-            "sweep.output_dir": str(output_dir),
-            "sweep.starting_params": starting,
-        })
+        starting = [
+            {
+                "optimizer.lr": 99.9,
+                "optimizer.weight_decay": 0.5,
+                "model.transformer.d_model": 512,
+                "model.transformer.n_layers": 8,
+                "model.transformer.dropout": 0.9,
+            }
+        ]
+        cfg, _ = _make_cfg(
+            tmp_path,
+            n_trials=1,
+            resume=True,
+            extra={
+                "sweep.output_dir": str(output_dir),
+                "sweep.starting_params": starting,
+            },
+        )
 
         sampled_lrs = []
 
@@ -214,6 +258,6 @@ class TestStartingParams:
         with patch("simba.commands.sweep_train._run_trial", side_effect=_capture):
             _run_sweep(cfg)
 
-        assert all(lr <= 1e-2 for lr in sampled_lrs), \
+        assert all(lr <= 1e-2 for lr in sampled_lrs), (
             "starting_params should be ignored on resume"
-
+        )

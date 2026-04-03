@@ -176,9 +176,12 @@ def _train_with_hydra(cfg: DictConfig) -> None:
 
         # Setup model and callbacks
         click.echo("Initializing model...")
-        checkpoint_callback, checkpoint_n_steps_callback, losscallback, early_stopping_callback = (
-            setup_callbacks(cfg)
-        )
+        (
+            checkpoint_callback,
+            checkpoint_n_steps_callback,
+            losscallback,
+            early_stopping_callback,
+        ) = setup_callbacks(cfg)
 
         # Get weights for MCES from first 100 batches (same as original script)
         click.echo("Computing MCES weights from training data...")

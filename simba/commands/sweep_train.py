@@ -25,19 +25,25 @@ def _build_distributions(params_cfg: DictConfig) -> dict:
         t = p.type
         if t == "loguniform":
             distributions[name] = optuna.distributions.LogUniformDistribution(
-                float(p.low), float(p.high))
+                float(p.low), float(p.high)
+            )
         elif t == "uniform":
             distributions[name] = optuna.distributions.UniformDistribution(
-                float(p.low), float(p.high))
+                float(p.low), float(p.high)
+            )
         elif t == "int":
             distributions[name] = optuna.distributions.IntUniformDistribution(
-                int(p.low), int(p.high))
+                int(p.low), int(p.high)
+            )
         elif t == "categorical":
             distributions[name] = optuna.distributions.CategoricalDistribution(
-                list(p.choices))
+                list(p.choices)
+            )
         else:
-            raise ValueError(f"Unknown param type '{t}' for '{name}'. "
-                             "Use: loguniform, uniform, int, categorical")
+            raise ValueError(
+                f"Unknown param type '{t}' for '{name}'. "
+                "Use: loguniform, uniform, int, categorical"
+            )
     return distributions
 
 
@@ -57,8 +63,9 @@ def _sample_params(trial: optuna.Trial, params_cfg: DictConfig) -> dict:
     return sampled
 
 
-def _run_trial(base_cfg: DictConfig, trial: optuna.Trial, output_dir: Path,
-               params_cfg: DictConfig) -> float:
+def _run_trial(
+    base_cfg: DictConfig, trial: optuna.Trial, output_dir: Path, params_cfg: DictConfig
+) -> float:
     """Sample hyperparameters, train one trial, return best validation loss."""
     import click
 
@@ -83,40 +90,53 @@ def _run_trial(base_cfg: DictConfig, trial: optuna.Trial, output_dir: Path,
     trial_dir.mkdir(parents=True, exist_ok=True)
     OmegaConf.update(cfg, "paths.checkpoint_dir", str(trial_dir), merge=True)
 
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo(f"Trial {trial.number}")
     for k, v in sampled.items():
         click.echo(f"  {k} = {v}")
     click.echo(f"  checkpoint → {trial_dir}")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
 
     (mol_train, mol_val, mol_test, mol_test_uni) = load_dataset(cfg)
     (dataset_train, train_sampler, dataset_val, val_sampler, _, _) = prepare_data(
-        mol_train, mol_val, mol_test, mol_test_uni, cfg)
+        mol_train, mol_val, mol_test, mol_test_uni, cfg
+    )
     dataloader_train, dataloader_val = create_dataloaders(
-        cfg, dataset_train, train_sampler, dataset_val, val_sampler)
+        cfg, dataset_train, train_sampler, dataset_val, val_sampler
+    )
 
     n_batches = len(dataloader_train)
     if n_batches == 0:
         raise RuntimeError("No training batches found.")
     if n_batches < cfg.training.val_check_interval:
-        OmegaConf.update(cfg, "training.val_check_interval",
-                         max(1, n_batches // 2), merge=True)
+        OmegaConf.update(
+            cfg, "training.val_check_interval", max(1, n_batches // 2), merge=True
+        )
 
     mces_sampled: list[float] = []
     for batch in itertools.islice(dataloader_train, 100):
         mces_sampled += list(batch["mces"].reshape(-1))
 
     counting_mces, _ = TrainUtils.count_ranges(
-        np.array(mces_sampled), number_bins=5, bin_sim_1=False, max_value=1)
+        np.array(mces_sampled), number_bins=5, bin_sim_1=False, max_value=1
+    )
     weights_mces = np.array(
-        [np.sum(counting_mces) / c if c != 0 else 0 for c in counting_mces])
+        [np.sum(counting_mces) / c if c != 0 else 0 for c in counting_mces]
+    )
     weights_mces = weights_mces / np.sum(weights_mces)
 
     chk_cb, chk_n_cb, loss_cb, early_stop_cb = setup_callbacks(cfg)
     model = setup_model(cfg, weights_mces)
-    trainer = run_training(model, dataloader_train, dataloader_val, cfg,
-                           chk_cb, chk_n_cb, loss_cb, early_stop_cb)
+    trainer = run_training(
+        model,
+        dataloader_train,
+        dataloader_val,
+        cfg,
+        chk_cb,
+        chk_n_cb,
+        loss_cb,
+        early_stop_cb,
+    )
 
     val_loss = float(trainer.callback_metrics.get("validation_loss", math.inf))
     click.echo(f"Trial {trial.number} finished — val_loss={val_loss:.6f}")
@@ -135,19 +155,27 @@ def sweep_train(cfg: DictConfig) -> None:
     import click
 
     n_trials: int = int(OmegaConf.select(cfg, "sweep.n_trials", default=10))
-    output_dir = Path(str(OmegaConf.select(
-        cfg, "sweep.output_dir",
-        default=f"./sweeps/optuna_{datetime.now():%Y%m%d_%H%M%S}")))
+    output_dir = Path(
+        str(
+            OmegaConf.select(
+                cfg,
+                "sweep.output_dir",
+                default=f"./sweeps/optuna_{datetime.now():%Y%m%d_%H%M%S}",
+            )
+        )
+    )
     resume: bool = bool(OmegaConf.select(cfg, "sweep.resume", default=False))
-    study_name: str = str(OmegaConf.select(
-        cfg, "sweep.study_name", default="simba_hyperparam_search"))
+    study_name: str = str(
+        OmegaConf.select(cfg, "sweep.study_name", default="simba_hyperparam_search")
+    )
 
     params_cfg = OmegaConf.select(cfg, "sweep.params")
     if params_cfg is None:
         raise ValueError(
             "No search space defined. Load a sweep config:\n"
             "  simba-sweep +sweep=default ...\n"
-            "Or add sweep.params.* overrides directly.")
+            "Or add sweep.params.* overrides directly."
+        )
     distributions = _build_distributions(params_cfg)
 
     preprocessing_dir = cfg.paths.preprocessing_dir_train or cfg.paths.preprocessing_dir
@@ -166,7 +194,8 @@ def sweep_train(cfg: DictConfig) -> None:
         if not trials_file.exists():
             raise FileNotFoundError(
                 f"sweep.resume=true but no trials.json in {output_dir}.\n"
-                "Run without resume first.")
+                "Run without resume first."
+            )
         with open(trials_file) as f:
             previous_trials = json.load(f)
         click.echo(f"Resuming: loaded {len(previous_trials)} trials from {trials_file}")
@@ -175,9 +204,12 @@ def sweep_train(cfg: DictConfig) -> None:
         # Remove stale per-trial checkpoint dirs so no old checkpoint is reused
         # with the wrong hyperparams from a new trial with the same index.
         import shutil
+
         if checkpoints_dir.exists():
             shutil.rmtree(checkpoints_dir)
-            click.echo(f"Removed stale checkpoints from previous run: {checkpoints_dir}")
+            click.echo(
+                f"Removed stale checkpoints from previous run: {checkpoints_dir}"
+            )
 
     # Create in-memory Optuna study (no SQLite, no SQLAlchemy)
     study = optuna.create_study(
@@ -207,9 +239,13 @@ def sweep_train(cfg: DictConfig) -> None:
         if isinstance(starting_points, list):
             for point in starting_points:
                 study.enqueue_trial(point)
-            click.echo(f"Enqueued {len(starting_points)} starting point(s) to run first.")
+            click.echo(
+                f"Enqueued {len(starting_points)} starting point(s) to run first."
+            )
         else:
-            click.echo("Warning: sweep.starting_params must be a list of dicts — skipping.")
+            click.echo(
+                "Warning: sweep.starting_params must be a list of dicts — skipping."
+            )
 
     click.echo(f"Running {n_trials} new trials...\n")
 
@@ -252,7 +288,9 @@ def sweep_train(cfg: DictConfig) -> None:
     click.echo("=" * 60)
 
     # ── Inference on the best trial's checkpoint ──────────────────────────
-    save_checkpoints = bool(OmegaConf.select(cfg, "checkpoints.save_checkpoints", default=True))
+    save_checkpoints = bool(
+        OmegaConf.select(cfg, "checkpoints.save_checkpoints", default=True)
+    )
     if not save_checkpoints:
         click.echo("\n(Skipping inference — checkpoints.save_checkpoints=false)")
     else:
@@ -268,8 +306,13 @@ def sweep_train(cfg: DictConfig) -> None:
             OmegaConf.select(cfg, "paths.preprocessing_dir_train")
             or OmegaConf.select(cfg, "paths.preprocessing_dir")
         )
-        pickle_file = str(OmegaConf.select(
-            cfg, "paths.preprocessing_pickle_file", default="mapping_unique_smiles.pkl"))
+        pickle_file = str(
+            OmegaConf.select(
+                cfg,
+                "paths.preprocessing_pickle_file",
+                default="mapping_unique_smiles.pkl",
+            )
+        )
         accelerator = str(OmegaConf.select(cfg, "hardware.accelerator", default="auto"))
 
         # Read the params that were actually used to train the best trial's.
@@ -278,7 +321,9 @@ def sweep_train(cfg: DictConfig) -> None:
             with open(best_params_file) as f:
                 best_params = json.load(f)
         else:
-            click.echo("Warning: params.json not found for best trial, falling back to study params")
+            click.echo(
+                "Warning: params.json not found for best trial, falling back to study params"
+            )
             best_params = best.params
 
         # Build overrides exactly as the standalone `simba inference` command would,
@@ -306,12 +351,14 @@ def sweep_train(cfg: DictConfig) -> None:
         try:
             metrics = run_inference_wf(inf_cfg)
             metrics_file = inference_out / "metrics.json"
+
             def _to_json(v):
                 if hasattr(v, "tolist"):
                     return v.tolist()
                 if hasattr(v, "item"):
                     return v.item()
                 return v
+
             with open(metrics_file, "w") as f:
                 json.dump({k: _to_json(v) for k, v in metrics.items()}, f, indent=2)
             click.echo("\nInference metrics (best trial):")
@@ -321,6 +368,7 @@ def sweep_train(cfg: DictConfig) -> None:
             click.echo(f"Plots saved   → {inference_out}")
         except Exception as exc:
             import traceback
+
             click.echo(f"\nInference failed: {exc}", err=True)
             traceback.print_exc()
 
