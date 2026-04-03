@@ -495,14 +495,6 @@ The command generates evaluation metrics and visualization plots:
 
 SIMBA includes a built-in Optuna-based hyperparameter sweep via the `simba-sweep` command. All trials run **sequentially in a single job**. Results are written to `trials.json` after every trial, enabling **resume** with full knowledge after a crash or walltime limit.
 
-### Installation
-
-Install the sweep extras:
-
-```bash
-uv sync --extra sweep
-```
-
 ### Configuring the Search Space
 
 Edit `simba/configs/sweep/default.yaml` to define which hyperparameters to search. Each entry under `sweep.params` requires a `type` and bounds/choices:
@@ -577,7 +569,7 @@ sweep:
 
 ### Output Structure
 
-```
+```text
 sweeps/run1/
 ├── trials.json                  # All trial results (params + val_loss)
 ├── checkpoints/

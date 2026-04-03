@@ -279,9 +279,16 @@ def sweep_train(cfg: DictConfig) -> None:
         with open(trials_file, "w") as f:
             json.dump(all_trials, f, indent=2)
 
-    best = study.best_trial
     click.echo("\n" + "=" * 60)
     click.echo(f"Sweep complete — {n_trials} new trials done.")
+    completed_trials = study.get_trials(states=[optuna.trial.TrialState.COMPLETE])
+    if not completed_trials:
+        click.echo("No completed trials.")
+        click.echo(f"Trials file   : {trials_file}")
+        click.echo("=" * 60)
+        return
+
+    best = study.best_trial
     click.echo(f"Best val_loss : {best.value:.6f}  (trial #{best.number})")
     click.echo(f"Best params   : {best.params}")
     click.echo(f"Trials file   : {trials_file}")
