@@ -255,21 +255,24 @@ def prepare_data(
     logger.info(f"Number of pairs for train: {len(molecule_pairs_train)}")
     logger.info(f"Number of pairs for val: {len(molecule_pairs_val)}")
 
-    # Sanity checks
-    sanity_check_ids = SanityChecks.sanity_checks_ids(
-        molecule_pairs_train,
-        molecule_pairs_val,
-        molecule_pairs_test,
-        uniformed_molecule_pairs_test,
-    )
-    sanity_check_bms = SanityChecks.sanity_checks_bms(
-        molecule_pairs_train,
-        molecule_pairs_val,
-        molecule_pairs_test,
-        uniformed_molecule_pairs_test,
-    )
-    logger.info(f"Sanity check ids. Passed? {sanity_check_ids}")
-    logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
+    # Sanity checks (skipped when test split is not provided, e.g. benchmarks)
+    if molecule_pairs_test is not None:
+        sanity_check_ids = SanityChecks.sanity_checks_ids(
+            molecule_pairs_train,
+            molecule_pairs_val,
+            molecule_pairs_test,
+            uniformed_molecule_pairs_test,
+        )
+        sanity_check_bms = SanityChecks.sanity_checks_bms(
+            molecule_pairs_train,
+            molecule_pairs_val,
+            molecule_pairs_test,
+            uniformed_molecule_pairs_test,
+        )
+        logger.info(f"Sanity check ids. Passed? {sanity_check_ids}")
+        logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
+    else:
+        logger.info("Sanity checks skipped (no test split provided).")
 
     # Calculate weights for the training set
     train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(

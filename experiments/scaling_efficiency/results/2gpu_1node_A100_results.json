@@ -1,0 +1,16 @@
+{
+  "num_gpus": 2,
+  "num_nodes": 1,
+  "gpus_per_node": 2,
+  "gpu_type": "A100",
+  "batch_size_per_gpu": 2048,
+  "warmup_steps": 75,
+  "measure_steps": 750,
+  "steps_measured": 750,
+  "time_s": 664.0783,
+  "samples": 3072000,
+  "throughput_samples_per_s": 4625.96,
+  "max_gpu_mem_gb": 41.636,
+  "max_cpu_ram_gb": 2.203,
+  "gpu_util_pct": 97.7
+}
