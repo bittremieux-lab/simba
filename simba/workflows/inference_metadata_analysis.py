@@ -189,13 +189,13 @@ def main(cfg: DictConfig):
     cfg.model.features.use_ion_method=1
     cfg.model.features.use_ion_mode=1
 
-    metrics_baseline, mols_mces= inference_metadata_analysis(cfg)
+    metrics_baseline, mols_mces_baseline= inference_metadata_analysis(cfg)
     
     error_prediction_baseline = np.abs(metrics_baseline['mces_true']- metrics_baseline['mces_pred'])
 
     cfg.model.features.use_ion_mode=0
     cfg.model.features.use_adduct=0
-    metrics_sensitivity, mols_mces = inference_metadata_analysis(cfg)
+    metrics_sensitivity, mols_mces_sensitivity = inference_metadata_analysis(cfg)
 
             
     error_prediction_sensitivity = np.abs(metrics_sensitivity['mces_true']- metrics_sensitivity['mces_pred'])
@@ -208,6 +208,12 @@ def main(cfg: DictConfig):
 
     all_indexes=[]
     remarked_pair_indexes= []
+
+    print(f'These results must be the same:')
+    print(f'{mols_mces_baseline.pair_distances[100,0]}')
+    print(f'{mols_mces_sensitivity.pair_distances[100,0]}')
+
+    mols_mces= mols_mces_sensitivity
     for i in range(0,1000):
         unique_index_0 = mols_mces.pair_distances[i, 0]
         unique_index_1 = mols_mces.pair_distances[i, 1]
@@ -215,6 +221,7 @@ def main(cfg: DictConfig):
         spec_1 = mols_mces.get_original_spectrum_from_unique_index(unique_index_1, pair=1)
         adduct_0 = spec_0.params['adduct']
         adduct_1 = spec_1.params['adduct']
+
 
         print(f'adducts:{spec_0.params["adduct"]}, {spec_1.params["adduct"]}')
         
@@ -239,7 +246,7 @@ def main(cfg: DictConfig):
     
     # remove cases where the ground truth is large
     diff_pred[metrics_sensitivity['mces_true'] > 20]=0
-    ordered_indexes =np.argsort(np.abs(diff_pred))
+    ordered_indexes =np.argsort(diff_pred)
 
     indexes_high_error= ordered_indexes[-10:]
 
@@ -268,19 +275,39 @@ def main(cfg: DictConfig):
 
         unique_index_0 = mols_mces.pair_distances[highest_diff_index, 0]
         unique_index_1 = mols_mces.pair_distances[highest_diff_index, 1]
-
-
         spec_0 = mols_mces.get_original_spectrum_from_unique_index(unique_index_0, pair=0)
         spec_1 = mols_mces.get_original_spectrum_from_unique_index(unique_index_1, pair=1)
+
+
 
         print(f'spec_0: {spec_0}')
         print(f'spec_1: {spec_1}')
     
+
+        unique_index_0_baseline = mols_mces_baseline.pair_distances[highest_diff_index, 0]
+        unique_index_1_baseline = mols_mces_baseline.pair_distances[highest_diff_index, 1]
+        spec_0_baseline = mols_mces_baseline.get_original_spectrum_from_unique_index(unique_index_0_baseline, pair=0)
+        spec_1_baseline = mols_mces_baseline.get_original_spectrum_from_unique_index(unique_index_1_baseline, pair=1)
+
         pairs_interesting = [{'indexes':[0,0]}]
         out = plot_pair_mols_plus_spectrum_png(
             pair_index=0,
             all_spectrums_query = [spec_0],
             all_spectrums_reference = [spec_1],
+            pairs_interesting = pairs_interesting,
+            metrics= {'mces_gt': metrics_sensitivity['mces_true'][highest_diff_index],
+                      "mces_pred": metrics_sensitivity['mces_true'][highest_diff_index],
+                      "ed_gt": 0,
+                      "ed_pred": 0,
+                      "mod_cos": 0},
+            out_dir = "/data/simba_files/metadata_analysis",
+            out_name_tpl = f"/data/simba_files/metadata_analysis/example_with_mol_{i}.png",
+            )
+
+        out = plot_pair_mols_plus_spectrum_png(
+            pair_index=0,
+            all_spectrums_query = [spec_0_baseline],
+            all_spectrums_reference = [spec_1_baseline],
             pairs_interesting = pairs_interesting,
             metrics= {'mces_gt': metrics_baseline['mces_true'][highest_diff_index],
                       "mces_pred": metrics_baseline['mces_pred'][highest_diff_index],
@@ -288,7 +315,7 @@ def main(cfg: DictConfig):
                       "ed_pred": 0,
                       "mod_cos": 0},
             out_dir = "/data/simba_files/metadata_analysis",
-            out_name_tpl = f"/data/simba_files/metadata_analysis/example_with_mol_{i}.png",
+            out_name_tpl = f"/data/simba_files/metadata_analysis/example_with_mol_{i}_sanitiy_check.png",
             )
 if __name__ == "__main__":
     main()
