@@ -423,6 +423,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "gumbel_reg_weight": cfg.model.tasks.edit_distance.gumbel_reg_weight,
         "weights": weights_mces,
         "lr": cfg.optimizer.lr,
+        "optimizer_config": dict(cfg.optimizer),
         "use_adduct": cfg.model.features.use_adduct,
         "use_precursor_mz_for_model": cfg.model.features.use_precursor_mz,
         "use_ce": cfg.model.features.use_ce,
