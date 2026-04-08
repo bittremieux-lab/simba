@@ -145,7 +145,12 @@ def preprocess(cfg: DictConfig) -> None:
         use_only_protonized_adducts=cfg.preprocessing.use_only_protonized_adducts,
     )
 
-    logger.info(f"Loaded {len(all_spectra)} spectra")
+    unique_molecules_total = len(
+        set(s.params.get("smiles", "N/A") for s in all_spectra)
+    )
+    logger.info(
+        f"Loaded {len(all_spectra)} spectra with {unique_molecules_total} unique molecules"
+    )
 
     # Split data into train, validation, and test sets
     logger.info("Splitting data into train/val/test sets...")
@@ -167,6 +172,14 @@ def preprocess(cfg: DictConfig) -> None:
         f"Val: {len(all_spectra_val)}, Test: {len(all_spectra_test)}"
     )
 
+    # Log unique molecules per split
+    train_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_train))
+    val_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_val))
+    test_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_test))
+    logger.info(
+        f"Unique molecules per split - Train: {train_unique}, Val: {val_unique}, Test: {test_unique}"
+    )
+
     logger.info("Pre-computing SMILES mappings for early save...")
     molecule_pairs_metadata = {}
     for type_data, spectra in [
@@ -180,6 +193,29 @@ def preprocess(cfg: DictConfig) -> None:
             "spectra_unique": spectra_unique,
             "original_spectra": spectra,
         }
+
+        # Log statistics about molecule sizes
+        from rdkit import Chem
+
+        large_mols = []
+        for smiles in df_smiles["canon_smiles"]:
+            try:
+                mol = Chem.MolFromSmiles(smiles)
+                if mol and mol.GetNumAtoms() > 40:
+                    large_mols.append((smiles, mol.GetNumAtoms()))
+            except:
+                pass
+
+        if large_mols:
+            logger.info(
+                f"  {type_data[1:]} set: {len(large_mols)} molecules with >40 atoms "
+                f"(will produce NaN in distance calculations)"
+            )
+            if len(large_mols) <= 5:
+                for smiles, natoms in large_mols:
+                    logger.debug(
+                        f"    Large molecule: {natoms} atoms - {smiles[:60]}..."
+                    )
 
     output_file = workspace / cfg.paths.preprocessing_pickle_file
     logger.info(f"Saving mapping file early to {output_file}...")
@@ -254,7 +290,9 @@ def preprocess(cfg: DictConfig) -> None:
         ("_val", all_spectra_val),
         ("_test", all_spectra_test),
     ]:
-        logger.info(f"Computing distances for {type_data[1:]} set...")
+        logger.info(
+            f"Computing distances for {type_data[1:]} set with {len(spectra)} spectra..."
+        )
         molecule_pairs[type_data] = MCES.compute_all_mces_results_unique(
             spectra,
             max_combinations=10000000000000,
@@ -272,6 +310,23 @@ def preprocess(cfg: DictConfig) -> None:
             loaded_molecule_pairs=None,
             compute_both_metrics=True,
             precomputed_cache=precomputed_cache if len(precomputed_cache) > 0 else None,
+        )
+
+        # Log statistics about the computed pairs
+        pairs_obj = molecule_pairs[type_data]
+        num_unique_mols = (
+            len(pairs_obj.df_smiles)
+            if hasattr(pairs_obj, "df_smiles") and pairs_obj.df_smiles is not None
+            else 0
+        )
+        num_pairs = (
+            pairs_obj.pair_distances.shape[0]
+            if hasattr(pairs_obj, "pair_distances")
+            and pairs_obj.pair_distances is not None
+            else 0
+        )
+        logger.info(
+            f"{type_data[1:]} set completed: {num_unique_mols} unique molecules, {num_pairs} molecule pairs"
         )
 
     # Combine edit distance and MCES files
@@ -312,6 +367,10 @@ def preprocess(cfg: DictConfig) -> None:
             ed_data = np.load(file_ed)
             mces_data = np.load(file_mces)
 
+            logger.info(
+                f"  {partition} partition '{identifier}': Loaded {ed_data.shape[0]} pairs from files"
+            )
+
             # Check that the indexes are the same
             if np.all(ed_data[:, 0] == mces_data[:, 0]) and np.all(
                 ed_data[:, 1] == mces_data[:, 1]
@@ -319,15 +378,91 @@ def preprocess(cfg: DictConfig) -> None:
                 # Combine ED and MCES data
                 all_distance_data = np.column_stack((ed_data, mces_data[:, 2]))
 
+                pairs_before_filter = all_distance_data.shape[0]
+
                 # Filter out invalid values (NaN and 666)
                 ed = all_distance_data[:, cfg.model.data_columns.edit_distance]
                 mces = all_distance_data[:, cfg.model.data_columns.mces20]
                 indexes_invalid = np.isnan(ed) | np.isnan(mces)
                 ed_exceeded = ed == 666
                 mces_exceeded = mces == 666
+
+                # Count failures (with overlap-aware breakdown)
+                nan_count = int(np.sum(indexes_invalid))
+                both_timeout_mask = ed_exceeded & mces_exceeded & (~indexes_invalid)
+                ed_only_timeout_mask = (
+                    ed_exceeded & (~mces_exceeded) & (~indexes_invalid)
+                )
+                mces_only_timeout_mask = (
+                    mces_exceeded & (~ed_exceeded) & (~indexes_invalid)
+                )
+                any_timeout_mask = (ed_exceeded | mces_exceeded) & (~indexes_invalid)
+
+                both_timeout_count = int(np.sum(both_timeout_mask))
+                ed_only_timeout_count = int(np.sum(ed_only_timeout_mask))
+                mces_only_timeout_count = int(np.sum(mces_only_timeout_mask))
+                any_timeout_count = int(np.sum(any_timeout_mask))
+
+                # Log specific problem pairs if there are NaN values (usually large molecules)
+                if nan_count > 0:
+                    nan_pairs = all_distance_data[indexes_invalid][
+                        : min(5, nan_count)
+                    ]  # show first 5
+                    logger.debug(
+                        f"    Example NaN pairs (large molecules >40 atoms): "
+                        f"{nan_pairs[:, :2].astype(int)}"
+                    )
+
+                # Log specific problem pairs if there are 666 values (low Tanimoto similarity)
+                if any_timeout_count > 0:
+                    timeout_pairs = all_distance_data[any_timeout_mask][
+                        : min(5, any_timeout_count)
+                    ]
+                    logger.debug(
+                        f"    Example 666 (low similarity) pairs: "
+                        f"{timeout_pairs[:, :2].astype(int)}"
+                    )
+
+                # Apply filter
                 all_distance_data = all_distance_data[
                     (~indexes_invalid) & (~ed_exceeded) & (~mces_exceeded)
                 ]
+
+                pairs_after_filter = all_distance_data.shape[0]
+                pairs_removed = pairs_before_filter - pairs_after_filter
+                removal_pct = (
+                    100.0 * pairs_removed / pairs_before_filter
+                    if pairs_before_filter > 0
+                    else 0
+                )
+
+                logger.info(
+                    f"  {partition} partition '{identifier}' filtering: "
+                    f"{pairs_before_filter} pairs → {pairs_after_filter} pairs "
+                    f"({pairs_removed} removed, {removal_pct:.1f}% loss)"
+                )
+                if nan_count > 0 or any_timeout_count > 0:
+                    nan_pct = (
+                        100.0 * nan_count / pairs_before_filter
+                        if pairs_before_filter > 0
+                        else 0.0
+                    )
+                    any_timeout_pct = (
+                        100.0 * any_timeout_count / pairs_before_filter
+                        if pairs_before_filter > 0
+                        else 0.0
+                    )
+                    logger.info(
+                        f"    Filtered out (non-overlapping): "
+                        f"{nan_count} NaN ({nan_pct:.1f}%), "
+                        f"{any_timeout_count} timeout(666) ({any_timeout_pct:.1f}%)"
+                    )
+                    logger.info(
+                        f"    Timeout breakdown: "
+                        f"ED-only={ed_only_timeout_count}, "
+                        f"MCES-only={mces_only_timeout_count}, "
+                        f"both={both_timeout_count}"
+                    )
 
                 np.save(file_output, all_distance_data)
                 logger.info(

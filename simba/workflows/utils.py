@@ -39,6 +39,7 @@ def load_spectra(
         A list of preprocessed SpectrumExt objects.
     """
     # load
+    logger.info(f"Starting to load spectra from {file_name}...")
     if file_name.endswith(".mgf"):
         loader_saver = LoaderSaver(
             block_size=100,
@@ -64,7 +65,13 @@ def load_spectra(
         logger.error("Error: unrecognized file extension")
         return []
 
+    logger.info(
+        f"Loaded {len(all_spectra)} spectra from file. "
+        f"Unique molecules: {len(set(s.params.get('smiles', 'N/A') for s in all_spectra))}"
+    )
+
     # preprocess
+    logger.info("Starting spectrum preprocessing (filtering, normalization)...")
     all_spectra_processed = [copy.deepcopy(s) for s in all_spectra]
 
     pp = Preprocessor()
@@ -90,5 +97,19 @@ def load_spectra(
         if len(s_processed.mz) >= min_peaks
     ]
     logger.info(f"{len(filtered_spectra)} spectra remaining after filtering.")
+
+    # Additional logging for filtering stage
+    failed_filtering = len(all_spectra) - len(filtered_spectra)
+    unique_molecules_original = len(
+        set(s.params.get("smiles", "N/A") for s in all_spectra)
+    )
+    unique_molecules_filtered = len(
+        set(s.params.get("smiles", "N/A") for s in filtered_spectra)
+    )
+
+    logger.info(
+        f"Filtering summary: {failed_filtering} spectra removed due to insufficient peaks ({min_peaks} required). "
+        f"Unique molecules before: {unique_molecules_original}, after: {unique_molecules_filtered}"
+    )
 
     return filtered_spectra

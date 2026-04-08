@@ -178,6 +178,8 @@ class TrainUtils:
         Tuple[List[SpectrumExt], pd.DataFrame]
             A tuple containing a list of unique SpectrumExt objects and a DataFrame with smiles metadata.
         """
+        logger.info(f"Finding unique spectra from {len(all_spectra)} total spectra...")
+
         # convert to canonical smiles
         canon_smiles = [Chem.CanonSmiles(s.smiles) for s in all_spectra]
 
@@ -192,6 +194,10 @@ class TrainUtils:
         all_subclass = [s.subclass for s in all_spectra]
 
         unique_smiles = np.unique(canon_smiles)
+        logger.info(
+            f"Found {len(unique_smiles)} unique SMILES from {len(all_spectra)} spectra (compression: {len(all_spectra) / len(unique_smiles):.2f}x)"
+        )
+
         # map unique smiles to spectrum indexes
         smiles_to_spectra_map = {
             s: [i for i, c in enumerate(canon_smiles) if c == s] for s in unique_smiles
@@ -228,6 +234,11 @@ class TrainUtils:
         new_indexes = [canon_smiles_ordered.index(s) for s in canon_smiles_not_ordered]
         df_smiles.set_index(pd.Index(new_indexes), inplace=True)
         df_smiles = df_smiles.sort_index()
+
+        logger.info(
+            f"Created {len(spectra_unique_ordered)} unique dummy spectra from {len(all_spectra)} input spectra"
+        )
+
         return spectra_unique_ordered, df_smiles
 
     @staticmethod
