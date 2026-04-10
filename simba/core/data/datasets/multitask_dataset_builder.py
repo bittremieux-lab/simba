@@ -65,6 +65,8 @@ class MultitaskDataBuilder:
             The Pytorch dataset.
         """
         # copy spectrums to avoid overwriting
+        print(f'DEBUG: Size of incoming spectra: {len( molecule_pairs_input.original_spectra)}')
+        print(f'DEBUG: Size of pair distances: {molecule_pairs_input.pair_distances.shape}')
         molecule_pairs = MoleculePairsOpt(
             original_spectra=[
                 copy.copy(s) for s in molecule_pairs_input.original_spectra
@@ -128,6 +130,7 @@ class MultitaskDataBuilder:
         )
 
         logger.info("Loading mz, intensity and precursor data ...")
+        print(f'DEBUG: Size of original spectra loaded into CustomDataset {len(molecule_pairs.original_spectra)}')
         for i, spec in enumerate(molecule_pairs.original_spectra):
             # check for maximum length
             length = len(spec.mz) if len(spec.mz) <= max_num_peaks else max_num_peaks
