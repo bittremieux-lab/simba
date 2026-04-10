@@ -30,7 +30,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ion_method: bool
             Whether to include ionization method in the encoding (default: False).
         """
-        self.use_encoders=True
+        self.use_encoders=False
         super().__init__(*args, **kwargs)
         self.use_adduct = use_adduct
         self.use_ce = use_ce
