@@ -1,0 +1,14 @@
+{
+  "n_samples": 32000000,
+  "batch_size": 2048,
+  "gpu_type": "A100",
+  "warmup_steps": 50,
+  "measure_steps": 15625,
+  "steps_measured": 15625,
+  "wall_time_s": 13850.8118,
+  "samples_processed": 32000000,
+  "throughput_samples_per_s": 2310.33,
+  "max_gpu_mem_gb": 41.617,
+  "max_cpu_ram_gb": 2.036,
+  "wall_time_hms": "03:50:50"
+}

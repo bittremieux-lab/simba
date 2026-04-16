@@ -74,6 +74,8 @@ run_scripts_tfs*
 *.hdf5
 *.npy
 *.csv
+# Allow experiment result CSVs
+!experiments/**/*.csv
 
 # Logs
 logs/

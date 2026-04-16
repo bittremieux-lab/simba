@@ -1,0 +1,20 @@
+{
+  "n_layers": 8,
+  "d_model": 256,
+  "embeddings_dim": 512,
+  "n_heads": 8,
+  "n_params": 6845705,
+  "gpu_type": "A100",
+  "effective_batch_size": 2048,
+  "micro_batch_size": 2048,
+  "accumulate_grad_batches": 1,
+  "warmup_steps": 50,
+  "measure_steps": 200,
+  "steps_measured": 200,
+  "time_s": 279.924,
+  "samples": 409600,
+  "throughput_samples_per_s": 1463.25,
+  "max_gpu_mem_gb": 65.267,
+  "max_cpu_ram_gb": 2.02,
+  "gpu_util_pct": 97.2
+}

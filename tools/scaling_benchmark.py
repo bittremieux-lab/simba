@@ -154,11 +154,13 @@ def parse_args():
                    help="Number of nodes (defaults to SLURM_NNODES)")
     p.add_argument("--gpu-type", type=str, default="gpu",
                    help="GPU type label for output filename, e.g. A100, H100")
+    p.add_argument("--accelerator", type=str, default=None,
+                   help="Accelerator to use: 'gpu' (default) or 'cpu'")
     return p.parse_args()
 
 
 def load_config(preprocessing_dir: str, batch_size: int, num_workers: int,
-                gpus_per_node: int, num_nodes: int):
+                gpus_per_node: int, num_nodes: int, accelerator: str = "gpu"):
     """Load Hydra config via compose API."""
     from hydra import compose, initialize_config_dir
     from hydra.core.global_hydra import GlobalHydra
@@ -177,7 +179,7 @@ def load_config(preprocessing_dir: str, batch_size: int, num_workers: int,
                 f"paths.preprocessing_dir={preprocessing_dir}",
                 f"paths.preprocessing_dir_train={preprocessing_dir}",
                 f"training.batch_size={batch_size}",
-                f"hardware.accelerator=gpu",
+                f"hardware.accelerator={accelerator}",
                 f"hardware.devices={gpus_per_node}",
                 f"hardware.num_workers={num_workers}",
                 "training.epochs=9999",     # stopped by max_steps
@@ -190,10 +192,24 @@ def main():
     args = parse_args()
 
     num_nodes = args.num_nodes or int(os.environ.get("SLURM_NNODES", 1))
+    cpus_per_task = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
     gpus_per_node = args.gpus_per_node or int(
         os.environ.get("SLURM_NTASKS_PER_NODE", 1)
     )
     total_gpus = num_nodes * gpus_per_node
+
+    if args.accelerator is not None:
+        accelerator = args.accelerator
+    elif not torch.cuda.is_available():
+        accelerator = "cpu"
+    else:
+        accelerator = "gpu"
+
+    use_gpu = (accelerator == "gpu")
+
+    if not use_gpu:
+        total_gpus = cpus_per_task * num_nodes
+        gpus_per_node = cpus_per_task
 
     local_rank = int(os.environ.get("SLURM_LOCALID", 0))
     global_rank = int(os.environ.get("SLURM_PROCID", 0))
@@ -202,6 +218,7 @@ def main():
     if is_rank0:
         print("=" * 60)
         print(f"SimBA scaling benchmark")
+        print(f"  Accelerator  : {accelerator}")
         print(f"  Nodes        : {num_nodes}")
         print(f"  GPUs / node  : {gpus_per_node}")
         print(f"  Total GPUs   : {total_gpus}")
@@ -217,6 +234,7 @@ def main():
         num_workers=args.num_workers,
         gpus_per_node=gpus_per_node,
         num_nodes=num_nodes,
+        accelerator=accelerator,
     )
 
     from simba.workflows.training import (
@@ -261,7 +279,7 @@ def main():
         sampler=big_sampler,
         num_workers=args.num_workers,
         persistent_workers=args.num_workers > 0,
-        pin_memory=True,
+        pin_memory=use_gpu,
     )
 
     if is_rank0:
@@ -276,11 +294,13 @@ def main():
         warmup_steps=args.warmup_steps,
         measure_steps=args.measure_steps,
         batch_size_per_gpu=args.batch_size,
-        num_gpus=total_gpus,
+        # CPU runs on a single process; cores improve throughput via threading,
+        # not data parallelism, so the multiplier is 1 (not N_cores).
+        num_gpus=total_gpus if use_gpu else 1,
     )
 
     gpu_monitor = None
-    if is_rank0:
+    if is_rank0 and use_gpu:
         gpu_monitor = GpuUtilMonitor(interval=2.0)
         gpu_monitor.start()
 
@@ -290,11 +310,12 @@ def main():
         strategy = "auto"
     max_steps = args.warmup_steps + args.measure_steps + 20
 
+    trainer_devices = gpus_per_node if use_gpu else "auto"
     trainer = pl.Trainer(
         max_steps=max_steps,
         limit_val_batches=0.0,          # skip validation entirely
-        accelerator="gpu",
-        devices=gpus_per_node,
+        accelerator=accelerator,
+        devices=trainer_devices,
         num_nodes=num_nodes,
         strategy=strategy,
         enable_checkpointing=False,
@@ -319,11 +340,16 @@ def main():
 
     results = throughput_cb.get_results()
 
+    # For CPU runs, reinterpret "gpu" fields as cpu-core counts
+    num_units = total_gpus  # GPUs when use_gpu, logical cores when not
+    unit_label = "gpu" if use_gpu else "cpu"
+
     output = {
-        "num_gpus": total_gpus,
+        "num_gpus": num_units,
         "num_nodes": num_nodes,
         "gpus_per_node": gpus_per_node,
         "gpu_type": args.gpu_type,
+        "accelerator": accelerator,
         "batch_size_per_gpu": args.batch_size,
         "warmup_steps": args.warmup_steps,
         "measure_steps": args.measure_steps,
@@ -333,19 +359,22 @@ def main():
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"{total_gpus}gpu_{num_nodes}node_{args.gpu_type}_results.json"
+    out_path = output_dir / f"{num_units}{unit_label}_{num_nodes}node_{args.gpu_type}_results.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
 
+    unit_word = "GPU" if use_gpu else "CPU core"
     print("\n" + "=" * 60)
-    print(f"Results ({total_gpus} GPU{'s' if total_gpus > 1 else ''}):")
+    print(f"Results ({num_units} {unit_word}{'s' if num_units > 1 else ''}):")
     print(f"  Steps measured  : {results['steps_measured']}")
     print(f"  Wall-clock time : {results['time_s']:.2f} s")
     print(f"  Samples         : {results['samples']}")
     print(f"  Throughput      : {results['throughput_samples_per_s']:.1f} samples/s")
-    print(f"  Peak GPU memory : {results['max_gpu_mem_gb']:.2f} GB")
+    if use_gpu:
+        print(f"  Peak GPU memory : {results['max_gpu_mem_gb']:.2f} GB")
     print(f"  Peak CPU RAM    : {results['max_cpu_ram_gb']:.2f} GB")
-    print(f"  Mean GPU util   : {mean_util:.1f}%")
+    if use_gpu:
+        print(f"  Mean GPU util   : {mean_util:.1f}%")
     print(f"  Saved to        : {out_path}")
     print("=" * 60)
 

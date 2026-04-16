@@ -1,0 +1,17 @@
+{
+  "num_gpus": 16,
+  "num_nodes": 1,
+  "gpus_per_node": 16,
+  "gpu_type": "doduo",
+  "accelerator": "cpu",
+  "batch_size_per_gpu": 256,
+  "warmup_steps": 5,
+  "measure_steps": 20,
+  "steps_measured": 20,
+  "time_s": 216.9697,
+  "samples": 5120,
+  "throughput_samples_per_s": 23.6,
+  "max_gpu_mem_gb": 0.0,
+  "max_cpu_ram_gb": 12.676,
+  "gpu_util_pct": 0.0
+}
