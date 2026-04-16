@@ -145,9 +145,7 @@ def preprocess(cfg: DictConfig) -> None:
         use_only_protonized_adducts=cfg.preprocessing.use_only_protonized_adducts,
     )
 
-    unique_molecules_total = len(
-        set(s.params.get("smiles", "N/A") for s in all_spectra)
-    )
+    unique_molecules_total = len({s.params.get("smiles", "N/A") for s in all_spectra})
     logger.info(
         f"Loaded {len(all_spectra)} spectra with {unique_molecules_total} unique molecules"
     )
@@ -173,9 +171,9 @@ def preprocess(cfg: DictConfig) -> None:
     )
 
     # Log unique molecules per split
-    train_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_train))
-    val_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_val))
-    test_unique = len(set(s.params.get("smiles", "N/A") for s in all_spectra_test))
+    train_unique = len({s.params.get("smiles", "N/A") for s in all_spectra_train})
+    val_unique = len({s.params.get("smiles", "N/A") for s in all_spectra_val})
+    test_unique = len({s.params.get("smiles", "N/A") for s in all_spectra_test})
     logger.info(
         f"Unique molecules per split - Train: {train_unique}, Val: {val_unique}, Test: {test_unique}"
     )
@@ -203,7 +201,8 @@ def preprocess(cfg: DictConfig) -> None:
                 mol = Chem.MolFromSmiles(smiles)
                 if mol and mol.GetNumAtoms() > 40:
                     large_mols.append((smiles, mol.GetNumAtoms()))
-            except:
+            except Exception as e:
+                logger.warning(f"Error processing SMILES '{smiles}': {e}")
                 pass
 
         if large_mols:
@@ -269,12 +268,22 @@ def preprocess(cfg: DictConfig) -> None:
                         all_smiles.update(s.params["smiles"] for s in spectra_list)
 
                 if all_smiles:
+                    from rdkit import Chem as _Chem
+
                     from simba.core.chemistry.edit_distance.edit_distance import (
                         filter_cache_by_smiles,
                     )
 
+                    canon_smiles = set()
+                    for s in all_smiles:
+                        canon = _Chem.CanonSmiles(s)
+                        if canon:
+                            canon_smiles.add(canon)
+                        else:
+                            canon_smiles.add(s)
+
                     precomputed_cache = filter_cache_by_smiles(
-                        precomputed_cache, list(all_smiles)
+                        precomputed_cache, list(canon_smiles)
                     )
         else:
             logger.info(
