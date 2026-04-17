@@ -78,7 +78,10 @@ class TestTrainUtils:
 
     def test_train_val_test_split_bms(self, sample_spectra):
         train, val, test = TrainUtils.train_val_test_split_bms(
-            sample_spectra, val_split=0.25, test_split=0.25, seed=42
+            sample_spectra,
+            train_buckets=[0, 1, 2, 3, 4, 5],
+            val_buckets=[6, 7],
+            test_buckets=[8, 9],
         )
 
         assert len(train) + len(val) + len(test) == len(sample_spectra)
@@ -199,9 +202,84 @@ class TestTrainUtils:
 
     def test_train_val_test_split_bms_no_val_test(self, sample_spectra):
         train, val, test = TrainUtils.train_val_test_split_bms(
-            sample_spectra, val_split=0.0, test_split=0.0, seed=42
+            sample_spectra,
+            train_buckets=list(range(10)),
+            val_buckets=[],
+            test_buckets=[],
         )
 
         assert len(train) == len(sample_spectra)
         assert len(val) == 0
         assert len(test) == 0
+
+
+class TestHashBasedSplit:
+    """Tests for the deterministic hash-based scaffold split."""
+
+    def test_no_scaffold_overlap(self, sample_spectra):
+        train, val, test = TrainUtils.train_val_test_split_bms(sample_spectra)
+        train_bms = {s.murcko_scaffold for s in train}
+        val_bms = {s.murcko_scaffold for s in val}
+        test_bms = {s.murcko_scaffold for s in test}
+        assert train_bms.isdisjoint(val_bms)
+        assert train_bms.isdisjoint(test_bms)
+        assert val_bms.isdisjoint(test_bms)
+
+    def test_all_spectra_assigned(self, sample_spectra):
+        train, val, test = TrainUtils.train_val_test_split_bms(sample_spectra)
+        assert len(train) + len(val) + len(test) == len(sample_spectra)
+
+    def test_dataset_independent(self, create_test_spectrum):
+        """Adding new molecules must not move existing scaffolds between splits."""
+        shared = [
+            create_test_spectrum(identifier="a", smiles="CCO", bms="scaffoldA"),
+            create_test_spectrum(identifier="b", smiles="CCCO", bms="scaffoldB"),
+            create_test_spectrum(identifier="c", smiles="CCCCO", bms="scaffoldC"),
+        ]
+        extra = [
+            create_test_spectrum(identifier="d", smiles="c1ccccc1", bms="scaffoldD"),
+            create_test_spectrum(identifier="e", smiles="c1ccncc1", bms="scaffoldE"),
+        ]
+
+        def split_label(spectra, spectrum):
+            train, val, test = TrainUtils.train_val_test_split_bms(
+                spectra,
+                train_buckets=list(range(8)),
+                val_buckets=[8],
+                test_buckets=[9],
+            )
+            if spectrum in train:
+                return "train"
+            if spectrum in val:
+                return "val"
+            return "test"
+
+        for s in shared:
+            assert split_label(shared, s) == split_label(shared + extra, s), (
+                f"Spectrum {s.identifier} changed split when extra data was added"
+            )
+
+    def test_same_scaffold_same_split(self, create_test_spectrum):
+        """Two spectra sharing a scaffold always end up in the same split."""
+        spectra = [
+            create_test_spectrum(identifier="x1", smiles="CCO", bms="sharedScaffold"),
+            create_test_spectrum(identifier="x2", smiles="CCCO", bms="sharedScaffold"),
+        ]
+        train, val, test = TrainUtils.train_val_test_split_bms(spectra)
+        assert len(train) == 2 or len(val) == 2 or len(test) == 2
+
+    def test_deterministic_across_calls(self, sample_spectra):
+        """Calling the function twice returns identical splits."""
+        r1 = TrainUtils.train_val_test_split_bms(sample_spectra)
+        r2 = TrainUtils.train_val_test_split_bms(sample_spectra)
+        for s1, s2 in zip(r1, r2):
+            assert [s.identifier for s in s1] == [s.identifier for s in s2]
+
+    def test_spectra_without_scaffold_go_to_train(self, create_test_spectrum):
+        spectra = [
+            create_test_spectrum(identifier="no_bms", smiles="CCO", bms=""),
+            create_test_spectrum(identifier="has_bms", smiles="CCCO", bms="scaffoldX"),
+        ]
+        train, val, test = TrainUtils.train_val_test_split_bms(spectra)
+        train_ids = [s.identifier for s in train]
+        assert "no_bms" in train_ids

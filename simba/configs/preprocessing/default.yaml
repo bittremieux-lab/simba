@@ -16,9 +16,12 @@ max_spectra_train: 10000  # Maximum training spectra to preprocess
 max_spectra_val: 1000000  # Maximum validation spectra to preprocess
 max_spectra_test: 1000000  # Maximum test spectra to preprocess
 
-# Data splits
-val_split: 0.1  # Validation split fraction (0.0-1.0)
-test_split: 0.1  # Test split fraction (0.0-1.0)
+# Data splits (hash-bucket based — dataset-independent)
+# Scaffolds are assigned to buckets by SHA-256(scaffold) % n_buckets.
+n_buckets: 10
+train_buckets: [0, 1, 2, 3, 4, 5, 6, 7]
+val_buckets:   [8]
+test_buckets:  [9]
 
 # Sampling
 random_mces_sampling: false

@@ -221,8 +221,10 @@ simba preprocess \
 * `preprocessing.max_spectra_train`: Maximum number of spectra to process for training (default: 1000)
 * `preprocessing.max_spectra_val`: Maximum number of spectra for validation (default: 1000)
 * `preprocessing.max_spectra_test`: Maximum number of spectra for testing (default: 1000)
-* `preprocessing.val_split`: Fraction of data for validation (default: 0.1)
-* `preprocessing.test_split`: Fraction of data for testing (default: 0.1)
+* `preprocessing.n_buckets`: Total hash buckets / modulus (default: 10)
+* `preprocessing.train_buckets`: Bucket numbers assigned to train (default: [0,1,2,3,4,5,6,7], ~80%)
+* `preprocessing.val_buckets`: Bucket numbers assigned to validation (default: [8], ~10%)
+* `preprocessing.test_buckets`: Bucket numbers assigned to test (default: [9], ~10%)
 * `preprocessing.overwrite`: Overwrite existing preprocessing files (default: false)
 * `preprocessing.num_workers`: Number of worker processes for parallel computation (default: 0)
 
@@ -326,12 +328,13 @@ simba preprocess \
   preprocessing.max_spectra_train=1000000 \
   preprocessing.num_workers=4
 
-# Custom splits and overwrite existing data
+# Custom splits: 2/10 val, 2/10 test (20% each) and overwrite existing data
 simba preprocess \
   paths.spectra_path=data/spectra.mgf \
   paths.preprocessing_dir=./preprocessed_data \
-  preprocessing.val_split=0.15 \
-  preprocessing.test_split=0.15 \
+  'preprocessing.train_buckets=[0,1,2,3,4,5]' \
+  'preprocessing.val_buckets=[6,7]' \
+  'preprocessing.test_buckets=[8,9]' \
   preprocessing.overwrite=true
 ```
 

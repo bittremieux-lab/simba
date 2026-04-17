@@ -155,8 +155,10 @@ def preprocess(cfg: DictConfig) -> None:
     all_spectra_train, all_spectra_val, all_spectra_test = (
         TrainUtils.train_val_test_split_bms(
             all_spectra,
-            val_split=cfg.preprocessing.val_split,
-            test_split=cfg.preprocessing.test_split,
+            n_buckets=cfg.preprocessing.n_buckets,
+            train_buckets=list(cfg.preprocessing.train_buckets),
+            val_buckets=list(cfg.preprocessing.val_buckets),
+            test_buckets=list(cfg.preprocessing.test_buckets),
         )
     )
 

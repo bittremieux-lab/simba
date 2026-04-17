@@ -48,8 +48,10 @@ class TestDataPreprocessing:
         # Perform split
         train, val, test = TrainUtils.train_val_test_split_bms(
             all_spectra,
-            val_split=0.2,
-            test_split=0.2,
+            n_buckets=10,
+            train_buckets=[2],
+            val_buckets=[4],
+            test_buckets=[9],
         )
 
         # Check splits are non-empty
@@ -88,8 +90,10 @@ class TestDataPreprocessing:
 
         train, val, test = TrainUtils.train_val_test_split_bms(
             all_spectra,
-            val_split=0.2,
-            test_split=0.2,
+            n_buckets=10,
+            train_buckets=[0, 1, 2, 3, 4, 5],
+            val_buckets=[6, 7],
+            test_buckets=[8, 9],
         )
         train = train[:4]
 
