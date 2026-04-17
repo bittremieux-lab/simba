@@ -67,7 +67,7 @@ def load_spectra(
 
     logger.info(
         f"Loaded {len(all_spectra)} spectra from file. "
-        f"Unique molecules: {len(set(s.params.get('smiles', 'N/A') for s in all_spectra))}"
+        f"Unique molecules: {len({s.params.get('smiles', 'N/A') for s in all_spectra})}"
     )
 
     # preprocess
@@ -101,10 +101,10 @@ def load_spectra(
     # Additional logging for filtering stage
     failed_filtering = len(all_spectra) - len(filtered_spectra)
     unique_molecules_original = len(
-        set(s.params.get("smiles", "N/A") for s in all_spectra)
+        {s.params.get("smiles", "N/A") for s in all_spectra}
     )
     unique_molecules_filtered = len(
-        set(s.params.get("smiles", "N/A") for s in filtered_spectra)
+        {s.params.get("smiles", "N/A") for s in filtered_spectra}
     )
 
     logger.info(
