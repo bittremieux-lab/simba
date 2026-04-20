@@ -12,9 +12,15 @@ class MurckoScaffold:
     @staticmethod
     def get_bm_scaffold(smiles):
         try:
-            scaffold = Chem.MolToSmiles(
-                MakeScaffoldGeneric(mol=Chem.MolFromSmiles(smiles))
-            )
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                logger.warning(f"Invalid SMILES, could not parse molecule ({smiles})")
+                return ""
+            scaffold_mol = MakeScaffoldGeneric(mol=mol)
+            if scaffold_mol is None:
+                logger.warning(f"No scaffold for given SMILES ({smiles})")
+                return ""
+            scaffold = Chem.MolToSmiles(scaffold_mol)
         except Exception:
             logger.warning(f"No scaffold for given SMILES ({smiles})")
             scaffold = ""
