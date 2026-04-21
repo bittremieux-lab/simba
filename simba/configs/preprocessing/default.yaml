@@ -1,8 +1,5 @@
 # Preprocessing configuration
 
-# Storage format options
-use_lightweight_format: false
-
 # Preprocessing batch processing
 batch_size: 1000
 num_workers: 60

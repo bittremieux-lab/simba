@@ -16,8 +16,6 @@ import numpy as np
 import pandas as pd
 
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
-from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.data.spectrum import SpectrumExt
 from simba.core.models.simba_model import Simba
 from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.train_utils import TrainUtils
@@ -95,33 +93,24 @@ class TestDataPreprocessing:
             val_buckets=[6, 7],
             test_buckets=[8, 9],
         )
-        train = train[:4]
 
-        unique_smiles = list({s.smiles for s in train})
-        df_smiles = pd.DataFrame(
+        unique_smiles_train = list({s.smiles for s in train})
+        df_smiles_train = pd.DataFrame(
             {
-                "smiles": unique_smiles,
-                "indexes": [[i] for i in range(len(unique_smiles))],
+                "smiles": unique_smiles_train,
+                "indexes": [[i] for i in range(len(unique_smiles_train))],
             }
         )
 
-        pair_distances = (
-            np.array([[0, 1, 0.5]])
-            if len(unique_smiles) > 1
-            else np.array([[0, 0, 1.0]])
-        )
-
-        molecule_pairs_train = MoleculePairsOpt(
-            original_spectra=train,
-            unique_spectra=train[: len(unique_smiles)],
-            df_smiles=df_smiles,
-            pair_distances=pair_distances,
-        )
-
         mapping_data = {
-            "molecule_pairs_train": molecule_pairs_train,
-            "molecule_pairs_val": None,
-            "molecule_pairs_test": None,
+            "df_smiles_train": df_smiles_train,
+            "df_smiles_val": None,
+            "df_smiles_test": None,
+            "spectrum_indexes_train": [s.mgf_index for s in train],
+            "spectrum_indexes_val": None,
+            "spectrum_indexes_test": None,
+            "mgf_path": str(sample_training_spectra),
+            "format_version": "lightweight",
         }
 
         mapping_path = tmp_path / "mapping_test.pkl"
@@ -133,8 +122,11 @@ class TestDataPreprocessing:
         with open(mapping_path, "rb") as f:
             loaded_data = pickle.load(f)
 
-        assert "molecule_pairs_train" in loaded_data
-        assert loaded_data["molecule_pairs_train"] is not None
+        assert "df_smiles_train" in loaded_data
+        assert "spectrum_indexes_train" in loaded_data
+        assert "mgf_path" in loaded_data
+        assert loaded_data["format_version"] == "lightweight"
+        assert loaded_data["df_smiles_train"] is not None
 
 
 class TestMappingFileStructure:
@@ -142,49 +134,6 @@ class TestMappingFileStructure:
 
     def test_mapping_file_has_required_keys(self, tmp_path):
         """Test that mapping file contains expected keys."""
-        spec1 = SpectrumExt(
-            identifier="spec1",
-            precursor_mz=100.0,
-            precursor_charge=1,
-            mz=np.array([45.0]),
-            intensity=np.array([100.0]),
-            retention_time=0.0,
-            params={},
-            library="test",
-            inchi="InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3",
-            smiles="CCO",
-            ionmode="Positive",
-            adduct="[M+H]+",
-            ce=0.0,
-            ion_activation="CID",
-            ionization_method="ESI",
-            bms="",
-            superclass="",
-            classe="",
-            subclass="",
-        )
-        spec2 = SpectrumExt(
-            identifier="spec2",
-            precursor_mz=100.0,
-            precursor_charge=1,
-            mz=np.array([60.0]),
-            intensity=np.array([100.0]),
-            retention_time=0.0,
-            params={},
-            library="test",
-            inchi="InChI=1S/C3H8O/c1-3(2)4/h3-4H,1-2H3",
-            smiles="CC(C)O",
-            ionmode="Positive",
-            adduct="[M+H]+",
-            ce=0.0,
-            ion_activation="CID",
-            ionization_method="ESI",
-            bms="",
-            superclass="",
-            classe="",
-            subclass="",
-        )
-
         df_smiles = pd.DataFrame(
             {
                 "smiles": ["CCO", "CC(C)O"],
@@ -192,19 +141,15 @@ class TestMappingFileStructure:
             }
         )
 
-        pair_distances = np.array([[0, 1, 0.5]])
-
-        mol_pairs = MoleculePairsOpt(
-            original_spectra=[spec1, spec2],
-            unique_spectra=[spec1, spec2],
-            df_smiles=df_smiles,
-            pair_distances=pair_distances,
-        )
-
         mapping_data = {
-            "molecule_pairs_train": mol_pairs,
-            "molecule_pairs_val": None,
-            "molecule_pairs_test": None,
+            "df_smiles_train": df_smiles,
+            "df_smiles_val": None,
+            "df_smiles_test": None,
+            "spectrum_indexes_train": [0, 1],
+            "spectrum_indexes_val": None,
+            "spectrum_indexes_test": None,
+            "mgf_path": "/tmp/spectra.mgf",
+            "format_version": "lightweight",
         }
 
         mapping_path = tmp_path / "test_mapping.pkl"
@@ -215,80 +160,17 @@ class TestMappingFileStructure:
         with open(mapping_path, "rb") as f:
             loaded = pickle.load(f)
 
-        assert "molecule_pairs_train" in loaded
-        assert "molecule_pairs_val" in loaded
-        assert "molecule_pairs_test" in loaded
+        assert "df_smiles_train" in loaded
+        assert "df_smiles_val" in loaded
+        assert "df_smiles_test" in loaded
+        assert "spectrum_indexes_train" in loaded
+        assert "mgf_path" in loaded
+        assert loaded["format_version"] == "lightweight"
 
-        train_pairs = loaded["molecule_pairs_train"]
-        assert hasattr(train_pairs, "df_smiles")
-        assert isinstance(train_pairs.df_smiles, pd.DataFrame)
+        assert isinstance(loaded["df_smiles_train"], pd.DataFrame)
 
     def test_mapping_df_smiles_structure(self, tmp_path):
         """Test that df_smiles DataFrame has correct structure."""
-        spec1 = SpectrumExt(
-            identifier="spec1",
-            precursor_mz=100.0,
-            precursor_charge=1,
-            mz=np.array([45.0]),
-            intensity=np.array([100.0]),
-            retention_time=0.0,
-            params={},
-            library="test",
-            inchi="InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3",
-            smiles="CCO",
-            ionmode="Positive",
-            adduct="[M+H]+",
-            ce=0.0,
-            ion_activation="CID",
-            ionization_method="ESI",
-            bms="",
-            superclass="",
-            classe="",
-            subclass="",
-        )
-        spec2 = SpectrumExt(
-            identifier="spec2",
-            precursor_mz=100.0,
-            precursor_charge=1,
-            mz=np.array([60.0]),
-            intensity=np.array([100.0]),
-            retention_time=0.0,
-            params={},
-            library="test",
-            inchi="InChI=1S/C3H8O/c1-3(2)4/h3-4H,1-2H3",
-            smiles="CC(C)O",
-            ionmode="Positive",
-            adduct="[M+H]+",
-            ce=0.0,
-            ion_activation="CID",
-            ionization_method="ESI",
-            bms="",
-            superclass="",
-            classe="",
-            subclass="",
-        )
-        spec3 = SpectrumExt(
-            identifier="spec3",
-            precursor_mz=100.0,
-            precursor_charge=1,
-            mz=np.array([75.0]),
-            intensity=np.array([100.0]),
-            retention_time=0.0,
-            params={},
-            library="test",
-            inchi="InChI=1S/C4H10/c1-3-4-2/h3-4H2,1-2H3",
-            smiles="CCCC",
-            ionmode="Positive",
-            adduct="[M+H]+",
-            ce=0.0,
-            ion_activation="CID",
-            ionization_method="ESI",
-            bms="",
-            superclass="",
-            classe="",
-            subclass="",
-        )
-
         df_smiles = pd.DataFrame(
             {
                 "smiles": ["CCO", "CC(C)O", "CCCC"],
@@ -296,23 +178,25 @@ class TestMappingFileStructure:
             }
         )
 
-        pair_distances = np.array([[0, 1, 0.5], [1, 2, 0.3]])
-
-        mol_pairs = MoleculePairsOpt(
-            original_spectra=[spec1, spec2, spec3],
-            unique_spectra=[spec1, spec2, spec3],
-            df_smiles=df_smiles,
-            pair_distances=pair_distances,
-        )
+        mapping_data = {
+            "df_smiles_train": df_smiles,
+            "df_smiles_val": None,
+            "df_smiles_test": None,
+            "spectrum_indexes_train": [0, 1, 2, 3, 4, 5],
+            "spectrum_indexes_val": None,
+            "spectrum_indexes_test": None,
+            "mgf_path": "/tmp/spectra.mgf",
+            "format_version": "lightweight",
+        }
 
         mapping_path = tmp_path / "test_mapping.pkl"
         with open(mapping_path, "wb") as f:
-            pickle.dump({"molecule_pairs_train": mol_pairs}, f)
+            pickle.dump(mapping_data, f)
 
         with open(mapping_path, "rb") as f:
             loaded = pickle.load(f)
 
-        df = loaded["molecule_pairs_train"].df_smiles
+        df = loaded["df_smiles_train"]
 
         assert "smiles" in df.columns
         assert "indexes" in df.columns

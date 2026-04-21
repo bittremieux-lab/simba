@@ -44,7 +44,7 @@ rm -rf test_full_workflow/
 mkdir -p test_full_workflow
 
 echo ""
-echo "1/10 Testing: simba preprocess"
+echo "1/12 Testing: simba preprocess"
 echo "--------------------------------"
 uv run simba preprocess \
     preprocessing=fast_dev \
@@ -52,7 +52,7 @@ uv run simba preprocess \
     paths.preprocessing_dir=./test_full_workflow/preprocessed/
 
 echo ""
-echo "2/10 Testing: simba preprocess with cache (reuse distances)"
+echo "2/12 Testing: simba preprocess with cache (reuse distances)"
 echo "------------------------------------------------------------"
 uv run simba preprocess \
     preprocessing=fast_dev \

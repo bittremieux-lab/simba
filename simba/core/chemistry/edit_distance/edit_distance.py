@@ -1,4 +1,5 @@
 import os
+import sys
 from functools import lru_cache
 
 import dill
@@ -373,6 +374,7 @@ def compute_ed_and_mces_both(
         leave=False,
         unit="pair",
         bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+        disable=not sys.stdout.isatty(),
     ):
         pair = pair_distances[index]
 
@@ -508,6 +510,7 @@ def compute_ed_or_mces(
         leave=False,
         unit="pair",
         bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+        disable=not sys.stdout.isatty(),
     ):
         pair = pair_distances[index]
 
