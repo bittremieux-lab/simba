@@ -195,8 +195,16 @@ class TrainUtils:
         """
         logger.info(f"Finding unique spectra from {len(all_spectra)} total spectra...")
 
-        # convert to canonical smiles
-        canon_smiles = [Chem.CanonSmiles(s.smiles) for s in all_spectra]
+        # convert to canonical smiles; guard against invalid SMILES that would
+        # cause a C++ abort inside CanonSmiles -> MolToSmiles(None)
+        canon_smiles = []
+        for s in all_spectra:
+            mol = Chem.MolFromSmiles(s.smiles)
+            if mol is None:
+                logger.warning(f"Could not parse SMILES, using raw: {s.smiles}")
+                canon_smiles.append(s.smiles)
+            else:
+                canon_smiles.append(Chem.MolToSmiles(mol))
 
         # get all metadata associated with the spectra
         all_mz = [s.precursor_mz for s in all_spectra]
