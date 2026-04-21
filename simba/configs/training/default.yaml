@@ -16,6 +16,7 @@ training:
   validate_after_ratio: 0.001
   gradient_clip_val: 1.0
   accumulate_grad_batches: 1
+  early_stopping_patience: 0  # 0 = disabled; set e.g. 5 to stop when val_loss stops improving
 
 # Data splits
 data:
