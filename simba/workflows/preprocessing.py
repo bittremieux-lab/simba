@@ -278,9 +278,9 @@ def preprocess(cfg: DictConfig) -> None:
 
                     canon_smiles = set()
                     for s in all_smiles:
-                        canon = _Chem.CanonSmiles(s)
-                        if canon:
-                            canon_smiles.add(canon)
+                        mol = _Chem.MolFromSmiles(s)
+                        if mol is not None:
+                            canon_smiles.add(_Chem.MolToSmiles(mol))
                         else:
                             canon_smiles.add(s)
 
