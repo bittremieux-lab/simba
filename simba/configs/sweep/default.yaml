@@ -1,0 +1,57 @@
+# @package _global_
+
+sweep:
+  n_trials: 10
+  output_dir: ./sweeps/optuna_default
+  resume: false
+  study_name: simba_hyperparam_search
+  params:
+    # [Tier 1] Learning rate — most impactful hyperparameter
+    optimizer.lr:
+      type: loguniform
+      low: 1.0e-5
+      high: 1.0e-2
+
+    # [Tier 1] Weight decay — currently 0 (disabled); critical for regularising
+    # transformers on small datasets (~22k spectra). Log scale avoids 0.
+    optimizer.weight_decay:
+      type: loguniform
+      low: 1.0e-6
+      high: 1.0e-2
+
+    # [Tier 2] Model width — drives capacity, also affects compute
+    model.transformer.d_model:
+      type: categorical
+      choices: [128, 256, 512]
+
+    # [Tier 2] Model depth — meaningful once width is set
+    model.transformer.n_layers:
+      type: int
+      low: 3
+      high: 8
+
+    # [Tier 3] Dropout — important with limited training data; 0.1 may be too low
+    model.transformer.dropout:
+      type: uniform
+      low: 0.0
+      high: 0.4
+
+    # Uncomment to add lower-priority params:
+    # training.gradient_clip_val:      # usually stable between 0.5-2.0 with Adam
+    #   type: uniform
+    #   low: 0.5
+    #   high: 2.0
+    #
+    # training.batch_size:
+    #   type: categorical
+    #   choices: [64, 128, 256]
+
+  # Optional: seed the sweep with specific starting points that run as
+  # the first trial(s) before TPE takes over. Ignored when resume=true.
+  # These values reflect the current default config — a sensible baseline.
+  starting_params:
+    - optimizer.lr: 0.0001
+      optimizer.weight_decay: 0.000001  # near-zero → effectively the current default of 0
+      model.transformer.d_model: 256
+      model.transformer.n_layers: 5
+      model.transformer.dropout: 0.1

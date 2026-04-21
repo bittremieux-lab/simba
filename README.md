@@ -491,7 +491,104 @@ The command generates evaluation metrics and visualization plots:
 
 ---
 
-## 🛠️ Development & Contributing
+## Hyperparameter Search
+
+SIMBA includes a built-in Optuna-based hyperparameter sweep via the `simba-sweep` command. All trials run **sequentially in a single job**. Results are written to `trials.json` after every trial, enabling **resume** with full knowledge after a crash or walltime limit.
+
+### Configuring the Search Space
+
+Edit `simba/configs/sweep/default.yaml` to define which hyperparameters to search. Each entry under `sweep.params` requires a `type` and bounds/choices:
+
+```yaml
+sweep:
+  n_trials: 10
+  output_dir: ./sweeps/run1
+  resume: false
+  params:
+    optimizer.lr:
+      type: loguniform
+      low: 1.0e-5
+      high: 1.0e-2
+
+    model.transformer.d_model:
+      type: categorical
+      choices: [128, 256, 512]
+
+    model.transformer.n_layers:
+      type: int
+      low: 3
+      high: 8
+
+    training.gradient_clip_val:
+      type: uniform
+      low: 0.5
+      high: 2.0
+```
+
+Supported `type` values: `loguniform`, `uniform`, `int`, `categorical`.
+
+Any valid Hydra config key (e.g. `optimizer.lr`, `model.transformer.d_model`, `training.batch_size`) can be added without touching Python code.
+
+### Running a Sweep Locally
+
+```bash
+simba-sweep \
+    +sweep=default \
+    sweep.n_trials=10 \
+    sweep.output_dir=./sweeps/run1 \
+    paths.preprocessing_dir_train=./preprocessed_data \
+    training.epochs=10 \
+    hardware.accelerator=cpu
+```
+
+### Resuming After Interruption
+
+Set `sweep.resume=true` to continue from where the sweep left off. TPE will use all previously completed trials to guide new ones:
+
+### Starting from Known Good Parameters
+
+You can seed the sweep with specific hyperparameter combinations that run as the first trial(s) before TPE takes over — useful when you have prior knowledge of a reasonable starting point:
+
+```yaml
+# In simba/configs/sweep/default.yaml — uncomment and edit:
+sweep:
+  starting_params:
+    - optimizer.lr: 0.001
+      model.transformer.d_model: 256
+      model.transformer.n_layers: 5
+      training.gradient_clip_val: 1.0
+    - optimizer.lr: 0.0001
+      model.transformer.d_model: 512
+      model.transformer.n_layers: 3
+      training.gradient_clip_val: 0.5
+```
+
+- All keys must be valid params listed under `sweep.params`
+- Multiple starting points are supported — each runs as a separate trial
+- Ignored when `sweep.resume=true` (TPE already has prior knowledge)
+
+### Output Structure
+
+```text
+sweeps/run1/
+├── trials.json                  # All trial results (params + val_loss)
+├── checkpoints/
+│   ├── 0/
+│   │   ├── best_model.ckpt      # Best checkpoint for trial 0
+│   │   └── params.json          # Hyperparams used for this checkpoint
+│   ├── 1/
+│   │   └── ...
+│   └── ...
+└── best_inference/
+    ├── metrics.json             # ED & MCES correlation + MAE for best trial
+    ├── cm.png                   # Confusion matrix
+    ├── hexbin_plot_*.png
+    └── scatter_plot_*.png
+```
+
+After all trials, inference is automatically run on the best trial's checkpoint and metrics/plots are saved to `best_inference/`.
+
+## Development & Contributing
 
 ### Setting Up Development Environment
 

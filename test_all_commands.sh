@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Test script for all SIMBA commands
-# Tests: preprocess, train, inference, analog-discovery
+# Tests: preprocess, sweep (fresh+resume), train, inference, analog-discovery
 #
 # Usage: bash test_all_commands.sh [DEVICE] [PRETRAINED_CHECKPOINT_DIR] [PRETRAINED_MODEL_NAME]
 #   DEVICE: cpu or gpu (default: cpu)
-#   PRETRAINED_CHECKPOINT_DIR: Path to pretrained model checkpoint directory (required for tests 5-6)
-#   PRETRAINED_MODEL_NAME: Name of pretrained model file (required for tests 5-6)
+#   PRETRAINED_CHECKPOINT_DIR: Path to pretrained model checkpoint directory (required for tests 7-8)
+#   PRETRAINED_MODEL_NAME: Name of pretrained model file (required for tests 7-8)
 #
 # Example: bash test_all_commands.sh gpu ./downl_data best_model.ckpt
 
@@ -26,7 +26,7 @@ fi
 # Check if pretrained model arguments are provided
 if [[ -z "$PRETRAINED_CHECKPOINT_DIR" || -z "$PRETRAINED_MODEL_NAME" ]]; then
     echo "Warning: PRETRAINED_CHECKPOINT_DIR and PRETRAINED_MODEL_NAME not provided."
-    echo "Tests 5 and 6 (pretrained model tests) will be skipped."
+    echo "Tests 7 and 8 (pretrained model tests) will be skipped."
     SKIP_PRETRAINED=true
 else
     SKIP_PRETRAINED=false
@@ -61,7 +61,31 @@ uv run simba preprocess \
     'preprocessing.precomputed_distances=[./test_full_workflow/preprocessed/]'
 
 echo ""
-echo "3/10 Testing: simba train"
+echo "3/12 Testing: simba-sweep (fresh, 3 trials, 1 epoch)"
+echo "------------------------------------------------------------"
+uv run simba-sweep \
+    +sweep=default \
+    sweep.n_trials=3 \
+    sweep.output_dir=./test_full_workflow/sweep_run1 \
+    sweep.resume=false \
+    paths.preprocessing_dir_train=./test_full_workflow/preprocessed/ \
+    training.epochs=1 \
+    hardware.accelerator=$DEVICE
+
+echo ""
+echo "4/12 Testing: simba-sweep (resume, 3 more trials with prior TPE knowledge)"
+echo "------------------------------------------------------------"
+uv run simba-sweep \
+    +sweep=default \
+    sweep.n_trials=3 \
+    sweep.output_dir=./test_full_workflow/sweep_run1 \
+    sweep.resume=true \
+    paths.preprocessing_dir_train=./test_full_workflow/preprocessed/ \
+    training.epochs=1 \
+    hardware.accelerator=$DEVICE
+
+echo ""
+echo "5/12 Testing: simba train"
 echo "--------------------------------"
 uv run simba train \
     training=fast_dev \
@@ -72,7 +96,7 @@ uv run simba train \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "4/10 Testing: simba inference"
+echo "6/12 Testing: simba inference"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
@@ -82,7 +106,7 @@ uv run simba inference \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "5/10 Testing: simba analog-discovery"
+echo "7/12 Testing: simba analog-discovery"
 echo "--------------------------------"
 uv run simba analog-discovery \
     analog_discovery=fast_dev \
@@ -95,7 +119,7 @@ uv run simba analog-discovery \
 
 if [[ "$SKIP_PRETRAINED" == "false" ]]; then
     echo ""
-    echo "6/10 Testing: simba inference (pretrained model)"
+    echo "8/12 Testing: simba inference (pretrained model)"
     echo "--------------------------------"
     uv run simba inference \
         inference=fast_dev \
@@ -105,7 +129,7 @@ if [[ "$SKIP_PRETRAINED" == "false" ]]; then
         hardware.accelerator=$DEVICE
 
     echo ""
-    echo "7/10 Testing: simba analog-discovery (pretrained model)"
+    echo "9/12 Testing: simba analog-discovery (pretrained model)"
     echo "--------------------------------"
     uv run simba analog-discovery \
         analog_discovery=fast_dev \
@@ -117,13 +141,13 @@ if [[ "$SKIP_PRETRAINED" == "false" ]]; then
         analog_discovery.device=$DEVICE
 else
     echo ""
-    echo "5/9 Skipping: simba inference (pretrained model) - no pretrained model provided"
+    echo "8/12 Skipping: simba inference (pretrained model) - no pretrained model provided"
     echo ""
-    echo "6/9 Skipping: simba analog-discovery (pretrained model) - no pretrained model provided"
+    echo "9/12 Skipping: simba analog-discovery (pretrained model) - no pretrained model provided"
 fi
 
 echo ""
-echo "8/10 Testing: simba train (with metadata features)"
+echo "10/12 Testing: simba train (with metadata features)"
 echo "--------------------------------"
 uv run simba train \
     training=fast_dev \
@@ -138,7 +162,7 @@ uv run simba train \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "9/10 Testing: simba inference (with metadata features)"
+echo "11/12 Testing: simba inference (with metadata features)"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
@@ -152,7 +176,7 @@ uv run simba inference \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "10/10 Testing: simba analog-discovery (with metadata features)"
+echo "12/12 Testing: simba analog-discovery (with metadata features)"
 echo "--------------------------------"
 uv run simba analog-discovery \
     analog_discovery=fast_dev \
