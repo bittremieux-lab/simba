@@ -100,7 +100,9 @@ class PreprocessingUtils:
         if clss is None and not pd.isna(smiles) and smiles != "N/A":
             mol = PreprocessingUtils._smiles_to_mol(smiles)
             clss = (
-                PreprocessingUtils._get_class("smiles", Chem.MolToSmiles(mol, False))
+                PreprocessingUtils._get_class(
+                    "smiles", Chem.MolToSmiles(mol, isomericSmiles=False)
+                )
                 if mol is not None
                 else None
             )
