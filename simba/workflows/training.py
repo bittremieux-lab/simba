@@ -10,7 +10,7 @@ from pathlib import Path
 import dill
 import lightning.pytorch as pl
 import numpy as np
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
@@ -397,7 +397,23 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    return checkpoint_callback, checkpoint_n_steps_callback, loss_callback
+    # Optional early stopping: patience=0 means disabled
+    early_stopping_callback = None
+    patience = cfg.training.get("early_stopping_patience", 0)
+    if patience and patience > 0:
+        early_stopping_callback = EarlyStopping(
+            monitor="validation_loss",
+            patience=patience,
+            mode="min",
+            verbose=True,
+        )
+
+    return (
+        checkpoint_callback,
+        checkpoint_n_steps_callback,
+        loss_callback,
+        early_stopping_callback,
+    )
 
 
 def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMultitask:
@@ -458,7 +474,8 @@ def train(
     checkpoint_callback: ModelCheckpoint | None,
     checkpoint_n_steps_callback: ModelCheckpoint | None,
     loss_callback: LossCallback,
-) -> None:
+    early_stopping_callback: EarlyStopping | None = None,
+) -> pl.Trainer:
     """Run the training loop.
     Args:
         model: SIMBA model to train
@@ -468,11 +485,19 @@ def train(
         checkpoint_callback: Best model checkpoint callback (optional, can be None)
         checkpoint_n_steps_callback: Periodic checkpoint callback (optional, can be None)
         loss_callback: Loss tracking callback
+        early_stopping_callback: EarlyStopping callback (optional, None=disabled)
+    Returns:
+        The fitted PyTorch Lightning Trainer.
     """
     # Build callbacks list, excluding None values
     callbacks = [
         cb
-        for cb in [checkpoint_callback, checkpoint_n_steps_callback, loss_callback]
+        for cb in [
+            checkpoint_callback,
+            checkpoint_n_steps_callback,
+            loss_callback,
+            early_stopping_callback,
+        ]
         if cb is not None
     ]
 
@@ -489,6 +514,7 @@ def train(
     )
 
     trainer.fit(model, dataloader_train, dataloader_val)
+    return trainer
 
 
 def _remove_duplicates_array(arr: np.ndarray) -> np.ndarray:
