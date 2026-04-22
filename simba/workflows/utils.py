@@ -2,10 +2,39 @@
 
 import copy
 
+from rdkit import Chem
+
 from simba.core.data.loaders import LoadData, LoaderSaver
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
 from simba.utils.logger_setup import logger
+
+
+def filter_invalid_smiles(spectra: list[SpectrumExt]) -> list[SpectrumExt]:
+    """Remove spectra whose SMILES cannot be parsed by RDKit.
+
+    Spectra with empty/missing SMILES are left untouched.
+    Only non-empty SMILES that RDKit cannot parse are removed.
+    """
+    unique_smiles = {s.smiles or s.params.get("smiles", "") for s in spectra}
+    unique_smiles.discard("")
+    valid_smiles = {smi for smi in unique_smiles if Chem.MolFromSmiles(smi) is not None}
+    invalid_smiles = unique_smiles - valid_smiles
+
+    if not invalid_smiles:
+        return spectra
+
+    valid = [
+        s
+        for s in spectra
+        if (s.smiles or s.params.get("smiles", "")) not in invalid_smiles
+    ]
+    logger.warning(
+        f"Removed {len(spectra) - len(valid)} spectra with unparseable SMILES "
+        f"({len(invalid_smiles)} distinct SMILES affected). "
+        f"Examples: {list(invalid_smiles)[:3]}"
+    )
+    return valid
 
 
 def load_spectra(
@@ -111,5 +140,8 @@ def load_spectra(
         f"Filtering summary: {failed_filtering} spectra removed due to insufficient peaks ({min_peaks} required). "
         f"Unique molecules before: {unique_molecules_original}, after: {unique_molecules_filtered}"
     )
+
+    # Filter out spectra with unparseable SMILES to prevent C++ aborts downstream
+    filtered_spectra = filter_invalid_smiles(filtered_spectra)
 
     return filtered_spectra
