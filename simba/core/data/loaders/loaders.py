@@ -506,6 +506,7 @@ class LoadData:
             subclass=subclass,
             inchi_key=inchi_key,
             spectrum_hash=spectrum_hash_result,
+            fold=params.get("fold", None),
         )
 
         # postprocessing

@@ -369,8 +369,8 @@ class MCES:
             else:
                 my_data = sample_idx
 
-            # Now chunk this node's data by workers
-            chunk_size = num_workers * 10
+            # Process all samples as a single chunk per node.
+            chunk_size = len(my_data)
             num_chunks = int(np.ceil(len(my_data) / chunk_size))
             chunks = np.array_split(my_data, num_chunks)
 
@@ -386,6 +386,11 @@ class MCES:
         logger.info(
             f"Size of each sub-chunk: {np.array_split(chunks[0], num_workers)[0].shape[0]}"
         )
+
+        edit_distance.set_global_cache(precomputed_cache)
+        mols = [Chem.MolFromSmiles(s) for s in all_smiles]
+        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3, fpSize=512)
+        fps = [fpgen.GetFingerprint(m) for m in mols]
 
         computed_pair_distances = np.empty((0, 3))
 
@@ -409,14 +414,7 @@ class MCES:
             if not (os.path.exists(filename)):  # do not overwrite existing files
                 logger.info(f"Processing chunk {chunk_idx}/{len(chunks)}")
 
-                # Set global cache before creating pool (inherited via fork)
-                edit_distance.set_global_cache(precomputed_cache)
-
                 pool = multiprocessing.Pool(processes=num_workers)
-
-                mols = [Chem.MolFromSmiles(s) for s in all_smiles]
-                fpgen = AllChem.GetRDKitFPGenerator(maxPath=3, fpSize=512)
-                fps = [fpgen.GetFingerprint(m) for m in mols]
 
                 # Check if we should compute both metrics in single pass
                 if compute_both_metrics:

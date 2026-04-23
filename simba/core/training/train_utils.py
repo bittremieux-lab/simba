@@ -62,9 +62,13 @@ class TrainUtils:
         test_buckets: list[int] = None,
     ) -> tuple[list[SpectrumExt], list[SpectrumExt], list[SpectrumExt]]:
         """
-        Split spectra into train / val / test based on Murcko scaffolds.
+        Split spectra into train / val / test.
 
-        Each scaffold is assigned to a bucket by SHA-256(scaffold) % n_buckets.
+        If any spectrum has a non-null ``fold`` attribute (e.g. "train"/"val"/"test"
+        as shipped in MassSpecGym MGF files), those labels are used directly for all
+        spectra and the scaffold-hashing logic is skipped entirely.
+
+        Otherwise each scaffold is assigned to a bucket by SHA-256(scaffold) % n_buckets.
 
         Default: n_buckets=10, train=[0..7], val=[8], test=[9]
         Spectra whose scaffold is empty are put in train.
@@ -82,6 +86,33 @@ class TrainUtils:
         test_buckets:
             Bucket numbers that go to test (default [9]).
         """
+        # Use predefined fold labels when present (e.g. MassSpecGym)
+        if any(getattr(s, "fold", None) is not None for s in spectra):
+            spectrums_train, spectrums_val, spectrums_test = [], [], []
+            unlabeled = 0
+            for s in spectra:
+                fold = getattr(s, "fold", None)
+                if fold == "val":
+                    spectrums_val.append(s)
+                elif fold == "test":
+                    spectrums_test.append(s)
+                else:
+                    spectrums_train.append(s)
+                    if fold != "train":
+                        unlabeled += 1
+            if unlabeled:
+                logger.info(
+                    f"{unlabeled} spectra with unknown fold label assigned to train"
+                )
+            total = len(spectra)
+            logger.info(
+                f"Using predefined fold labels – Train: {len(spectrums_train)} "
+                f"({100 * len(spectrums_train) / total:.1f}%), "
+                f"Val: {len(spectrums_val)} ({100 * len(spectrums_val) / total:.1f}%), "
+                f"Test: {len(spectrums_test)} ({100 * len(spectrums_test) / total:.1f}%)"
+            )
+            return spectrums_train, spectrums_val, spectrums_test
+
         if train_buckets is None:
             train_buckets = list(range(n_buckets - 2))
         if val_buckets is None:
