@@ -15,10 +15,8 @@ import simba.core.chemistry.edit_distance.mol_utils as mu
 from simba.utils.logger_setup import logger
 
 
-# Sentinel value indicating very dissimilar molecules (Tanimoto < 0.2)
 VERY_HIGH_DISTANCE = 666
 
-# Global cache for precomputed distances (shared across workers via fork)
 _GLOBAL_CACHE = None
 
 
@@ -79,7 +77,9 @@ def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
         # Find the pickle file
         pickle_path = os.path.join(prep_dir, "mapping_unique_smiles.pkl")
         if not os.path.exists(pickle_path):
-            logger.warning(f"No mapping_unique_smiles.pkl found in {prep_dir}")
+            pickle_path = os.path.join(prep_dir, "mapping.pkl")
+        if not os.path.exists(pickle_path):
+            logger.warning(f"No mapping pickle found in {prep_dir}")
             continue
 
         # Find distance files by prefix and split

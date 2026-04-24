@@ -20,7 +20,7 @@ with contextlib.suppress(RuntimeError):
 from simba.core.chemistry.edit_distance.edit_distance import (
     load_precomputed_distances_cache,
 )
-from simba.core.chemistry.mces.mces_computation import MCES
+from simba.core.chemistry.mces.fast_compute import compute_pairs_for_split
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.workflows.utils import load_spectra
@@ -304,23 +304,15 @@ def preprocess(cfg: DictConfig) -> None:
         logger.info(
             f"Computing distances for {type_data[1:]} set with {len(spectra)} spectra..."
         )
-        molecule_pairs[type_data] = MCES.compute_all_mces_results_unique(
+        molecule_pairs[type_data] = compute_pairs_for_split(
             spectra,
-            max_combinations=10000000000000,
-            num_workers=cfg.preprocessing.num_workers,
-            random_sampling=cfg.preprocessing.random_mces_sampling,
             preprocessing_dir=str(workspace) + "/",
-            batch_size=cfg.preprocessing.batch_size,
-            num_nodes=cfg.preprocessing.num_nodes,
-            current_node=cfg.preprocessing.current_node,
-            compute_specific_pairs=cfg.data.similarity.compute_specific_pairs,
-            format_file_specific_pairs=cfg.data.formats.format_file_specific_pairs,
-            threshold_mces=cfg.model.tasks.mces.threshold,
             identifier=type_data,
-            use_edit_distance=True,  # Ignored when compute_both_metrics=True
-            loaded_molecule_pairs=None,
-            compute_both_metrics=True,
+            num_workers=cfg.preprocessing.num_workers,
+            current_node=cfg.preprocessing.current_node,
+            num_nodes=cfg.preprocessing.num_nodes,
             precomputed_cache=precomputed_cache if len(precomputed_cache) > 0 else None,
+            threshold_mces=cfg.model.tasks.mces.threshold,
         )
 
         # Log statistics about the computed pairs
