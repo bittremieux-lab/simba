@@ -32,5 +32,11 @@ precomputed_distances:
   # - "./ms2_preprocessing/"
   # - "./ms3_preprocessing/"
 
+# HDF5 MCES cache - precomputed MCES from an external HDF5 file (e.g. MassSpecGym)
+# Only pairs with MCES <= hdf5_mces_threshold are taken from the cache;
+# all others are computed as usual.
+hdf5_mces_cache_path: null  # Path to HDF5 file with 'mces' and 'mces_smiles_order' datasets
+hdf5_mces_threshold: 10.0
+
 # Subsampling
 subsample_preprocessing: false

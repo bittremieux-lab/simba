@@ -265,6 +265,20 @@ def preprocess(cfg: DictConfig) -> None:
     else:
         logger.info("No precomputed distances configured, computing all from scratch")
 
+    # Load HDF5 MCES cache if configured
+    hdf5_mces_cache = None
+    hdf5_mces_threshold = 10.0
+    hdf5_path = getattr(cfg.preprocessing, "hdf5_mces_cache_path", None)
+    if hdf5_path:
+        from simba.core.chemistry.mces.hdf5_mces_loader import HDF5MCESCache
+
+        logger.info(f"Loading HDF5 MCES cache from {hdf5_path} ...")
+        hdf5_mces_cache = HDF5MCESCache.load(hdf5_path)
+        hdf5_mces_threshold = float(
+            getattr(cfg.preprocessing, "hdf5_mces_threshold", 10.0)
+        )
+        logger.info(f"HDF5 MCES cache loaded, using values ≤ {hdf5_mces_threshold}")
+
     # Compute distances for each partition
     molecule_pairs = {}
     for type_data, spectra in [
@@ -284,6 +298,8 @@ def preprocess(cfg: DictConfig) -> None:
             num_nodes=cfg.preprocessing.num_nodes,
             precomputed_cache=precomputed_cache if len(precomputed_cache) > 0 else None,
             threshold_mces=cfg.model.tasks.mces.threshold,
+            hdf5_mces_cache=hdf5_mces_cache,
+            hdf5_mces_threshold=hdf5_mces_threshold,
         )
 
         # Log statistics about the computed pairs
