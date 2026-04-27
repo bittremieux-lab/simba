@@ -42,67 +42,82 @@ class TrainUtils:
         return new_molecule_pairs
 
     @staticmethod
+    def _scaffold_bucket(scaffold: str, n_buckets: int = 10) -> int:
+        """Return a deterministic bucket index in [0, n_buckets) for a scaffold string.
+
+        Uses SHA-256 so the assignment depends only on the scaffold identity,
+        not on what other scaffolds happen to be in the dataset.
+        """
+        import hashlib
+
+        digest = hashlib.sha256(scaffold.encode()).hexdigest()
+        return int(digest, 16) % n_buckets
+
+    @staticmethod
     def train_val_test_split_bms(
         spectra: list[SpectrumExt],
-        val_split: float = 0.1,
-        test_split: float = 0.1,
-        seed: int = 42,
+        n_buckets: int = 10,
+        train_buckets: list[int] = None,
+        val_buckets: list[int] = None,
+        test_buckets: list[int] = None,
     ) -> tuple[list[SpectrumExt], list[SpectrumExt], list[SpectrumExt]]:
         """
-        Split data into train, validation, and test sets based on Murcko scaffolds
-        ensuring that scaffolds do not overlap between sets.
+        Split spectra into train / val / test based on Murcko scaffolds.
+
+        Each scaffold is assigned to a bucket by SHA-256(scaffold) % n_buckets.
+
+        Default: n_buckets=10, train=[0..7], val=[8], test=[9]
+        Spectra whose scaffold is empty are put in train.
 
         Parameters
         ----------
-        spectra: List[SpectrumExt]
+        spectra:
             List of SpectrumExt objects to be split.
-        val_split: float
-            Proportion of data to be used for validation.
-        test_split: float
-            Proportion of data to be used for testing.
-        seed: int
-            Random seed for reproducibility.
-
-        Returns
-        -------
-        Tuple[List[SpectrumExt], List[SpectrumExt], List[SpectrumExt]]
-            Three lists containing the training, validation, and test spectra.
+        n_buckets:
+            Total number of hash buckets (modulus for SHA-256 hash).
+        train_buckets:
+            Bucket numbers that go to train (default 0-7).
+        val_buckets:
+            Bucket numbers that go to val (default [8]).
+        test_buckets:
+            Bucket numbers that go to test (default [9]).
         """
-        # Use a consistent RNG for reproducibility across parallel processes
-        rng = np.random.RandomState(seed)
+        if train_buckets is None:
+            train_buckets = list(range(n_buckets - 2))
+        if val_buckets is None:
+            val_buckets = [n_buckets - 2]
+        if test_buckets is None:
+            test_buckets = [n_buckets - 1]
 
-        # get the percentage of training data
-        train_split = 1 - val_split - test_split
-        # get the murcko scaffold
+        val_set = set(val_buckets)
+        test_set = set(test_buckets)
+
         bms = [s.murcko_scaffold for s in spectra]
+        no_bms = sum(1 for b in bms if not b)
+        if no_bms:
+            logger.info(f"{no_bms}/{len(bms)} spectra without bms")
 
-        # count the unique elements
-        unique_values, counts = np.unique(bms, return_counts=True)
-        idx_no_bms = np.where(unique_values == "")
-        if len(idx_no_bms[0]) > 0:
-            logger.info(
-                f"{counts[np.where(unique_values == '')][0]}/{len(bms)} spectra without bms"
-            )
+        spectrums_train, spectrums_val, spectrums_test = [], [], []
+        for s, scaffold in zip(spectra, bms):
+            if not scaffold:
+                spectrums_train.append(s)
+                continue
+            bucket = TrainUtils._scaffold_bucket(scaffold, n_buckets)
+            if bucket in test_set:
+                spectrums_test.append(s)
+            elif bucket in val_set:
+                spectrums_val.append(s)
+            else:
+                spectrums_train.append(s)
 
-        # remove the appearence of not identified bms
-        unique_values = unique_values[unique_values != ""]
+        total = len(spectra)
+        logger.info(
+            f"Split sizes – Train: {len(spectrums_train)} ({100 * len(spectrums_train) / total:.1f}%), "
+            f"Val: {len(spectrums_val)} ({100 * len(spectrums_val) / total:.1f}%), "
+            f"Test: {len(spectrums_test)} ({100 * len(spectrums_test) / total:.1f}%) "
+            f"[train buckets: {sorted(train_buckets)}, val: {sorted(val_buckets)}, test: {sorted(test_buckets)}]"
+        )
 
-        # randomize using numpy's RNG for deterministic shuffling
-        rng.shuffle(unique_values)
-
-        # get indexes
-        train_index = int((train_split) * (len(unique_values)))
-        val_index = train_index + int(val_split * (len(unique_values)))
-
-        # get elements
-        train_bms = unique_values[0:train_index]
-        val_bms = unique_values[train_index:val_index]
-        test_bms = unique_values[val_index:]
-
-        # get data
-        spectrums_train = [s for s in spectra if s.murcko_scaffold in train_bms]
-        spectrums_val = [s for s in spectra if s.murcko_scaffold in val_bms]
-        spectrums_test = [s for s in spectra if s.murcko_scaffold in test_bms]
         return spectrums_train, spectrums_val, spectrums_test
 
     @staticmethod
@@ -178,8 +193,18 @@ class TrainUtils:
         Tuple[List[SpectrumExt], pd.DataFrame]
             A tuple containing a list of unique SpectrumExt objects and a DataFrame with smiles metadata.
         """
-        # convert to canonical smiles
-        canon_smiles = [Chem.CanonSmiles(s.smiles) for s in all_spectra]
+        logger.info(f"Finding unique spectra from {len(all_spectra)} total spectra...")
+
+        # convert to canonical smiles; guard against invalid SMILES that would
+        # cause a C++ abort inside CanonSmiles -> MolToSmiles(None)
+        canon_smiles = []
+        for s in all_spectra:
+            mol = Chem.MolFromSmiles(s.smiles)
+            if mol is None:
+                logger.warning(f"Could not parse SMILES, using raw: {s.smiles}")
+                canon_smiles.append(s.smiles)
+            else:
+                canon_smiles.append(Chem.MolToSmiles(mol))
 
         # get all metadata associated with the spectra
         all_mz = [s.precursor_mz for s in all_spectra]
@@ -192,6 +217,10 @@ class TrainUtils:
         all_subclass = [s.subclass for s in all_spectra]
 
         unique_smiles = np.unique(canon_smiles)
+        logger.info(
+            f"Found {len(unique_smiles)} unique SMILES from {len(all_spectra)} spectra (compression: {len(all_spectra) / len(unique_smiles):.2f}x)"
+        )
+
         # map unique smiles to spectrum indexes
         smiles_to_spectra_map = {
             s: [i for i, c in enumerate(canon_smiles) if c == s] for s in unique_smiles
@@ -228,6 +257,11 @@ class TrainUtils:
         new_indexes = [canon_smiles_ordered.index(s) for s in canon_smiles_not_ordered]
         df_smiles.set_index(pd.Index(new_indexes), inplace=True)
         df_smiles = df_smiles.sort_index()
+
+        logger.info(
+            f"Created {len(spectra_unique_ordered)} unique dummy spectra from {len(all_spectra)} input spectra"
+        )
+
         return spectra_unique_ordered, df_smiles
 
     @staticmethod

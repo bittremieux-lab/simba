@@ -13,5 +13,3 @@ max_spectra_test: 20
 
 # Development settings
 overwrite: true  # Always overwrite in dev mode
-val_split: 0.1
-test_split: 0.1
