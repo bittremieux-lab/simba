@@ -1,9 +1,9 @@
 import torch
-from depthcharge.encoders import FloatEncoder
 from depthcharge.transformers import (
     SpectrumTransformerEncoder,
 )  # PeptideTransformerEncoder,
-
+from depthcharge.encoders import FloatEncoder
+import torch.nn as nn
 
 class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
     def __init__(
@@ -13,7 +13,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
-        use_ion_mode: bool = False,
+        use_ion_mode:  bool =False,
         **kwargs,
     ):
         """
@@ -30,7 +30,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ion_method: bool
             Whether to include ionization method in the encoding (default: False).
         """
-        self.use_encoders = False
+        self.use_encoders=True
         super().__init__(*args, **kwargs)
         self.use_adduct = use_adduct
         self.use_ce = use_ce
@@ -38,27 +38,39 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         self.use_ion_method = use_ion_method
         self.use_ion_mode = use_ion_mode
 
+        # Only used when self.use_encoders = True
         if self.use_encoders:
+            metadata_hidden_dim= 256
+            adduct_num_embeddings=128
+            adduct_embedding_dim=16
+            self.adduct_embedding = nn.Embedding(
+                num_embeddings=adduct_num_embeddings,
+                embedding_dim=adduct_embedding_dim,
+            )
+
+            # Input size to the metadata MLP
+            metadata_input_dim = 1  # precursor_mass always included
+
+            if self.use_ion_mode:
+                metadata_input_dim += 1  # precursor_charge
+                metadata_input_dim += 1  # ionmode
+
             if self.use_adduct:
-                self.adduct_encoder = FloatEncoder(self.d_model)
-                self.ionmode_encoder = FloatEncoder(self.d_model)
+                metadata_input_dim += adduct_embedding_dim
+
             if self.use_ce:
-                self.ce_encoder = FloatEncoder(
-                    self.d_model,
-                )
+                metadata_input_dim += 1
 
-            if self.use_ion_activation:
-                self.ion_activation_encoder = FloatEncoder(self.d_model)
+            # These sizes assume ion_activation and ion_method are vectors already
+            # projected as raw numeric features. If they are one-hot vectors, this works.
+            # If you know their dimensions beforehand, set them explicitly.
+            self._use_ia_raw = self.use_ion_activation
+            self._use_im_raw = self.use_ion_method
 
-            if self.use_ion_method:
-                self.ion_method_encoder = FloatEncoder(self.d_model)
-            if (
-                self.use_adduct
-                or self.use_ce
-                or self.use_ion_activation
-                or self.use_ion_method
-            ):
-                self.precursor_mz_encoder = FloatEncoder(self.d_model)
+            # LazyLinear avoids having to know ia/im dims at __init__ time
+            self.metadata_fc1 = nn.LazyLinear(metadata_hidden_dim)
+            self.metadata_fc2 = nn.Linear(metadata_hidden_dim, self.d_model)
+            self.metadata_activation = nn.ReLU()
 
     def precursor_hook(
         self,
@@ -69,24 +81,24 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         device = mz_array.device
         dtype = mz_array.dtype
         batch_size = mz_array.shape[0]
-
-        if not (self.use_encoders):
+        # ============================================================
+        # Original behavior: keep exactly the previous placeholder logic
+        # ============================================================
+        if not self.use_encoders:
             placeholder = torch.zeros(
                 (batch_size, self.d_model), dtype=dtype, device=device
             )
-            precursor_mass = (
-                kwargs["precursor_mass"].float().to(device).view(batch_size)
-            )
+
+            precursor_mass = kwargs["precursor_mass"].float().to(device).view(batch_size)
             placeholder[:, 0] = precursor_mass
 
-            precursor_charge = (
-                kwargs["precursor_charge"].float().to(device).view(batch_size)
-            )
-            # skip the use of the precursor charge field
+            precursor_charge = kwargs["precursor_charge"].float().to(device).view(batch_size)
+
+            # original logic preserved
             if self.use_ion_mode:
                 placeholder[:, 1] = precursor_charge
 
-            current_idx = 2  # keep track of where to insert metadata
+            current_idx = 2
 
             ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
             if self.use_ion_mode:
@@ -116,41 +128,81 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
                 placeholder[:, current_idx:stop_idx] = im
             current_idx = stop_idx
 
-            # ensure there are no nans
-            placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)
-
-        else:
-            precursor_mass = (
-                kwargs["precursor_mass"].float().to(device).view(batch_size)
+            placeholder = torch.nan_to_num(
+                placeholder, nan=0.0, posinf=0.0, neginf=0.0
             )
-            precursor_mass_rep = self.precursor_mz_encoder(
-                precursor_mass[:, None]
-            ).squeeze(1)
-            placeholder = precursor_mass_rep + 0 * precursor_mass_rep
+            return placeholder
 
-            if self.use_adduct:
-                ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
-                adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
-                ionmode_rep = self.ionmode_encoder(ionmode[:, None]).squeeze(1)
-                adduct_rep = self.adduct_encoder(adduct).mean(dim=1)
+        # ============================================================
+        # New behavior: encode metadata using embedding + 2 FC layers
+        # Output shape remains (batch_size, self.d_model)
+        # ============================================================
+        features = []
 
-                placeholder = placeholder + (ionmode_rep + adduct_rep)
+        # precursor_mass is always included
+        precursor_mass = kwargs["precursor_mass"].float().to(device).view(batch_size, 1)
+        precursor_mass = torch.nan_to_num(precursor_mass, nan=0.0, posinf=0.0, neginf=0.0)
+        features.append(precursor_mass)
 
-            if self.use_ce:
-                ce = kwargs["ce"].float().to(device).view(batch_size)
-                ce_rep = self.ce_encoder(ce[:, None]).squeeze(1)
-                placeholder = placeholder + ce_rep
+        if self.use_ion_mode:
+            precursor_charge = kwargs["precursor_charge"].float().to(device).view(batch_size, 1)
+            precursor_charge = torch.nan_to_num(
+                precursor_charge, nan=0.0, posinf=0.0, neginf=0.0
+            )
+            features.append(precursor_charge)
 
-            if self.use_ion_method:
-                im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
-                im_rep = self.ion_method_encoder(im).mean(dim=1)
-                placeholder = placeholder + im_rep
+            ionmode = kwargs["ionmode"].float().to(device).view(batch_size, 1)
+            ionmode = torch.nan_to_num(ionmode, nan=0.0, posinf=0.0, neginf=0.0)
+            features.append(ionmode)
 
-            if self.use_ion_activation:
-                ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
-                ia_rep = self.ion_activation_encoder(ia).mean(dim=1)
-                placeholder = placeholder + ia_rep
+        if self.use_adduct:
+            adduct_raw = kwargs["adduct"].to(device)
 
-            placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)
+            # Case 1: one-hot or score vector, shape (batch_size, n_adducts)
+            if adduct_raw.dim() == 2:
+                adduct_idx = adduct_raw.argmax(dim=1).long()
+
+            # Case 2: already a scalar per sample, shape (batch_size,) or (batch_size, 1)
+            elif adduct_raw.dim() == 1:
+                adduct_idx = adduct_raw.long()
+            elif adduct_raw.dim() == 3 and adduct_raw.shape[-1] == 1:
+                adduct_idx = adduct_raw.view(batch_size).long()
+            else:
+                adduct_idx = adduct_raw.view(batch_size).long()
+
+            adduct_idx = torch.clamp(
+              adduct_idx,
+                min=0,
+                max=self.adduct_embedding.num_embeddings - 1,
+            )
+
+            adduct_emb = self.adduct_embedding(adduct_idx)
+            adduct_emb = torch.nan_to_num(adduct_emb, nan=0.0, posinf=0.0, neginf=0.0)
+            features.append(adduct_emb)
+        if self.use_ce:
+            ce = kwargs["ce"].float().to(device).view(batch_size, 1)
+            ce = torch.nan_to_num(ce, nan=0.0, posinf=0.0, neginf=0.0)
+            features.append(ce)
+
+        if self.use_ion_activation:
+            ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
+            ia = torch.nan_to_num(ia, nan=0.0, posinf=0.0, neginf=0.0)
+            features.append(ia)
+
+        if self.use_ion_method:
+            im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
+            im = torch.nan_to_num(im, nan=0.0, posinf=0.0, neginf=0.0)
+            features.append(im)
+
+        metadata_input = torch.cat(features, dim=1)  # (batch_size, total_metadata_dim)
+        metadata_input = metadata_input.to(dtype)
+
+        placeholder = self.metadata_fc1(metadata_input)
+        placeholder = self.metadata_activation(placeholder)
+        placeholder = self.metadata_fc2(placeholder)
+
+        placeholder = torch.nan_to_num(
+            placeholder, nan=0.0, posinf=0.0, neginf=0.0
+        ).to(dtype)
 
         return placeholder

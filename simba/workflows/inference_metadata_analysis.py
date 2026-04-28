@@ -12,7 +12,7 @@ from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error
 from torch.utils.data import DataLoader
-
+import pandas as pd
 import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
@@ -39,6 +39,11 @@ from simba.workflows.inference import *
 from simba.workflows.inference import _get_ground_truth
 from simba.workflows.inference import _which_index
 from simba.workflows.inference import _plot_cm, _plot_performance
+
+## PARAMETERS:
+USE_ONLY_ADDUCT_ANALYSIS=False 
+
+
 def evaluate_predictions_metadata_analysis(
     cfg: DictConfig,
     pred_ed,
@@ -309,13 +314,13 @@ print('Inference for metadata analysis')
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import pickle
+import matplotlib.pyplot as plt 
 
 @hydra.main(version_base=None, config_path= "/home/spiedrahita/simba/simba/configs", config_name="config")
 def main(cfg: DictConfig):
     #CODE_NAME="metadata_all_adducts_seb_20260318_new_metadata_encoding"
     CODE_NAME="metadata_all_adducts_seb_20260218_adduct_fixing_2" 
     
-    cfg.preprocessing="tfs_auto" 
     cfg.paths.preprocessing_dir="/data/simba_files/distance_files/ms2_ref_all_metadata/" 
     cfg.paths.preprocessing_dir_train="/data/simba_files/distance_files/ms2_ref_all_metadata/" 
     cfg.paths.checkpoint_dir=f"/data/simba_files/training_files_new_encoding/train_{CODE_NAME}/" 
@@ -337,11 +342,20 @@ def main(cfg: DictConfig):
     
     error_prediction_baseline = np.abs(metrics_baseline['mces_true']- metrics_baseline['mces_pred'])
 
-    cfg.model.features.use_adduct=0
-    cfg.model.features.use_ce=0
-    cfg.model.features.use_ion_activation=0
-    cfg.model.features.use_ion_method=0
-    cfg.model.features.use_ion_mode=0
+    if USE_ONLY_ADDUCT_ANALYSIS:
+        cfg.model.features.use_adduct=0
+        cfg.model.features.use_ion_mode=0
+        cfg.model.features.use_ce=1
+        cfg.model.features.use_ion_activation=1
+        cfg.model.features.use_ion_method=1
+        
+    else:
+        cfg.model.features.use_adduct=0
+        cfg.model.features.use_ion_mode=0
+        cfg.model.features.use_ce=0
+        cfg.model.features.use_ion_activation=0
+        cfg.model.features.use_ion_method=0
+        
 
     metrics_sensitivity, mols_mces_sensitivity = inference_metadata_analysis(cfg)
 
@@ -359,54 +373,63 @@ def main(cfg: DictConfig):
     not_remarked_pair_indexes= []
 
     mols_mces= mols_mces_sensitivity
-    for i in range(0,mols_mces.pair_distances.shape[0]):
-        unique_index_0 = mols_mces.pair_distances[i, 0]
-        unique_index_1 = mols_mces.pair_distances[i, 1]
-        spec_0 = mols_mces.get_original_spectrum_from_unique_index(unique_index_0, pair=0)
-        spec_1 = mols_mces.get_original_spectrum_from_unique_index(unique_index_1, pair=1)
-        adduct_0 = spec_0.params['adduct']
-        adduct_1 = spec_1.params['adduct']
+
+    list_adducts= ['', 'M+H', 'M-H', 'M+Na', 'M+FA-H', 'M+NH4']
+    for AD_0 in list_adducts:
+        for AD_1 in list_adducts:
+            remarked_pair_indexes= []
+            for i in range(0,mols_mces.pair_distances.shape[0]):
+                unique_index_0 = mols_mces.pair_distances[i, 0]
+                unique_index_1 = mols_mces.pair_distances[i, 1]
+                spec_0 = mols_mces.get_original_spectrum_from_unique_index(unique_index_0, pair=0)
+                spec_1 = mols_mces.get_original_spectrum_from_unique_index(unique_index_1, pair=1)
+                adduct_0 = spec_0.params['adduct']
+                adduct_1 = spec_1.params['adduct']
 
 
-        #print(f'adducts:{spec_0.params["adduct"]}, {spec_1.params["adduct"]}')
-        
-        if (('M+H' in adduct_0) and ("M-H" in adduct_1)) or (('M-H' in adduct_0) and ("M+H" in adduct_1)):
-            remarked_pair_indexes.append(i)
-        elif (('M+H' in adduct_0) and ("M+H" in adduct_1)):
-            not_remarked_pair_indexes.append(i) 
+                print(f'adducts:{spec_0.params["adduct"]}, {spec_1.params["adduct"]}')
+                
+                if (((AD_0 in adduct_0) and (AD_1 in adduct_1)) or ((AD_1 in adduct_0) and (AD_0 in adduct_1))) and (metrics_baseline['mces_true'][i]< 10):
+                    remarked_pair_indexes.append(i)
 
-        #all_indexes.append(i)
-    #plot scatter plot
-    all_er_pred_sen = np.array([error_prediction_sensitivity[i] for i in not_remarked_pair_indexes])
-    all_er_pred_baseline = np.array([error_prediction_baseline[i] for i in not_remarked_pair_indexes])
-    filtered_er_pred_sen = np.array([error_prediction_sensitivity[i] for i in remarked_pair_indexes])
-    filtered_er_pred_baseline = np.array([error_prediction_baseline[i] for i in remarked_pair_indexes])
-    random_guess= np.arange(0,40)
 
-    plt.figure()
-    plt.scatter(all_er_pred_baseline, all_er_pred_sen, label='M+H pairs', alpha=0.1)
-    plt.plot(random_guess, random_guess, linestyle='--', c='k')
-    plt.legend()
-    plt.xlim([0,40])
-    plt.ylim([0,40])
+            #plot scatter plot
+            filtered_er_pred_sen = np.array([error_prediction_sensitivity[i] for i in remarked_pair_indexes])
+            filtered_er_pred_baseline = np.array([error_prediction_baseline[i] for i in remarked_pair_indexes])
+            random_guess= np.arange(0,40)
+
     
-    affected_pairs = sum((all_er_pred_sen- all_er_pred_baseline)>0)
-    plt.title(f'Proportion of pairs more affected by absence of adduct: {affected_pairs/len(all_er_pred_sen)}')
-    plt.xlabel('Error using all metadata')
-    plt.ylabel('Error removing target variable')
-    plt.savefig("/data/simba_files/metadata_analysis/adduct_analysis_m_h.png")
    
-    plt.figure()
-    plt.scatter(filtered_er_pred_baseline, filtered_er_pred_sen, label= "filtered", alpha=0.1)
-    plt.plot(random_guess, random_guess, linestyle='--', c='k')
-    plt.legend()
-    plt.xlim([0,40])
-    plt.ylim([0,40])
-    affected_pairs = sum((filtered_er_pred_sen- filtered_er_pred_baseline)>0)
-    plt.title(f'Proportion of pairs more affected by absence of adduct: {affected_pairs/len(filtered_er_pred_sen)}')
-    plt.xlabel('Error using all metadata')
-    plt.ylabel('Error removing target variable')
-    plt.savefig("/data/simba_files/metadata_analysis/adduct_analysis.png")
+            # scatter plot 2
+            import matplotlib.pyplot as plt
+            plt.figure()
+            plt.scatter(filtered_er_pred_baseline, filtered_er_pred_sen, label=  AD_0+ "," + AD_1 , alpha=0.10)
+            plt.plot(random_guess, random_guess, linestyle='--', c='k')
+            plt.legend()
+            plt.xlim([0,40])
+            plt.ylim([0,40])
+            affected_pairs = sum((filtered_er_pred_sen- filtered_er_pred_baseline)>0)
+            plt.title(f'Proportion of pairs more affected by absence of adduct: {affected_pairs/len(filtered_er_pred_sen)}')
+            plt.xlabel('Error using all metadata')
+            plt.ylabel('Error removing target variable')
+            plt.savefig("/data/simba_files/metadata_analysis/adduct_analysis.png")
+
+
+
+            bin_width = 2.5
+            bins = np.arange(0, 40 + bin_width, bin_width)
+            # histogram together 1
+            plt.figure()
+            plt.hist(filtered_er_pred_sen, density=True, bins=bins,          alpha =0.3, label='All metadata - target metadata')
+            plt.hist(filtered_er_pred_baseline, density=True, bins=bins,  alpha=0.3,label='All metadata')
+            plt.grid(alpha=0.3)
+            plt.title(f'{AD_0},{AD_1} pairs')
+            plt.xlabel('Prediction error (MCES)')
+            plt.ylabel('Density')
+            plt.legend()
+            plt.savefig(f"/data/simba_files/metadata_analysis/hist_together_{AD_0}_{AD_1}.png")
+
+
 
     ## plot mols
     diff_pred = np.abs(error_prediction_baseline - error_prediction_sensitivity)
@@ -453,7 +476,7 @@ def main(cfg: DictConfig):
         pairs_interesting = [{'indexes':[0,0]}]
         
 
-    
+
         out = plot_pair_mols_plus_spectrum_png(
             pair_index=0,
             all_spectrums_query = [spec_0],
@@ -464,8 +487,53 @@ def main(cfg: DictConfig):
                       "ed_gt": 0,
                       "ed_pred": 0,
                       "mod_cos": 0},
+            mz_min=0,
+            mz_max=max(max(spec_0.mz)+10,max(spec_1.mz)+10 ),
             out_dir = "/data/simba_files/metadata_analysis",
             out_name_tpl = f"/data/simba_files/metadata_analysis/example_with_mol_{i}.png",
             )
+
+
+        # create the param csv
+        data = {}
+
+        # get union of keys (safer)
+        all_keys = set(spec_0.params.keys()).union(set(spec_1.params.keys()))
+        all_keys= ['pepmass','ionmode', 'adduct', 'ion_activation','ionization_method', 'ce',  ]
+        for k in all_keys:
+            
+            data[k] = [
+                spec_0.params.get(k, None),
+                spec_1.params.get(k, None)
+            ]
+            if k=='pepmass':
+                data[k] = [
+                round(spec_0.params.get(k, None)[0],2),
+                round(spec_1.params.get(k, None)[0],2)
+            ]
+            else:
+                data[k] = [
+                spec_0.params.get(k, None),
+                spec_1.params.get(k, None)
+            ]
+        import pandas as pd
+        df = pd.DataFrame(data, index=['spec_0', 'spec_1'])
+
+        df.to_csv(f'/data/simba_files/metadata_analysis/example_{i}.csv', index=True)
+
+
+
+        plt.figure()
+        fig, ax = plt.subplots()
+        ax.axis('off')
+
+        table = ax.table(
+            cellText=df.values,
+            colLabels=df.columns,
+            loc='center'
+        )
+
+        plt.savefig(f"/data/simba_files/metadata_analysis/example_{i}.pdf", bbox_inches='tight')
+
 if __name__ == "__main__":
     main()
