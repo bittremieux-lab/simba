@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for all SIMBA commands
-# Tests: preprocess, sweep (fresh+resume), train, inference, analog-discovery
+# Tests: preprocess, sweep (fresh+resume), train, inference, analog-discovery, molecular-network
 #
 # Usage: bash test_all_commands.sh [DEVICE] [PRETRAINED_CHECKPOINT_DIR] [PRETRAINED_MODEL_NAME]
 #   DEVICE: cpu or gpu (default: cpu)
@@ -44,7 +44,7 @@ rm -rf test_full_workflow/
 mkdir -p test_full_workflow
 
 echo ""
-echo "1/10 Testing: simba preprocess"
+echo "1/14 Testing: simba preprocess"
 echo "--------------------------------"
 uv run simba preprocess \
     preprocessing=fast_dev \
@@ -52,7 +52,7 @@ uv run simba preprocess \
     paths.preprocessing_dir=./test_full_workflow/preprocessed/
 
 echo ""
-echo "2/10 Testing: simba preprocess with cache (reuse distances)"
+echo "2/14 Testing: simba preprocess with cache (reuse distances)"
 echo "------------------------------------------------------------"
 uv run simba preprocess \
     preprocessing=fast_dev \
@@ -61,7 +61,7 @@ uv run simba preprocess \
     'preprocessing.precomputed_distances=[./test_full_workflow/preprocessed/]'
 
 echo ""
-echo "3/12 Testing: simba-sweep (fresh, 3 trials, 1 epoch)"
+echo "3/14 Testing: simba-sweep (fresh, 3 trials, 1 epoch)"
 echo "------------------------------------------------------------"
 uv run simba-sweep \
     +sweep=default \
@@ -73,7 +73,7 @@ uv run simba-sweep \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "4/12 Testing: simba-sweep (resume, 3 more trials with prior TPE knowledge)"
+echo "4/14 Testing: simba-sweep (resume, 3 more trials with prior TPE knowledge)"
 echo "------------------------------------------------------------"
 uv run simba-sweep \
     +sweep=default \
@@ -85,7 +85,7 @@ uv run simba-sweep \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "5/12 Testing: simba train"
+echo "5/14 Testing: simba train"
 echo "--------------------------------"
 uv run simba train \
     training=fast_dev \
@@ -96,7 +96,7 @@ uv run simba train \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "6/12 Testing: simba inference"
+echo "6/14 Testing: simba inference"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
@@ -106,7 +106,7 @@ uv run simba inference \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "7/12 Testing: simba analog-discovery"
+echo "7/14 Testing: simba analog-discovery"
 echo "--------------------------------"
 uv run simba analog-discovery \
     analog_discovery=fast_dev \
@@ -119,7 +119,7 @@ uv run simba analog-discovery \
 
 if [[ "$SKIP_PRETRAINED" == "false" ]]; then
     echo ""
-    echo "8/12 Testing: simba inference (pretrained model)"
+    echo "8/14 Testing: simba inference (pretrained model)"
     echo "--------------------------------"
     uv run simba inference \
         inference=fast_dev \
@@ -129,7 +129,7 @@ if [[ "$SKIP_PRETRAINED" == "false" ]]; then
         hardware.accelerator=$DEVICE
 
     echo ""
-    echo "9/12 Testing: simba analog-discovery (pretrained model)"
+    echo "9/14 Testing: simba analog-discovery (pretrained model)"
     echo "--------------------------------"
     uv run simba analog-discovery \
         analog_discovery=fast_dev \
@@ -141,13 +141,13 @@ if [[ "$SKIP_PRETRAINED" == "false" ]]; then
         analog_discovery.device=$DEVICE
 else
     echo ""
-    echo "8/12 Skipping: simba inference (pretrained model) - no pretrained model provided"
+    echo "8/14 Skipping: simba inference (pretrained model) - no pretrained model provided"
     echo ""
-    echo "9/12 Skipping: simba analog-discovery (pretrained model) - no pretrained model provided"
+    echo "9/14 Skipping: simba analog-discovery (pretrained model) - no pretrained model provided"
 fi
 
 echo ""
-echo "10/12 Testing: simba train (with metadata features)"
+echo "10/14 Testing: simba train (with metadata features)"
 echo "--------------------------------"
 uv run simba train \
     training=fast_dev \
@@ -162,7 +162,7 @@ uv run simba train \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "11/12 Testing: simba inference (with metadata features)"
+echo "11/14 Testing: simba inference (with metadata features)"
 echo "--------------------------------"
 uv run simba inference \
     inference=fast_dev \
@@ -176,7 +176,7 @@ uv run simba inference \
     hardware.accelerator=$DEVICE
 
 echo ""
-echo "12/12 Testing: simba analog-discovery (with metadata features)"
+echo "12/14 Testing: simba analog-discovery (with metadata features)"
 echo "--------------------------------"
 uv run simba analog-discovery \
     analog_discovery=fast_dev \
@@ -190,6 +190,27 @@ uv run simba analog-discovery \
     model.features.use_ion_activation=true \
     model.features.use_ion_method=true \
     analog_discovery.device=$DEVICE
+
+echo ""
+echo "13/14 Testing: simba molecular-network (from scratch)"
+echo "--------------------------------"
+uv run simba molecular-network \
+    --model-path ./test_full_workflow/checkpoints/best_model.ckpt \
+    --input-spectra data/casmi2022.mgf \
+    --output-dir ./test_full_workflow/molecular_network/ \
+    molecular_network.device=$DEVICE \
+    molecular_network.score_cutoff=0.0
+
+echo ""
+echo "14/14 Testing: simba molecular-network (reuse precomputed MCES)"
+echo "--------------------------------"
+uv run simba molecular-network \
+    --model-path ./test_full_workflow/checkpoints/best_model.ckpt \
+    --input-spectra data/casmi2022.mgf \
+    --output-dir ./test_full_workflow/molecular_network_precomputed/ \
+    molecular_network.device=$DEVICE \
+    molecular_network.score_cutoff=0.0 \
+    molecular_network.precomputed_mces=./test_full_workflow/molecular_network/similarity_mces.npy
 
 echo ""
 echo "================================"
