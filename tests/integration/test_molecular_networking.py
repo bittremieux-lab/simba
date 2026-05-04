@@ -51,8 +51,7 @@ class TestMolecularNetworkingWorkflow:
         spectra = load_spectra(sample_mgf_casmi, hydra_config, min_peaks=5, n_samples=100)
         n = len(spectra)
         sim = np.ones((n, n)) * 0.8
-        node_ids = [str(i) for i in range(len(spectra))]
-        scores, nodes = _build_scores(node_ids, sim, "simba_similarity")
+        scores, nodes = _build_scores(spectra, sim, "simba_similarity")
 
         assert scores.n_rows == n
         assert scores.n_cols == n
@@ -67,8 +66,7 @@ class TestMolecularNetworkingWorkflow:
         _, sim_mces = simba.predict(spectra, spectra)
 
         similarity = mces_to_similarity(sim_mces)
-        node_ids = [str(i) for i in range(len(spectra))]
-        scores, _ = _build_scores(node_ids, similarity, "simba_similarity")
+        scores, _ = _build_scores(spectra, similarity, "simba_similarity")
 
         network = SimilarityNetwork(
             identifier_key="spectrum_id",
@@ -89,10 +87,7 @@ class TestMolecularNetworkingWorkflow:
         sim = np.ones((n, n)) * 0.9
         np.fill_diagonal(sim, 1.0)
 
-        scores, _ = _build_scores(
-            [str(i) for i in range(len(spectra))],
-            sim, "simba_similarity"
-        )
+        scores, _ = _build_scores(spectra, sim, "simba_similarity")
         network = SimilarityNetwork(
             identifier_key="spectrum_id",
             top_n=n,

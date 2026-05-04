@@ -19,7 +19,7 @@ def mces_to_similarity(mces: np.ndarray, mces_max: float = 40.0) -> np.ndarray:
     return np.clip(1.0 - mces / mces_max, 0.0, 1.0)
 
 
-def _build_scores(node_ids: list[str], similarity_matrix: np.ndarray, score_name: str):
+def _build_scores(spectra: list, similarity_matrix: np.ndarray, score_name: str):
     """Wrap a precomputed [N, N] similarity matrix into a matchms.Scores object."""
     from matchms import Scores, Spectrum
 
@@ -27,10 +27,10 @@ def _build_scores(node_ids: list[str], similarity_matrix: np.ndarray, score_name
         Spectrum(
             mz=np.array([], dtype=float),
             intensities=np.array([], dtype=float),
-            metadata={"spectrum_id": nid},
+            metadata={"spectrum_id": str(s.mgf_index)},
             metadata_harmonization=False,
         )
-        for nid in node_ids
+        for s in spectra
     ]
     scores = Scores(references=nodes, queries=nodes, is_symmetric=True)
     scores._scores.add_dense_matrix(similarity_matrix.T, score_name)
@@ -99,7 +99,7 @@ def _plot_network(
         row_extents = comp_extents[row_slice]
         row_height = max(row_extents) * 2 + PADDING
         x_cursor = 0.0
-        for comp, lpos, extent in zip(row_comps, row_layouts, row_extents):
+        for _comp, lpos, extent in zip(row_comps, row_layouts, row_extents):
             offset = np.array([x_cursor + extent, -y_cursor - extent])
             for nd, p in lpos.items():
                 pos[nd] = p + offset
@@ -191,8 +191,6 @@ def run_molecular_networking(cfg: DictConfig) -> dict:
         )
     logger.info(f"Loaded {len(all_spectra)} spectra.")
 
-    node_ids = [str(s.mgf_index) for s in all_spectra]
-
     precomputed = mn_cfg.precomputed_mces
     if precomputed:
         logger.info(f"Loading precomputed MCES from {precomputed}")
@@ -215,7 +213,7 @@ def run_molecular_networking(cfg: DictConfig) -> dict:
     )
 
     score_name = "simba_similarity"
-    scores, _ = _build_scores(node_ids, similarity, score_name)
+    scores, _ = _build_scores(all_spectra, similarity, score_name)
 
     network = SimilarityNetwork(
         identifier_key="spectrum_id",
