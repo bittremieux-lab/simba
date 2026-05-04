@@ -132,20 +132,32 @@ def _plot_network(
 
     if len(weights):
         edge_colors = cm.YlOrRd(weights / weights.max())
-        nx.draw_networkx_edges(G, pos, ax=ax, edge_color=edge_colors, alpha=0.6, width=0.8)
+        nx.draw_networkx_edges(
+            G, pos, ax=ax, edge_color=edge_colors, alpha=0.6, width=0.8
+        )
 
     nx.draw_networkx_nodes(
-        G, pos, ax=ax, nodelist=node_list,
-        node_color=node_colors, node_size=node_sizes,
-        linewidths=0.3, edgecolors="white", alpha=0.95,
+        G,
+        pos,
+        ax=ax,
+        nodelist=node_list,
+        node_color=node_colors,
+        node_size=node_sizes,
+        linewidths=0.3,
+        edgecolors="white",
+        alpha=0.95,
     )
-    nx.draw_networkx_labels(G, pos, labels=labels, ax=ax, font_size=4.5, font_color="white")
+    nx.draw_networkx_labels(
+        G, pos, labels=labels, ax=ax, font_size=4.5, font_color="white"
+    )
 
     ax.set_title(
         f"SIMBA Molecular Network\n"
         f"score_cutoff={score_cutoff} · {G.number_of_nodes()} nodes · "
         f"{G.number_of_edges()} edges · {len(components)} clusters",
-        color="white", fontsize=12, pad=14,
+        color="white",
+        fontsize=12,
+        pad=14,
     )
     ax.axis("off")
     plt.tight_layout()
@@ -206,7 +218,9 @@ def run_molecular_networking(cfg: DictConfig) -> dict:
         np.save(output_path + "similarity_mces.npy", sim_mces)
         logger.info(f"Saved raw MCES matrix to {output_path}similarity_mces.npy")
 
-    similarity = mces_to_similarity(sim_mces, mces_max=float(cfg.model.tasks.mces.max_value))
+    similarity = mces_to_similarity(
+        sim_mces, mces_max=float(cfg.model.tasks.mces.max_value)
+    )
     logger.info(
         f"Similarity — min: {similarity.min():.3f}, "
         f"mean: {similarity.mean():.3f}, max: {similarity.max():.3f}"

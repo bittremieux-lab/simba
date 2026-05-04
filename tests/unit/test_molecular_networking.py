@@ -52,7 +52,10 @@ class TestMcesToSimilarity:
 
 class TestBuildScores:
     def test_build_scores_shape(self, create_test_spectrum):
-        spectra = [create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10)) for i in range(4)]
+        spectra = [
+            create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10))
+            for i in range(4)
+        ]
         sim = np.eye(4)
         scores, nodes = _build_scores(spectra, sim, "simba_similarity")
 
@@ -61,20 +64,29 @@ class TestBuildScores:
         assert scores.n_cols == 4
 
     def test_node_ids_are_mgf_position(self, create_test_spectrum):
-        spectra = [create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10)) for i in range(3)]
+        spectra = [
+            create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10))
+            for i in range(3)
+        ]
         scores, nodes = _build_scores(spectra, np.eye(3), "simba_similarity")
         assert [n.get("spectrum_id") for n in nodes] == ["0", "1", "2"]
 
     def test_node_ids_use_mgf_index_not_list_position(self, create_test_spectrum):
         # Simulate 3 spectra surviving filtering from a larger MGF (indices 5, 7, 9)
-        spectra = [create_test_spectrum(mgf_index=2 * i + 5, precursor_mz=float(100 + i * 10)) for i in range(3)]
+        spectra = [
+            create_test_spectrum(mgf_index=2 * i + 5, precursor_mz=float(100 + i * 10))
+            for i in range(3)
+        ]
         scores, nodes = _build_scores(spectra, np.eye(3), "simba_similarity")
         assert [n.get("spectrum_id") for n in nodes] == ["5", "7", "9"]
 
     def test_network_builds_from_scores(self, create_test_spectrum):
         from matchms.networking import SimilarityNetwork
 
-        spectra = [create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10)) for i in range(4)]
+        spectra = [
+            create_test_spectrum(mgf_index=i, precursor_mz=float(100 + i * 10))
+            for i in range(4)
+        ]
         sim = np.ones((4, 4)) * 0.9
         np.fill_diagonal(sim, 1.0)
         scores, _ = _build_scores(spectra, sim, "simba_similarity")
