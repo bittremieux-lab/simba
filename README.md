@@ -250,7 +250,7 @@ print(f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
 ---
 
-## �📚 Training Your Custom SIMBA Model
+## 📚 Training Your Custom SIMBA Model
 
 SIMBA supports training custom models using your own MS/MS datasets in `.mgf` format.
 
