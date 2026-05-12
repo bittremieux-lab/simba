@@ -128,6 +128,13 @@ def preprocess(cfg: DictConfig) -> None:
 
     # Split data into train, validation, and test sets
     logger.info("Splitting data into train/val/test sets...")
+    force_scaffold_split = bool(
+        getattr(cfg.preprocessing, "force_scaffold_split", False)
+    )
+    if force_scaffold_split:
+        logger.info(
+            "force_scaffold_split=True: ignoring predefined fold labels, using Murcko scaffold hashing"
+        )
     all_spectra_train, all_spectra_val, all_spectra_test = (
         TrainUtils.train_val_test_split_bms(
             all_spectra,
@@ -135,6 +142,7 @@ def preprocess(cfg: DictConfig) -> None:
             train_buckets=list(cfg.preprocessing.train_buckets),
             val_buckets=list(cfg.preprocessing.val_buckets),
             test_buckets=list(cfg.preprocessing.test_buckets),
+            force_scaffold_split=force_scaffold_split,
         )
     )
 

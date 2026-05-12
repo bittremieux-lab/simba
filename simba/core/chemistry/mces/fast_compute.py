@@ -121,53 +121,14 @@ def compute_pairs_for_split(
 
     chunk_idx = 0
 
-    # ── precomputed cache (full ed+mces) ──────────────────────────────────────
-    if precomputed_cache is not None:
-        ed_vals = np.full(len(idx0), np.nan)
-        mces_vals = np.full(len(idx0), np.nan)
-        hit = np.zeros(len(idx0), dtype=bool)
-        for k in range(len(idx0)):
-            entry = precomputed_cache.get(
-                tuple(sorted([all_smiles[idx0[k]], all_smiles[idx1[k]]]))
-            )
-            if entry is not None:
-                hit[k] = True
-                ed_vals[k] = entry[0]
-                mces_vals[k] = entry[1]
-        logger.info(f"{identifier}: {hit.sum():,} / {len(idx0):,} pairs from cache")
-        if hit.any():
-            cached_arr = np.column_stack(
-                [idx0[hit], idx1[hit], ed_vals[hit], mces_vals[hit]]
-            )
-            _save_chunk(
-                cached_arr,
-                preprocessing_dir,
-                identifier,
-                current_node,
-                num_nodes,
-                chunk_idx,
-            )
-            chunk_idx += 1
-        idx0 = idx0[~hit]
-        idx1 = idx1[~hit]
-
-    if len(idx0) == 0:
-        logger.info(f"{identifier}: all pairs served from cache, no workers needed")
-        return MoleculePairsOpt(
-            original_spectra=all_spectra,
-            unique_spectra=spectra_unique,
-            df_smiles=df_smiles,
-            pair_distances=np.empty((0, 3)),
-        )
-
     # ── trivial pre-filter (Tanimoto < 0.2, self-pairs, >40 atoms) ───────────
-    # Use BulkTanimotoSimilarity row-by-row (C-speed) to classify pairs without
-    # spawning workers. Workers only see pairs that actually need ILP computation.
+    # Must run BEFORE the precomputed cache step, because it relies on idx0/idx1
+    # being in the original grid order (row k occupies [k*N : (k+1)*N]).
+    # After the cache step removes pairs that order breaks, making row-by-row
+    # slicing incorrect.
     atom_counts = np.array([m.GetNumAtoms() if m is not None else 9999 for m in mols])
     right_large = atom_counts > 40  # reusable mask over all N molecules
 
-    # Rebuild idx0/idx1 as a structured view: k_row * N + j for row k_row, col j
-    # We iterate row by row to reuse BulkTanimotoSimilarity results
     n_rows = len(node_rows)
     trivial_mask = np.zeros(len(idx0), dtype=bool)
     triv_ed = np.full(len(idx0), np.nan)
@@ -190,9 +151,8 @@ def compute_pairs_for_split(
         mces_slice = np.full(N, np.nan)
         ed_slice[low_tani] = VERY_HIGH_DISTANCE
         mces_slice[low_tani] = VERY_HIGH_DISTANCE
-        ed_slice[row_i] = 0.0  # self-pair overrides low_tani (Tanimoto=1.0, never low)
+        ed_slice[row_i] = 0.0
         mces_slice[row_i] = 0.0
-        # large & ~low_tani stays NaN
 
         trivial_mask[start:end] = triv_slice
         triv_ed[start:end] = ed_slice
@@ -229,20 +189,72 @@ def compute_pairs_for_split(
             pair_distances=np.empty((0, 3)),
         )
 
+    # ── precomputed cache (full ed+mces) ──────────────────────────────────────
+    # Pairs with MCES exactly equal to hdf5_mces_threshold are excluded from the
+    # cache: that value is the ILP solver cap from the original run, meaning the
+    # true MCES is unknown (≥ threshold). They must be recomputed with the new,
+    # higher threshold to get the correct value.
+    if precomputed_cache is not None:
+        ed_vals = np.full(len(idx0), np.nan)
+        mces_vals = np.full(len(idx0), np.nan)
+        hit = np.zeros(len(idx0), dtype=bool)
+        capped_count = 0
+        for k in range(len(idx0)):
+            entry = precomputed_cache.get(
+                tuple(sorted([all_smiles[idx0[k]], all_smiles[idx1[k]]]))
+            )
+            if entry is not None:
+                mces_cached = entry[1]
+                if mces_cached == hdf5_mces_threshold:
+                    capped_count += 1
+                    continue
+                hit[k] = True
+                ed_vals[k] = entry[0]
+                mces_vals[k] = mces_cached
+        logger.info(
+            f"{identifier}: {hit.sum():,} / {len(idx0):,} non-trivial pairs from cache"
+            f" ({capped_count:,} skipped — MCES == {hdf5_mces_threshold}, will be recomputed)"
+        )
+        if hit.any():
+            cached_arr = np.column_stack(
+                [idx0[hit], idx1[hit], ed_vals[hit], mces_vals[hit]]
+            )
+            _save_chunk(
+                cached_arr,
+                preprocessing_dir,
+                identifier,
+                current_node,
+                num_nodes,
+                chunk_idx,
+            )
+            chunk_idx += 1
+        idx0 = idx0[~hit]
+        idx1 = idx1[~hit]
+
+    if len(idx0) == 0:
+        logger.info(f"{identifier}: all pairs served from cache, no workers needed")
+        return MoleculePairsOpt(
+            original_spectra=all_spectra,
+            unique_spectra=spectra_unique,
+            df_smiles=df_smiles,
+            pair_distances=np.empty((0, 3)),
+        )
+
     # ── HDF5 MCES cache (mces-only, applied to non-trivial pairs) ────────────
-    # Only values ≤ hdf5_mces_threshold are used; these skip the MCES ILP in workers.
+    # Only values strictly < hdf5_mces_threshold are used; values equal to the
+    # threshold are capped (true MCES unknown) and are left for the worker pool.
     mces_from_hdf5 = None
     if hdf5_mces_cache is not None:
         mces_from_hdf5 = np.full(len(idx0), np.nan)
         hdf5_hits = 0
         for k in range(len(idx0)):
             val = hdf5_mces_cache.lookup(all_smiles[idx0[k]], all_smiles[idx1[k]])
-            if val is not None and val <= hdf5_mces_threshold:
+            if val is not None and val < hdf5_mces_threshold:
                 mces_from_hdf5[k] = val
                 hdf5_hits += 1
         logger.info(
             f"{identifier}: {hdf5_hits:,} / {len(idx0):,} non-trivial pairs"
-            f" have HDF5 MCES ≤ {hdf5_mces_threshold}"
+            f" have HDF5 MCES < {hdf5_mces_threshold}"
         )
         if hdf5_hits == 0:
             mces_from_hdf5 = None

@@ -60,13 +60,16 @@ class TrainUtils:
         train_buckets: list[int] = None,
         val_buckets: list[int] = None,
         test_buckets: list[int] = None,
+        force_scaffold_split: bool = False,
     ) -> tuple[list[SpectrumExt], list[SpectrumExt], list[SpectrumExt]]:
         """
         Split spectra into train / val / test.
 
         If any spectrum has a non-null ``fold`` attribute (e.g. "train"/"val"/"test"
         as shipped in MassSpecGym MGF files), those labels are used directly for all
-        spectra and the scaffold-hashing logic is skipped entirely.
+        spectra and the scaffold-hashing logic is skipped entirely — unless
+        ``force_scaffold_split=True``, which ignores predefined labels and always
+        applies Murcko scaffold hashing.
 
         Otherwise each scaffold is assigned to a bucket by SHA-256(scaffold) % n_buckets.
 
@@ -85,9 +88,15 @@ class TrainUtils:
             Bucket numbers that go to val (default [8]).
         test_buckets:
             Bucket numbers that go to test (default [9]).
+        force_scaffold_split:
+            If True, ignore predefined fold labels and always use Murcko scaffold
+            hashing. Useful when the dataset ships with splits (e.g. MassSpecGym)
+            but you want a scaffold-based split instead.
         """
         # Use predefined fold labels when present (e.g. MassSpecGym)
-        if any(getattr(s, "fold", None) is not None for s in spectra):
+        if not force_scaffold_split and any(
+            getattr(s, "fold", None) is not None for s in spectra
+        ):
             spectrums_train, spectrums_val, spectrums_test = [], [], []
             unlabeled = 0
             for s in spectra:
