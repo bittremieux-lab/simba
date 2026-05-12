@@ -335,9 +335,11 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             loss = embedder.validation_step(sample_batch, batch_idx=0)
 
-        assert isinstance(loss, torch.Tensor)
+        assert isinstance(loss, dict)
+        assert "loss" in loss and "ed_pred" in loss and "ed_target" in loss
+        assert "mces_pred" in loss and "mces_target" in loss
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
-        assert not torch.isnan(loss)
+        assert not torch.isnan(loss["loss"])
 
     def test_test_step(self, embedder, sample_batch):
         # Add required fields
