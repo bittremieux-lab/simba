@@ -114,6 +114,81 @@ class PrecomputedDistancesCache:
             return [float(ed_col[row]), float(mces_col[row])]
         return None
 
+    def bulk_lookup(
+        self,
+        smiles_list: list[str],
+        idx0: np.ndarray,
+        idx1: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Vectorized bulk lookup for arrays of pair indices.
+
+        Parameters
+        ----------
+        smiles_list : list[str]
+            The molecule SMILES list for the current run (idx0/idx1 index into this).
+        idx0, idx1 : np.ndarray of int
+            Pair indices into smiles_list.
+
+        Returns
+        -------
+        hit : bool array, shape (len(idx0),)
+        ed  : float32 array — ED values for hits (NaN for misses)
+        mces: float32 array — MCES values for hits (NaN for misses)
+        """
+        n = len(idx0)
+        ed_out = np.full(n, np.nan, dtype=np.float32)
+        mces_out = np.full(n, np.nan, dtype=np.float32)
+        hit = np.zeros(n, dtype=bool)
+        remaining = np.ones(n, dtype=bool)  # pairs not yet resolved
+
+        for smiles_to_idx, i_col, j_col, ed_col, mces_col in self._splits:
+            if not remaining.any():
+                break
+
+            ridx = np.where(remaining)[0]
+
+            # Map current-run SMILES → old-split integer index (-1 if absent)
+            # Build new→old index array
+            new_to_old = np.full(len(smiles_list), -1, dtype=np.int32)
+            for new_i, s in enumerate(smiles_list):
+                old_i = smiles_to_idx.get(s)
+                if old_i is not None:
+                    new_to_old[new_i] = old_i
+
+            old_i = new_to_old[idx0[ridx]]
+            old_j = new_to_old[idx1[ridx]]
+
+            # Only pairs where both SMILES exist in this split
+            valid = (old_i >= 0) & (old_j >= 0)
+            if not valid.any():
+                continue
+
+            vidx = ridx[valid]
+            oi = old_i[valid].astype(np.int64)
+            oj = old_j[valid].astype(np.int64)
+
+            # Normalize so oi <= oj
+            swap = oi > oj
+            oi[swap], oj[swap] = oj[swap].copy(), oi[swap].copy()
+
+            # Pack into single int64 for binary search
+            n_split = len(smiles_to_idx)
+            packed_cache = i_col.astype(np.int64) * (n_split + 1) + j_col
+            packed_query = oi * (n_split + 1) + oj
+
+            pos = np.searchsorted(packed_cache, packed_query)
+            found = (pos < len(packed_cache)) & (packed_cache[pos] == packed_query)
+
+            found_vidx = vidx[found]
+            found_pos = pos[found]
+
+            ed_out[found_vidx] = ed_col[found_pos]
+            mces_out[found_vidx] = mces_col[found_pos]
+            hit[found_vidx] = True
+            remaining[found_vidx] = False
+
+        return hit, ed_out, mces_out
+
     def __len__(self) -> int:
         return sum(len(ic) for _, ic, *_ in self._splits)
 

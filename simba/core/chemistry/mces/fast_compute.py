@@ -195,22 +195,39 @@ def compute_pairs_for_split(
     # true MCES is unknown (≥ threshold). They must be recomputed with the new,
     # higher threshold to get the correct value.
     if precomputed_cache is not None:
-        ed_vals = np.full(len(idx0), np.nan)
-        mces_vals = np.full(len(idx0), np.nan)
-        hit = np.zeros(len(idx0), dtype=bool)
-        capped_count = 0
-        for k in range(len(idx0)):
-            entry = precomputed_cache.get(
-                tuple(sorted([all_smiles[idx0[k]], all_smiles[idx1[k]]]))
+        from simba.core.chemistry.edit_distance.edit_distance import (
+            PrecomputedDistancesCache,
+        )
+
+        if isinstance(precomputed_cache, PrecomputedDistancesCache):
+            # Vectorized bulk lookup — avoids 130M Python for-loop iterations
+            hit, ed_vals, mces_vals = precomputed_cache.bulk_lookup(
+                all_smiles, idx0, idx1
             )
-            if entry is not None:
-                mces_cached = entry[1]
-                if mces_cached == hdf5_mces_threshold:
-                    capped_count += 1
-                    continue
-                hit[k] = True
-                ed_vals[k] = entry[0]
-                mces_vals[k] = mces_cached
+            # Exclude capped pairs (MCES == threshold, true value unknown)
+            capped_mask = hit & (mces_vals == hdf5_mces_threshold)
+            capped_count = int(capped_mask.sum())
+            hit[capped_mask] = False
+            ed_vals[capped_mask] = np.nan
+            mces_vals[capped_mask] = np.nan
+        else:
+            # Legacy dict-based cache — scalar loop
+            ed_vals = np.full(len(idx0), np.nan)
+            mces_vals = np.full(len(idx0), np.nan)
+            hit = np.zeros(len(idx0), dtype=bool)
+            capped_count = 0
+            for k in range(len(idx0)):
+                entry = precomputed_cache.get(
+                    tuple(sorted([all_smiles[idx0[k]], all_smiles[idx1[k]]]))
+                )
+                if entry is not None:
+                    mces_cached = entry[1]
+                    if mces_cached == hdf5_mces_threshold:
+                        capped_count += 1
+                        continue
+                    hit[k] = True
+                    ed_vals[k] = entry[0]
+                    mces_vals[k] = mces_cached
         logger.info(
             f"{identifier}: {hit.sum():,} / {len(idx0):,} non-trivial pairs from cache"
             f" ({capped_count:,} skipped — MCES == {hdf5_mces_threshold}, will be recomputed)"
