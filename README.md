@@ -200,6 +200,56 @@ The notebook demonstrates:
 
 ---
 
+## Molecular Networking Using SIMBA
+
+Molecular networking computes all-vs-all pairwise structural similarity across a single set of spectra, producing a graph where nodes are spectra and edges connect structurally related compounds. This is analogous to GNPS molecular networking but uses SIMBA's learned structural distance predictions instead of cosine similarity.
+
+> **Note:** Input spectra are assumed to be deduplicated — one representative spectrum per compound. If your dataset contains multiple spectra per compound (e.g. from replicate injections), remove redundant entries before running molecular networking to avoid spurious high-similarity edges between duplicates.
+
+### Usage Example
+
+```bash
+simba molecular-network \
+  --model-path /path/to/model.ckpt \
+  --input-spectra /path/to/spectra.mgf \
+  --output-dir /path/to/output
+```
+
+**Common Parameters:**
+* `--model-path`: Path to trained SIMBA model checkpoint (.ckpt file) — **REQUIRED**
+* `--input-spectra`: Path to spectra file (.mgf format) — **REQUIRED**
+* `--output-dir`: Directory where results will be saved — **REQUIRED**
+* `molecular_network.score_cutoff`: Minimum similarity to create an edge (default: 0.5)
+* `molecular_network.top_n`: Top-N candidates considered per node (default: 20)
+* `molecular_network.max_links`: Maximum edges per node (default: 10)
+* `molecular_network.link_method`: Edge selection strategy — `single` (either end qualifies) or `mutual` (both ends must qualify) (default: single)
+* `molecular_network.keep_unconnected_nodes`: Include isolated spectra as singleton nodes (default: true)
+* `molecular_network.graph_format`: Output format — `graphml`, `gexf`, `cyjs`, `gml`, `json` (default: graphml)
+* `molecular_network.device`: Hardware device: `cpu` or `gpu` (default: cpu)
+* `molecular_network.use_gnps_format`: Set true if the input MGF uses GNPS-style headers (default: false)
+* `molecular_network.filter_spectra`: Apply quality filters (min 6 peaks, protonated adducts only). Default false — every spectrum becomes a node (default: false)
+* `molecular_network.precomputed_mces`: Path to a `similarity_mces.npy` from a previous run — skips model inference (default: null)
+* `molecular_network.plot`: Save a `network_plot.png` visualisation alongside the graph file (default: false)
+* `molecular_network.plot_label_key`: MGF metadata field to use as node labels in the plot (e.g. `formula`, `inchikey`). When null, MGF order index is used (default: null)
+
+**Output Files:**
+- `molecular_network.<format>`: Spectral network in the chosen format (default: `molecular_network.graphml`), loadable in Cytoscape or any NetworkX-compatible tool
+- `similarity_mces.npy`: Raw `[N×N]` predicted MCES distance matrix (can be reused with `precomputed_mces`)
+
+**Score Normalization:**
+
+MCES distances are converted to similarity scores as `sim = 1 - mces / max_mces`, where `max_mces` is the model's training cap (40). A score of 1.0 means identical structures; 0.0 means MCES ≥ 40 (no significant shared substructure).
+
+**Loading the network in Python:**
+
+```python
+import networkx as nx
+G = nx.read_graphml("output/molecular_network.graphml")
+print(f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+```
+
+---
+
 ## 📚 Training Your Custom SIMBA Model
 
 SIMBA supports training custom models using your own MS/MS datasets in `.mgf` format.

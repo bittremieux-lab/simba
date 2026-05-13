@@ -1,0 +1,36 @@
+# @package _global_
+
+# Default configuration for molecular networking
+molecular_network:
+  # Device for inference
+  device: cpu  # cpu or gpu
+
+  # GNPS format flag (set true if input MGF uses GNPS-style headers)
+  use_gnps_format: false
+
+  # matchms SimilarityNetwork parameters
+  top_n: 20        # top-N candidates considered per node when adding edges
+  max_links: 10    # maximum edges added per node
+  score_cutoff: 0.5  # minimum similarity to create an edge (0–1)
+  link_method: single  # "single" or "mutual"
+  keep_unconnected_nodes: true  # include isolated nodes in the graph
+
+  # Output format for the network file.
+  # Supported: "graphml" (default), "cyjs", "gexf", "gml", "json"
+  graph_format: graphml
+
+  # Optional: path to a precomputed similarity_mces.npy from a previous run.
+  # When set, the model inference step is skipped entirely.
+  # Example: molecular_network.precomputed_mces=./output/similarity_mces.npy
+  precomputed_mces: null
+
+  # Whether to apply spectrum quality filtering (min peak count, adduct type).
+  # Default false: every spectrum in the file becomes a node.
+  filter_spectra: false
+
+  # Plotting — disabled by default.
+  # Set plot=true to save a network_plot.png alongside the graph file.
+  # plot_label_key: MGF field to use as node labels (e.g. "id", "inchikey").
+  #   When null, node labels are the MGF order index of each spectrum.
+  plot: false
+  plot_label_key: null
