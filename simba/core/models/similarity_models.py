@@ -802,6 +802,11 @@ class EmbeddingExtractor(pl.LightningModule):
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
                 strict=strict,
+                 use_adduct=self.config.model.features.use_adduct,
+                use_ce=self.config.model.features.use_ce,
+                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_method=self.config.model.features.use_ion_method,
+                use_ion_mode=self.config.model.features.use_ion_mode,
             )
 
         else:
@@ -813,6 +818,11 @@ class EmbeddingExtractor(pl.LightningModule):
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
                 strict=strict,
+                use_adduct=self.config.model.features.use_adduct,
+                use_ce=self.config.model.features.use_ce,
+                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_method=self.config.model.features.use_ion_method,
+                use_ion_mode=self.config.model.features.use_ion_mode,
             )
 
     def forward(self, batch):
