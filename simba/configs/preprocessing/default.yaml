@@ -33,10 +33,15 @@ precomputed_distances:
   # - "./ms3_preprocessing/"
 
 # HDF5 MCES cache - precomputed MCES from an external HDF5 file (e.g. MassSpecGym)
-# Only pairs with MCES <= hdf5_mces_threshold are taken from the cache;
-# all others are computed as usual.
+# Only pairs with MCES strictly < hdf5_mces_threshold are taken from the cache;
+# values equal to the threshold are capped and will be recomputed from scratch.
 hdf5_mces_cache_path: null  # Path to HDF5 file with 'mces' and 'mces_smiles_order' datasets
 hdf5_mces_threshold: 10.0
+
+# Split strategy
+# force_scaffold_split: if true, ignore predefined fold labels (e.g. MassSpecGym)
+# and always use Murcko scaffold hashing for train/val/test assignment.
+force_scaffold_split: false
 
 # Subsampling
 subsample_preprocessing: false

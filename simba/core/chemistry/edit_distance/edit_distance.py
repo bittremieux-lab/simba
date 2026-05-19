@@ -32,10 +32,184 @@ def get_global_cache() -> dict:
     return _GLOBAL_CACHE
 
 
-def filter_cache_by_smiles(cache: dict, smiles_list: list[str]) -> dict:
-    """Filter cache to only keep entries for given SMILES."""
+class PrecomputedDistancesCache:
+    """
+    Memory-efficient precomputed distances cache using sorted numpy arrays + binary search.
+
+    Replaces a Python dict (which needs ~100M+ entries) with per-split sorted
+    numpy arrays. Loading is fast (numpy mmap I/O); lookup is O(log N) binary search.
+    Interface mirrors dict: supports .get(key), len(), bool().
+    """
+
+    def __init__(self) -> None:
+        # Each entry: (smiles_to_idx, i_col, j_col, ed_col, mces_col)
+        self._splits: list[tuple] = []
+
+    def add_split(
+        self,
+        smiles_list: list[str],
+        ed_mces_files: list[str],
+    ) -> None:
+        """Load one split's ed_mces_*.npy files into a sorted numpy array."""
+        if not smiles_list or not ed_mces_files:
+            return
+
+        smiles_to_idx = {s: i for i, s in enumerate(smiles_list)}
+
+        arrays = []
+        for f in ed_mces_files:
+            try:
+                arrays.append(np.load(f))
+            except Exception as e:
+                logger.warning(f"Error loading {f}: {e}")
+        if not arrays:
+            return
+
+        arr = np.concatenate(arrays, axis=0)  # (N, 4): [i, j, ed, mces]
+
+        # Normalize so i <= j (handles symmetric / full-matrix storage)
+        i_col = arr[:, 0].astype(np.int32)
+        j_col = arr[:, 1].astype(np.int32)
+        swap = i_col > j_col
+        i_col[swap], j_col[swap] = j_col[swap].copy(), i_col[swap].copy()
+
+        # Sort lexicographically by (i, j)
+        sort_idx = np.lexsort((j_col, i_col))
+        i_col = i_col[sort_idx]
+        j_col = j_col[sort_idx]
+        ed_col = arr[sort_idx, 2].astype(np.float32)
+        mces_col = arr[sort_idx, 3].astype(np.float32)
+
+        # Remove duplicate (i, j) pairs introduced by normalization
+        n = len(smiles_list)
+        packed = i_col.astype(np.int64) * (n + 1) + j_col
+        _, uniq = np.unique(packed, return_index=True)
+        i_col = i_col[uniq]
+        j_col = j_col[uniq]
+        ed_col = ed_col[uniq]
+        mces_col = mces_col[uniq]
+
+        self._splits.append((smiles_to_idx, i_col, j_col, ed_col, mces_col))
+        logger.info(
+            f"  split cached: {len(i_col):,} unique pairs ({len(smiles_list):,} molecules)"
+        )
+
+    def get(self, key: tuple) -> list | None:
+        """Return [ed, mces] for (smiles_a, smiles_b), or None if not found."""
+        smiles_a, smiles_b = key
+        for smiles_to_idx, i_col, j_col, ed_col, mces_col in self._splits:
+            ia = smiles_to_idx.get(smiles_a)
+            ib = smiles_to_idx.get(smiles_b)
+            if ia is None or ib is None:
+                continue
+            i, j = (ia, ib) if ia <= ib else (ib, ia)
+            lo = int(np.searchsorted(i_col, i))
+            hi = int(np.searchsorted(i_col, i, side="right"))
+            if lo >= hi:
+                continue
+            k = int(np.searchsorted(j_col[lo:hi], j))
+            if k >= (hi - lo) or j_col[lo + k] != j:
+                continue
+            row = lo + k
+            return [float(ed_col[row]), float(mces_col[row])]
+        return None
+
+    def bulk_lookup(
+        self,
+        smiles_list: list[str],
+        idx0: np.ndarray,
+        idx1: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Vectorized bulk lookup for arrays of pair indices.
+
+        Parameters
+        ----------
+        smiles_list : list[str]
+            The molecule SMILES list for the current run (idx0/idx1 index into this).
+        idx0, idx1 : np.ndarray of int
+            Pair indices into smiles_list.
+
+        Returns
+        -------
+        hit : bool array, shape (len(idx0),)
+        ed  : float32 array — ED values for hits (NaN for misses)
+        mces: float32 array — MCES values for hits (NaN for misses)
+        """
+        n = len(idx0)
+        ed_out = np.full(n, np.nan, dtype=np.float32)
+        mces_out = np.full(n, np.nan, dtype=np.float32)
+        hit = np.zeros(n, dtype=bool)
+        remaining = np.ones(n, dtype=bool)  # pairs not yet resolved
+
+        for smiles_to_idx, i_col, j_col, ed_col, mces_col in self._splits:
+            if not remaining.any():
+                break
+
+            ridx = np.where(remaining)[0]
+
+            # Map current-run SMILES → old-split integer index (-1 if absent)
+            # Build new→old index array
+            new_to_old = np.full(len(smiles_list), -1, dtype=np.int32)
+            for new_i, s in enumerate(smiles_list):
+                old_i = smiles_to_idx.get(s)
+                if old_i is not None:
+                    new_to_old[new_i] = old_i
+
+            old_i = new_to_old[idx0[ridx]]
+            old_j = new_to_old[idx1[ridx]]
+
+            # Only pairs where both SMILES exist in this split
+            valid = (old_i >= 0) & (old_j >= 0)
+            if not valid.any():
+                continue
+
+            vidx = ridx[valid]
+            oi = old_i[valid].astype(np.int64)
+            oj = old_j[valid].astype(np.int64)
+
+            # Normalize so oi <= oj
+            swap = oi > oj
+            oi[swap], oj[swap] = oj[swap].copy(), oi[swap].copy()
+
+            # Pack into single int64 for binary search
+            n_split = len(smiles_to_idx)
+            packed_cache = i_col.astype(np.int64) * (n_split + 1) + j_col
+            packed_query = oi * (n_split + 1) + oj
+
+            pos = np.searchsorted(packed_cache, packed_query)
+            found = (pos < len(packed_cache)) & (packed_cache[pos] == packed_query)
+
+            found_vidx = vidx[found]
+            found_pos = pos[found]
+
+            ed_out[found_vidx] = ed_col[found_pos]
+            mces_out[found_vidx] = mces_col[found_pos]
+            hit[found_vidx] = True
+            remaining[found_vidx] = False
+
+        return hit, ed_out, mces_out
+
+    def __len__(self) -> int:
+        return sum(len(ic) for _, ic, *_ in self._splits)
+
+    def __bool__(self) -> bool:
+        return bool(self._splits)
+
+
+def filter_cache_by_smiles(cache, smiles_list: list[str]):
+    """Filter cache to only keep entries for given SMILES.
+
+    For PrecomputedDistancesCache the numpy lookup naturally handles absent SMILES
+    (returns None), so filtering is a no-op — just return the same object.
+    For legacy dict caches, filter as before.
+    """
     if not cache:
         return {}
+
+    if isinstance(cache, PrecomputedDistancesCache):
+        # No filtering needed; binary search handles missing SMILES transparently.
+        logger.info(f"Precomputed cache: {len(cache):,} pairs (no filtering needed)")
+        return cache
 
     smiles_set = set(smiles_list)
     filtered = {
@@ -50,13 +224,18 @@ def filter_cache_by_smiles(cache: dict, smiles_list: list[str]) -> dict:
     return filtered
 
 
-def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
+def load_precomputed_distances_cache(
+    preprocessing_dirs: list[str],
+) -> "PrecomputedDistancesCache":
     """
     Load precomputed distances from preprocessing directories.
 
     Auto-discovers files in each directory:
-    - mapping_unique_smiles.pkl (for SMILES mapping)
-    - edit_distance_*.npy and mces_*.npy files (for distances)
+    - mapping_unique_smiles.pkl / mapping.pkl (for per-split SMILES lists)
+    - ed_mces_*_{split}_*.npy files (4-column arrays: [i, j, ed, mces])
+
+    Returns a PrecomputedDistancesCache backed by sorted numpy arrays.
+    Lookups are O(log N) binary search — avoids building a 100M+ entry Python dict.
 
     Parameters
     ----------
@@ -65,10 +244,9 @@ def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
 
     Returns
     -------
-    dict
-        Cache with (smiles1, smiles2) tuple keys -> [ed_distance, mces_distance] values.
+    PrecomputedDistancesCache
     """
-    cache = {}
+    cache = PrecomputedDistancesCache()
 
     for prep_dir in preprocessing_dirs:
         if not os.path.exists(prep_dir):
@@ -83,44 +261,31 @@ def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
             logger.warning(f"No mapping pickle found in {prep_dir}")
             continue
 
-        # Find distance files by prefix and split
-        distance_files = {}
-        for split in ["train", "val", "test"]:
-            distance_files[split] = {"ed": [], "mces": []}
-
-        for filename in os.listdir(prep_dir):
-            if not filename.endswith(".npy"):
+        # Discover ed_mces_*.npy files per split
+        ed_mces_files: dict[str, list[str]] = {"train": [], "val": [], "test": []}
+        for filename in sorted(os.listdir(prep_dir)):
+            if not filename.startswith("ed_mces_") or not filename.endswith(".npy"):
                 continue
-
-            # Determine split
-            split = None
-            for s in ["train", "val", "test"]:
-                if f"_{s}_" in filename or filename.endswith(f"_{s}.npy"):
-                    split = s
+            for split in ("train", "val", "test"):
+                if f"_{split}_" in filename or f"_{split}." in filename:
+                    ed_mces_files[split].append(os.path.join(prep_dir, filename))
                     break
 
-            if split is None:
-                continue
-
-            # Categorize by type
-            if filename.startswith("edit_distance_"):
-                distance_files[split]["ed"].append(os.path.join(prep_dir, filename))
-            elif filename.startswith("mces_"):
-                distance_files[split]["mces"].append(os.path.join(prep_dir, filename))
-
-        # Count total files
-        total_ed = sum(len(v["ed"]) for v in distance_files.values())
-        total_mces = sum(len(v["mces"]) for v in distance_files.values())
-
-        if total_ed == 0 and total_mces == 0:
-            logger.warning(f"No distance files found in {prep_dir}")
+        total = sum(len(v) for v in ed_mces_files.values())
+        if total == 0:
+            logger.warning(f"No ed_mces_*.npy files found in {prep_dir} — skipping")
             continue
 
         logger.info(
-            f"Auto-discovered in {prep_dir}: {total_ed} ED files, {total_mces} MCES files"
+            f"Auto-discovered in {prep_dir}: "
+            + ", ".join(
+                f"{split}={len(ed_mces_files[split])}"
+                for split in ("train", "val", "test")
+            )
+            + " ed_mces files"
         )
 
-        # Load SMILES mapping per split
+        # Load per-split SMILES lists from pickle
         try:
             with open(pickle_path, "rb") as f:
                 data = dill.load(f)
@@ -128,65 +293,53 @@ def load_precomputed_distances_cache(preprocessing_dirs: list[str]) -> dict:
             logger.error(f"Error loading pickle {pickle_path}: {e}")
             continue
 
-        # Process each split separately (indices are per-split)
-        pairs_added = 0
-        for split in ["train", "val", "test"]:
-            # Extract SMILES for this split only
-            split_smiles = []
-            for key_prefix in ["molecule_pairs_", "df_smiles_"]:
-                key = key_prefix + split
-                if key not in data or data[key] is None:
-                    continue
-
-                # Extract DataFrame
-                if key_prefix == "molecule_pairs_":
-                    if not hasattr(data[key], "df_smiles"):
-                        continue
-                    df = data[key].df_smiles
-                else:
-                    df = data[key]
-
-                if df is None or df.empty:
-                    continue
-
-                # Extract SMILES from DataFrame
-                if "canon_smiles" in df.columns:
-                    smiles_list = df["canon_smiles"].tolist()
-                elif "smiles" in df.columns:
-                    smiles_list = df["smiles"].tolist()
-                elif hasattr(df.index, "tolist"):
-                    smiles_list = df.index.tolist()
-                else:
-                    continue
-
-                # Remove duplicates while preserving order
-                seen = set()
-                for s in smiles_list:
-                    if s not in seen:
-                        seen.add(s)
-                        split_smiles.append(s)
-                break  # Only need one match
-
-            if not split_smiles:
+        for split in ("train", "val", "test"):
+            if not ed_mces_files[split]:
                 continue
 
-            # Load distances for this split
-            ed_cache_split = _load_distances_from_files(
-                distance_files[split]["ed"], split_smiles
+            split_smiles = _extract_split_smiles(data, split)
+            if not split_smiles:
+                logger.warning(f"No SMILES found for split '{split}' in {pickle_path}")
+                continue
+
+            logger.info(
+                f"Loading {len(ed_mces_files[split])} ed_mces files for split '{split}' "
+                f"({len(split_smiles):,} molecules) ..."
             )
-            mces_cache_split = _load_distances_from_files(
-                distance_files[split]["mces"], split_smiles
-            )
+            cache.add_split(split_smiles, ed_mces_files[split])
 
-            # Combine into final cache (only pairs with both ED and MCES)
-            for key in set(ed_cache_split.keys()) & set(mces_cache_split.keys()):
-                cache[key] = [ed_cache_split[key], mces_cache_split[key]]
-                pairs_added += 1
-
-        logger.info(f"Loaded {pairs_added} valid pairs from {prep_dir}")
-
-    logger.info(f"Total unique pairs in cache: {len(cache)}")
+    logger.info(f"Precomputed distances cache ready: {len(cache):,} unique pairs total")
     return cache
+
+
+def _extract_split_smiles(data: dict, split: str) -> list[str]:
+    """Extract ordered unique SMILES for one split from a loaded mapping pickle."""
+    for key_prefix in ("molecule_pairs_", "df_smiles_"):
+        key = key_prefix + split
+        if key not in data or data[key] is None:
+            continue
+        if key_prefix == "molecule_pairs_":
+            if not hasattr(data[key], "df_smiles"):
+                continue
+            df = data[key].df_smiles
+        else:
+            df = data[key]
+        if df is None or df.empty:
+            continue
+        if "canon_smiles" in df.columns:
+            raw = df["canon_smiles"].tolist()
+        elif "smiles" in df.columns:
+            raw = df["smiles"].tolist()
+        else:
+            raw = df.index.tolist()
+        seen: set[str] = set()
+        result = []
+        for s in raw:
+            if s not in seen:
+                seen.add(s)
+                result.append(s)
+        return result
+    return []
 
 
 def _load_smiles_from_pickle(pickle_path: str) -> list[str]:
@@ -384,8 +537,8 @@ def compute_ed_and_mces_both(
         # Check precomputed cache first
         if precomputed_cache is not None:
             cache_key = tuple(sorted([s0, s1]))
-            if cache_key in precomputed_cache:
-                cached_values = precomputed_cache[cache_key]
+            cached_values = precomputed_cache.get(cache_key)
+            if cached_values is not None:
                 ed_dist = cached_values[0]
                 mces_dist = cached_values[1]
                 cache_hits += 1
