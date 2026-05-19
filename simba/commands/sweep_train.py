@@ -125,7 +125,9 @@ def _run_trial(
     )
     weights_mces = weights_mces / np.sum(weights_mces)
 
-    chk_cb, chk_n_cb, loss_cb, early_stop_cb = setup_callbacks(cfg)
+    chk_cb, chk_n_cb, loss_cb, early_stop_cb, progress_log_cb, val_metrics_cb = (
+        setup_callbacks(cfg)
+    )
     model = setup_model(cfg, weights_mces)
     trainer = run_training(
         model,
@@ -136,6 +138,8 @@ def _run_trial(
         chk_n_cb,
         loss_cb,
         early_stop_cb,
+        progress_log_cb,
+        val_metrics_cb,
     )
 
     val_loss = float(trainer.callback_metrics.get("validation_loss", math.inf))

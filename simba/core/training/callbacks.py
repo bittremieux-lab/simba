@@ -299,15 +299,21 @@ class ValMetricsCallback(Callback):
             p = int(np.clip(p, 0, n - 1))
             cm[t, p] += 1
 
-        fig, ax = plt.subplots(figsize=(5, 4))
-        cm_norm = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8)
-        im = ax.imshow(cm_norm, vmin=0, vmax=1, cmap="Blues")
+        cm_pct = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8) * 100
+        accuracy = (pred == target).mean()
+
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+
+        # Left: raw counts
+        ax = axes[0]
+        im = ax.imshow(cm, cmap="Blues")
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         ax.set_xticks(range(n))
         ax.set_yticks(range(n))
-        ax.set_xlabel("Predicted class")
+        ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
         ax.set_ylabel("True class")
-        ax.set_title(f"ED confusion matrix (row-normalised) — step {step}")
+        ax.set_title(f"ED confusion matrix — counts (step {step})")
+        vmax = cm.max() if cm.max() > 0 else 1
         for i in range(n):
             for j in range(n):
                 ax.text(
@@ -317,11 +323,30 @@ class ValMetricsCallback(Callback):
                     ha="center",
                     va="center",
                     fontsize=7,
-                    color="white" if cm_norm[i, j] > 0.5 else "black",
+                    color="white" if cm[i, j] > 0.5 * vmax else "black",
                 )
 
-        accuracy = (pred == target).mean()
+        # Right: row percentages
+        ax = axes[1]
+        im = ax.imshow(cm_pct, vmin=0, vmax=100, cmap="Blues")
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="%")
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
         ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
+        ax.set_ylabel("True class")
+        ax.set_title(f"ED confusion matrix — row % (step {step})")
+        for i in range(n):
+            for j in range(n):
+                ax.text(
+                    j,
+                    i,
+                    f"{cm_pct[i, j]:.1f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color="white" if cm_pct[i, j] > 50 else "black",
+                )
+
         plt.tight_layout()
         path = os.path.join(self.output_dir, "confusion_matrix.png")
         plt.savefig(path, dpi=130)

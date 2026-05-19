@@ -1,39 +1,38 @@
 #!/bin/bash
-#SBATCH -J simba_train_th20_asb
+#SBATCH -J simba_train_scaffold_v2
 #SBATCH -p one_day
 #SBATCH --nodelist=asimov2
-#SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
+#SBATCH --gpus=nvidia_h200_nvl_2g.35gb:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=96G
-#SBATCH -o /home/nkubrakov/simba/logs/simba_train_th20_asb_%j.out
-#SBATCH -e /home/nkubrakov/simba/logs/simba_train_th20_asb_%j.err
+#SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.out
+#SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.err
 
 set -uo pipefail
 
-echo "===== SIMBA Training: th20_asb ====="
+echo "===== SIMBA Training: MSG scaffold_v2 ====="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node:   $SLURM_NODELIST"
 echo "Date:   $(date)"
 nvidia-smi
 
-PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_th20_asb
-CHECKPOINT_DIR=/mnt/data2/nkubrakov/massspecgym/checkpoints_th20_asb
+PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_scaffold_v2
+CHECKPOINT_DIR=/mnt/data2/nkubrakov/massspecgym/checkpoints_scaffold_v2
 
 mkdir -p "$CHECKPOINT_DIR"
 
 cd /home/nkubrakov/simba
-source .venv/bin/activate
 
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
-simba train \
+uv run simba train \
   paths.preprocessing_dir="$PREPRO_DIR" \
   paths.preprocessing_dir_train="$PREPRO_DIR" \
   paths.preprocessing_pickle_file=mapping.pkl \
   paths.checkpoint_dir="$CHECKPOINT_DIR" \
   training.epochs=1000 \
-  training.batch_size=3072 \
+  training.batch_size=2048 \
   training.val_check_interval=1000 \
   training.limit_train_batches=10000 \
   training.limit_val_batches=500 \
