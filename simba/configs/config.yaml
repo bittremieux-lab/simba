@@ -7,6 +7,7 @@ defaults:
   - preprocessing: default
   - inference: default
   - analog_discovery: default
+  - molecular_network: default
   - _self_  # Main config applied last, but training configs can override via training=fast_dev
 
 # Project metadata
