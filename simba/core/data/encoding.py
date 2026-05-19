@@ -21,12 +21,17 @@ def encode_adduct_mass(adduct: str):
     adducts = ADDUCT_TO_MASS.keys()
          
     # new encoding
-    response = [ADDUCT_TO_MASS[adduct] if a==adduct else 0 for a in adducts]
+    #response = [ADDUCT_TO_MASS[adduct] if a==adduct else 0 for a in adducts]
     
     # old encoding
     #response = [0 for a in adducts]
     #if adduct in adducts:
     #    response[0] = ADDUCT_TO_MASS[adduct]
+    
+    # fixed encoding
+    response= [0]
+    if adduct in adducts:
+        response = [ADDUCT_TO_MASS[adduct]]
     return response
 
 

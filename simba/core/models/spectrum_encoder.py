@@ -40,9 +40,9 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
 
         # Only used when self.use_encoders = True
         if self.use_encoders:
-            metadata_hidden_dim= 256
-            adduct_num_embeddings=128
-            adduct_embedding_dim=16
+            metadata_hidden_dim= 32
+            adduct_num_embeddings=32
+            adduct_embedding_dim=8
             self.adduct_embedding = nn.Embedding(
                 num_embeddings=adduct_num_embeddings,
                 embedding_dim=adduct_embedding_dim,
