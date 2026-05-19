@@ -294,8 +294,17 @@ def preprocess(cfg: DictConfig) -> None:
         ("_val", all_spectra_val),
         ("_test", all_spectra_test),
     ]:
+        split_name = type_data[1:]
+        done_marker = workspace / f".{split_name}_done"
+        if not cfg.preprocessing.overwrite and done_marker.exists():
+            logger.info(
+                f"Skipping {split_name} set — already completed (marker: {done_marker.name})"
+            )
+            molecule_pairs[type_data] = None
+            continue
+
         logger.info(
-            f"Computing distances for {type_data[1:]} set with {len(spectra)} spectra..."
+            f"Computing distances for {split_name} set with {len(spectra)} spectra..."
         )
         molecule_pairs[type_data] = compute_pairs_for_split(
             spectra,
@@ -309,6 +318,8 @@ def preprocess(cfg: DictConfig) -> None:
             hdf5_mces_cache=hdf5_mces_cache,
             hdf5_mces_threshold=hdf5_mces_threshold,
         )
+
+        done_marker.touch()
 
         # Log statistics about the computed pairs
         pairs_obj = molecule_pairs[type_data]
@@ -324,7 +335,7 @@ def preprocess(cfg: DictConfig) -> None:
             else 0
         )
         logger.info(
-            f"{type_data[1:]} set completed: {num_unique_mols} unique molecules, {num_pairs} molecule pairs"
+            f"{split_name} set completed: {num_unique_mols} unique molecules, {num_pairs} molecule pairs"
         )
 
     # Combine edit distance and MCES files
