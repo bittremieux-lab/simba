@@ -1,4 +1,5 @@
 import os
+import sys
 from functools import lru_cache
 
 import dill
@@ -373,6 +374,7 @@ def compute_ed_and_mces_both(
         leave=False,
         unit="pair",
         bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+        disable=not sys.stdout.isatty(),
     ):
         pair = pair_distances[index]
 
@@ -508,6 +510,7 @@ def compute_ed_or_mces(
         leave=False,
         unit="pair",
         bar_format="{desc}: {n_fmt}/{total_fmt} pairs [{elapsed}<{remaining}, {rate_fmt}]",
+        disable=not sys.stdout.isatty(),
     ):
         pair = pair_distances[index]
 
@@ -647,7 +650,7 @@ def simba_solve_pair_mces(
                 },
                 # solver_options={'threads': 1, 'msg': False},  # use single thread + no console messages
                 no_ilp_threshold=False,  # allow the ILP to stop early once the threshold is exceeded
-                always_stronger_bound=False,  # use dynamic bounding for speed
+                always_stronger_bound=True,
                 catch_errors=False,  # typically raise exceptions if something goes wrong
             )
             distance = result[1]

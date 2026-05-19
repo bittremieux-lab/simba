@@ -31,8 +31,6 @@ def write_data(
     molecule_pairs_train=None,
     molecule_pairs_val=None,
     molecule_pairs_test=None,
-    uniformed_molecule_pairs_test=None,
-    use_lightweight_format: bool = False,
     mgf_path: str = None,
 ):
     """Write preprocessed data to pickle file.
@@ -42,60 +40,38 @@ def write_data(
         molecule_pairs_train: Training molecule pairs
         molecule_pairs_val: Validation molecule pairs
         molecule_pairs_test: Test molecule pairs
-        uniformed_molecule_pairs_test: Uniformed test molecule pairs (optional)
-        use_lightweight_format: If True, save lightweight format with only df_smiles and spectrum IDs
-        mgf_path: Path to original MGF file (required for lightweight format)
+        mgf_path: Path to original MGF file
     """
-    if use_lightweight_format:
-        logger.info(
-            "Saving in lightweight format (df_smiles + spectrum indexes + MGF path)"
-        )
-        # Lightweight format: save only df_smiles, original MGF indexes, and mgf path
-        # Spectra will be loaded at training time from mgf file using absolute indexes
-        dataset = {
-            "df_smiles_train": (
-                molecule_pairs_train.df_smiles
-                if molecule_pairs_train is not None
-                else None
-            ),
-            "df_smiles_val": (
-                molecule_pairs_val.df_smiles if molecule_pairs_val is not None else None
-            ),
-            "df_smiles_test": (
-                molecule_pairs_test.df_smiles
-                if molecule_pairs_test is not None
-                else None
-            ),
-            "spectrum_indexes_train": (
-                [s.mgf_index for s in molecule_pairs_train.original_spectra]
-                if molecule_pairs_train is not None
-                else None
-            ),
-            "spectrum_indexes_val": (
-                [s.mgf_index for s in molecule_pairs_val.original_spectra]
-                if molecule_pairs_val is not None
-                else None
-            ),
-            "spectrum_indexes_test": (
-                [s.mgf_index for s in molecule_pairs_test.original_spectra]
-                if molecule_pairs_test is not None
-                else None
-            ),
-            "mgf_path": mgf_path,
-            "format_version": "lightweight",
-        }
-    else:
-        logger.info("Saving in full format (complete molecule pairs)")
-        # Original format: save full MoleculePairs objects
-        dataset = {
-            "all_spectrums_train": None,
-            "all_spectrums_val": None,
-            "all_spectrums_test": None,
-            "molecule_pairs_train": molecule_pairs_train,
-            "molecule_pairs_val": molecule_pairs_val,
-            "molecule_pairs_test": molecule_pairs_test,
-            "uniformed_molecule_pairs_test": uniformed_molecule_pairs_test,
-        }
+    # Save only df_smiles, original MGF indexes, and mgf path
+    # Spectra will be loaded at training time from mgf file using absolute indexes
+    dataset = {
+        "df_smiles_train": (
+            molecule_pairs_train.df_smiles if molecule_pairs_train is not None else None
+        ),
+        "df_smiles_val": (
+            molecule_pairs_val.df_smiles if molecule_pairs_val is not None else None
+        ),
+        "df_smiles_test": (
+            molecule_pairs_test.df_smiles if molecule_pairs_test is not None else None
+        ),
+        "spectrum_indexes_train": (
+            [s.mgf_index for s in molecule_pairs_train.original_spectra]
+            if molecule_pairs_train is not None
+            else None
+        ),
+        "spectrum_indexes_val": (
+            [s.mgf_index for s in molecule_pairs_val.original_spectra]
+            if molecule_pairs_val is not None
+            else None
+        ),
+        "spectrum_indexes_test": (
+            [s.mgf_index for s in molecule_pairs_test.original_spectra]
+            if molecule_pairs_test is not None
+            else None
+        ),
+        "mgf_path": mgf_path,
+        "format_version": "lightweight",
+    }
 
     with open(file_path, "wb") as file:
         pickle.dump(dataset, file)
@@ -221,29 +197,24 @@ def preprocess(cfg: DictConfig) -> None:
     output_file = workspace / cfg.paths.preprocessing_pickle_file
     logger.info(f"Saving mapping file early to {output_file}...")
 
-    use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
-    if use_lightweight_format:
-        logger.info("Saving in lightweight format (early save)")
-        dataset = {
-            "df_smiles_train": molecule_pairs_metadata["_train"]["df_smiles"],
-            "df_smiles_val": molecule_pairs_metadata["_val"]["df_smiles"],
-            "df_smiles_test": molecule_pairs_metadata["_test"]["df_smiles"],
-            "spectrum_indexes_train": [
-                s.mgf_index
-                for s in molecule_pairs_metadata["_train"]["original_spectra"]
-            ],
-            "spectrum_indexes_val": [
-                s.mgf_index for s in molecule_pairs_metadata["_val"]["original_spectra"]
-            ],
-            "spectrum_indexes_test": [
-                s.mgf_index
-                for s in molecule_pairs_metadata["_test"]["original_spectra"]
-            ],
-            "mgf_path": str(cfg.paths.spectra_path),
-            "format_version": "lightweight",
-        }
-        with open(output_file, "wb") as file:
-            pickle.dump(dataset, file)
+    dataset = {
+        "df_smiles_train": molecule_pairs_metadata["_train"]["df_smiles"],
+        "df_smiles_val": molecule_pairs_metadata["_val"]["df_smiles"],
+        "df_smiles_test": molecule_pairs_metadata["_test"]["df_smiles"],
+        "spectrum_indexes_train": [
+            s.mgf_index for s in molecule_pairs_metadata["_train"]["original_spectra"]
+        ],
+        "spectrum_indexes_val": [
+            s.mgf_index for s in molecule_pairs_metadata["_val"]["original_spectra"]
+        ],
+        "spectrum_indexes_test": [
+            s.mgf_index for s in molecule_pairs_metadata["_test"]["original_spectra"]
+        ],
+        "mgf_path": str(cfg.paths.spectra_path),
+        "format_version": "lightweight",
+    }
+    with open(output_file, "wb") as file:
+        pickle.dump(dataset, file)
 
     # Load precomputed distances cache if configured
     precomputed_cache = {}
@@ -294,6 +265,20 @@ def preprocess(cfg: DictConfig) -> None:
     else:
         logger.info("No precomputed distances configured, computing all from scratch")
 
+    # Load HDF5 MCES cache if configured
+    hdf5_mces_cache = None
+    hdf5_mces_threshold = 10.0
+    hdf5_path = getattr(cfg.preprocessing, "hdf5_mces_cache_path", None)
+    if hdf5_path:
+        from simba.core.chemistry.mces.hdf5_mces_loader import HDF5MCESCache
+
+        logger.info(f"Loading HDF5 MCES cache from {hdf5_path} ...")
+        hdf5_mces_cache = HDF5MCESCache.load(hdf5_path)
+        hdf5_mces_threshold = float(
+            getattr(cfg.preprocessing, "hdf5_mces_threshold", 10.0)
+        )
+        logger.info(f"HDF5 MCES cache loaded, using values ≤ {hdf5_mces_threshold}")
+
     # Compute distances for each partition
     molecule_pairs = {}
     for type_data, spectra in [
@@ -313,6 +298,8 @@ def preprocess(cfg: DictConfig) -> None:
             num_nodes=cfg.preprocessing.num_nodes,
             precomputed_cache=precomputed_cache if len(precomputed_cache) > 0 else None,
             threshold_mces=cfg.model.tasks.mces.threshold,
+            hdf5_mces_cache=hdf5_mces_cache,
+            hdf5_mces_threshold=hdf5_mces_threshold,
         )
 
         # Log statistics about the computed pairs
@@ -471,20 +458,5 @@ def preprocess(cfg: DictConfig) -> None:
                 logger.info(
                     f"  Combined {partition} partition identifier '{identifier}': {all_distance_data.shape[0]} pairs"
                 )
-
-    # Save/update mapping file (final save for full format, update for lightweight)
-    output_file = workspace / cfg.paths.preprocessing_pickle_file
-    use_lightweight_format = getattr(cfg.preprocessing, "use_lightweight_format", False)
-    if not use_lightweight_format:
-        logger.info(f"Saving mapping to {output_file}...")
-        write_data(
-            file_path=str(output_file),
-            molecule_pairs_train=molecule_pairs["_train"],
-            molecule_pairs_val=molecule_pairs["_val"],
-            molecule_pairs_test=molecule_pairs["_test"],
-            uniformed_molecule_pairs_test=None,
-            use_lightweight_format=use_lightweight_format,
-            mgf_path=cfg.paths.spectra_path,
-        )
 
     logger.info("✅ Preprocessing completed successfully!")

@@ -33,6 +33,7 @@ class SpectrumExt(MsmsSpectrum):
         inchi_key: str = None,
         spectrum_hash: str = None,
         mgf_index: int = None,
+        fold: str = None,
     ):
 
         super().__init__(
@@ -69,6 +70,7 @@ class SpectrumExt(MsmsSpectrum):
         self.inchi_key = inchi_key
         self.spectrum_hash = spectrum_hash
         self.mgf_index = mgf_index  # Original index in MGF file before filtering
+        self.fold = fold  # Predefined split label (e.g. "train"/"val"/"test")
 
     def set_params(self, params):
         self.params = params
@@ -100,6 +102,7 @@ class SpectrumExt(MsmsSpectrum):
                 "inchi_key": self.inchi_key,
                 "spectrum_hash": self.spectrum_hash,
                 "mgf_index": self.mgf_index,
+                "fold": self.fold,
             }
         )
         return state
@@ -150,6 +153,8 @@ class SpectrumExt(MsmsSpectrum):
             self.mgf_index = state["mgf_index"]
         except:
             self.mgf_index = None
+
+        self.fold = state.get("fold", None)
 
     def set_spectrum_vector(self, spectrum_vector):
         self.spectrum_vector = spectrum_vector

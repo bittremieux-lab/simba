@@ -258,16 +258,21 @@ SIMBA supports training custom models using your own MS/MS datasets in `.mgf` fo
 
 Preprocess your MS/MS spectral data:
 
+The input `.mgf` file must contain a `smiles=` field in each spectrum header. Spectra missing a valid SMILES are skipped automatically.
+
 ```bash
 simba preprocess \
   paths.spectra_path=/path/to/your/spectra.mgf \
   paths.preprocessing_dir=/path/to/preprocessed_data \
-  preprocessing.max_spectra_train=10000
+  paths.preprocessing_pickle_file=/path/to/preprocessed_data/mapping.pkl \
+  preprocessing.max_spectra_train=10000 \
+  preprocessing.num_workers=8
 ```
 
 **Common Parameters:**
-* `paths.spectra_path`: Path to input spectra file (.mgf format) - **REQUIRED**
+* `paths.spectra_path`: Path to input spectra file (.mgf with `smiles=` headers) - **REQUIRED**
 * `paths.preprocessing_dir`: Directory where preprocessed data will be saved - **REQUIRED**
+* `paths.preprocessing_pickle_file`: Output pickle file path - **REQUIRED**
 * `preprocessing.max_spectra_train`: Maximum number of spectra to process for training (default: 1000)
 * `preprocessing.max_spectra_val`: Maximum number of spectra for validation (default: 1000)
 * `preprocessing.max_spectra_test`: Maximum number of spectra for testing (default: 1000)
@@ -277,6 +282,8 @@ simba preprocess \
 * `preprocessing.test_buckets`: Bucket numbers assigned to test (default: [9], ~10%)
 * `preprocessing.overwrite`: Overwrite existing preprocessing files (default: false)
 * `preprocessing.num_workers`: Number of worker processes for parallel computation (default: 0)
+* `preprocessing.hdf5_mces_cache_path`: Path to an HDF5 file with precomputed MCES values (optional); matching pairs skip ILP
+* `preprocessing.hdf5_mces_threshold`: Only use cached MCES values ≤ this threshold (default: 10.0)
 
 **Multi-Node Preprocessing:**
 
@@ -390,27 +397,28 @@ simba preprocess \
 
 ---
 
-**What preprocessing computes:**
-- Edit distance between molecular structures
-- MCES (Maximum Common Edge Substructure) distance
-- Train/validation/test splits
-- A pickle file `mapping_unique_smiles.pkl` with mapping information between unique compounds and corresponding spectra
-
 ### Output
-- Numpy arrays with indexes and structural similarity metrics
-- Pickle file (`mapping_unique_smiles.pkl`) mapping spectra indexes to SMILES structures
 
-### Accessing Data Mapping
+Preprocessing produces:
+
+- **`.npy` files** — pairwise distances between unique molecules, one set per split:
+  - `edit_distance_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, edit_distance)`
+  - `mces_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, mces_distance)`
+  - `ed_mces_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, ed, mces)` combined
+  - Indices are row numbers in the unique-SMILES table: multiple spectra with the same SMILES map to one index. Distance `666` = trivially dissimilar pair (Tanimoto < 0.2 or > 40 heavy atoms); `NaN` = ILP timed out.
+
+- **`mapping.pkl`** (or the filename you set) — a dict with keys `molecule_pairs_train`, `molecule_pairs_val`, `molecule_pairs_test`:
+
 ```python
 import pickle
 
-with open('/path/to/output_dir/mapping_unique_smiles.pkl', 'rb') as f:
+with open('/path/to/preprocessed_data/mapping.pkl', 'rb') as f:
     data = pickle.load(f)
 
 mol_train = data['molecule_pairs_train']
-print(mol_train.df_smiles)
+print(mol_train.df_smiles)       # DataFrame: unique SMILES → original spectrum indices
+print(mol_train.unique_spectra)  # list of Spectrum objects, one per unique molecule
 ```
-The dataframe df_smiles contains the mapping from indexes of unique compounds to the original spectra loaded.
 
 ### Step 2: Model Training
 

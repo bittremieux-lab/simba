@@ -664,6 +664,24 @@ class SimilarityModelMultitask(SimilarityModel):
             #    torch.log(sigma2))
         else:
             loss = loss1 + (weight_loss2 * loss2)
+
+        self.log("loss_ed", loss1, on_step=True, on_epoch=True, prog_bar=False)
+        self.log("loss_mces", loss2, on_step=True, on_epoch=True, prog_bar=False)
+        if self.USE_LEARNABLE_MULTITASK:
+            self.log(
+                "log_sigma1",
+                self.log_sigma1,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+            )
+            self.log(
+                "log_sigma2",
+                self.log_sigma2,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+            )
         return loss
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
@@ -686,6 +704,26 @@ class SimilarityModelMultitask(SimilarityModel):
             target_matrix[i, : target[i] + 1] = 1.0
         loss = -torch.sum(target_matrix * F.log_softmax(pred, dim=1), dim=1).mean()
         return loss
+
+    def validation_step(self, batch, batch_idx):
+        """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
+        logits_list = self(batch)
+        logits1 = logits_list[0]  # [B, n_classes]
+        logits2 = logits_list[1]  # [B] cosine similarity
+
+        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
+        target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
+
+        loss = self.step(batch, batch_idx)
+        self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        return {
+            "loss": loss,
+            "ed_pred": torch.argmax(logits1, dim=1).cpu(),
+            "ed_target": target1.cpu(),
+            "mces_pred": logits2.view(-1).cpu(),
+            "mces_target": target2.cpu(),
+        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)

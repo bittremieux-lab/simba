@@ -1,8 +1,5 @@
 # Preprocessing configuration
 
-# Storage format options
-use_lightweight_format: false
-
 # Preprocessing batch processing
 batch_size: 1000
 num_workers: 60
@@ -34,6 +31,12 @@ precomputed_distances:
   # - "./test_precomputed_cache/dataset1/"
   # - "./ms2_preprocessing/"
   # - "./ms3_preprocessing/"
+
+# HDF5 MCES cache - precomputed MCES from an external HDF5 file (e.g. MassSpecGym)
+# Only pairs with MCES <= hdf5_mces_threshold are taken from the cache;
+# all others are computed as usual.
+hdf5_mces_cache_path: null  # Path to HDF5 file with 'mces' and 'mces_smiles_order' datasets
+hdf5_mces_threshold: 10.0
 
 # Subsampling
 subsample_preprocessing: false
