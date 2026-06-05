@@ -132,6 +132,7 @@ class SimilarityModel(pl.LightningModule):
             kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
             kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
+
         if self.use_ion_method:
             kwargs_0["ion_method"] = batch["ion_method_0"].float()
             kwargs_1["ion_method"] = batch["ion_method_1"].float()
@@ -811,6 +812,7 @@ class EmbeddingExtractor(pl.LightningModule):
             kwargs["ion_activation"] = batch["ion_activation"].float()
         if "ion_method" in batch:
             kwargs["ion_method"] = batch["ion_method"].float()
+
 
         emb, _ = self.model(
             mz_array=batch["mz"].float(),

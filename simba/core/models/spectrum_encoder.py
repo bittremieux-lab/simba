@@ -30,7 +30,11 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ion_method: bool
             Whether to include ionization method in the encoding (default: False).
         """
-        self.use_encoders=True
+        self.use_metadata = use_adduct or use_ce or use_ion_activation or use_ion_method or use_ion_mode
+        if self.use_metadata:
+            self.use_encoders=True
+        else:
+            self.use_encoders=False
         super().__init__(*args, **kwargs)
         self.use_adduct = use_adduct
         self.use_ce = use_ce
@@ -193,6 +197,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
             im = torch.nan_to_num(im, nan=0.0, posinf=0.0, neginf=0.0)
             features.append(im)
+        
 
         metadata_input = torch.cat(features, dim=1)  # (batch_size, total_metadata_dim)
         metadata_input = metadata_input.to(dtype)
