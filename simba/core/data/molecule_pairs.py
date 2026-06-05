@@ -370,9 +370,9 @@ class MoleculePairsOpt(MolecularPairsSet):
         return molecule_pair
 
     def get_original_spectrum_from_unique_index(self, unique_index, pair):
-        return self.original_spectra[
-            self.get_original_index_from_unique_index(unique_index, pair)
-        ]
+            return self.original_spectra[
+                self.get_original_index_from_unique_index(unique_index, pair)
+            ]
 
     def get_original_index_from_unique_index(self, index, pair):
         """
@@ -380,9 +380,9 @@ class MoleculePairsOpt(MolecularPairsSet):
         if pair=0, return the first index, else return the last index
         """
         if pair == 0:
-            return self.df_smiles.loc[index, "indexes"][0]
+            return self.df_smiles.loc[int(index), "indexes"][0]
         else:
-            return self.df_smiles.loc[index, "indexes"][-1]
+            return self.df_smiles.loc[int(index), "indexes"][-1]
 
     def get_spectrums_from_indexes(self, pair_index):
         # pair index refers if it is 0 or 1 in the pair
