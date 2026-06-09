@@ -2,7 +2,7 @@
 #SBATCH -J simba_train_scaffold_v2
 #SBATCH -p one_day
 #SBATCH --nodelist=asimov2
-#SBATCH --gpus=nvidia_h200_nvl_2g.35gb:1
+#SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=96G
@@ -32,7 +32,7 @@ uv run simba train \
   paths.preprocessing_pickle_file=mapping.pkl \
   paths.checkpoint_dir="$CHECKPOINT_DIR" \
   training.epochs=1000 \
-  training.batch_size=2048 \
+  training.batch_size=3072 \
   training.val_check_interval=1000 \
   training.limit_train_batches=10000 \
   training.limit_val_batches=500 \

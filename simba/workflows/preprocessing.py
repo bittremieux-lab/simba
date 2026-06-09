@@ -295,7 +295,9 @@ def preprocess(cfg: DictConfig) -> None:
         ("_test", all_spectra_test),
     ]:
         split_name = type_data[1:]
-        done_marker = workspace / f".{split_name}_done"
+        done_marker = (
+            workspace / f".{split_name}_done_node{cfg.preprocessing.current_node}"
+        )
         if not cfg.preprocessing.overwrite and done_marker.exists():
             logger.info(
                 f"Skipping {split_name} set — already completed (marker: {done_marker.name})"
