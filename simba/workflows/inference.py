@@ -8,6 +8,7 @@ from pathlib import Path
 import dill
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error
@@ -30,6 +31,105 @@ sys.modules["simba.molecule_pairs_opt"] = simba.core.data.molecule_pairs
 sys.modules["simba.molecular_pairs"] = simba.core.data.molecule_pairs
 sys.modules["simba.spectrum"] = simba.core.data.spectrum
 sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
+
+
+def expand_pairs_by_source(molecule_pairs, pair_distances):
+    """Expand molecular pairs by source dataset.
+
+    For each molecular pair (A, B), generates one sub-pair per (src_A, src_B) combination
+    where src_A is a dataset that molecule A has spectra in, and likewise for src_B.
+    One representative spectrum (the first one from that source) is used per (molecule, source).
+
+    If no spectra carry a dataset label (old MGF without DATASET= field), returns the
+    input unchanged with pair_metadata=None.
+
+    Returns:
+        (expanded_molecule_pairs, pair_metadata_df | None)
+        pair_metadata_df columns: smiles1, smiles2, source1, source2, mgf_index1, mgf_index2
+    """
+    original_spectra = molecule_pairs.original_spectra
+    df_smiles = molecule_pairs.df_smiles
+
+    # Check whether dataset labels are present
+    has_dataset = any(
+        getattr(original_spectra[idx], "dataset", None) is not None
+        for idxs in df_smiles["indexes"]
+        for idx in idxs[:1]  # sample first spectrum per molecule
+    )
+    if not has_dataset:
+        return molecule_pairs, None
+
+    # For each unique molecule, group original_spectra indexes by source dataset
+    # sources_for[unique_idx] = {source: [orig_idx, ...], ...}
+    sources_for = {}
+    for unique_idx in df_smiles.index:
+        groups = {}
+        for orig_idx in df_smiles.loc[unique_idx, "indexes"]:
+            src = getattr(original_spectra[orig_idx], "dataset", None) or "Unknown"
+            groups.setdefault(src, []).append(orig_idx)
+        sources_for[unique_idx] = groups
+
+    # Build expanded df_smiles: one virtual entry per (unique_molecule, source)
+    # virtual_idx_map[(original_unique_idx, source)] = new_virtual_idx
+    virtual_rows = []
+    virtual_idx_map = {}
+    for unique_idx in df_smiles.index:
+        row = df_smiles.loc[unique_idx]
+        for src, orig_idxs in sources_for[unique_idx].items():
+            v_idx = len(virtual_rows)
+            virtual_idx_map[(unique_idx, src)] = v_idx
+            virtual_rows.append(
+                {
+                    "canon_smiles": row["canon_smiles"],
+                    "indexes": [orig_idxs[0]],  # first spectrum from this source
+                    "number_indexes": 1,
+                    "source": src,
+                    "original_unique_idx": unique_idx,
+                }
+            )
+
+    expanded_df = pd.DataFrame(virtual_rows)
+    expanded_df.index = range(len(expanded_df))
+
+    # Expand pair_distances: for each original pair generate all source combos
+    expanded_pairs = []
+    metadata_rows = []
+    for row in pair_distances:
+        u_a, u_b = int(row[0]), int(row[1])
+        ed, mces = row[2], row[3]
+        smiles_a = df_smiles.loc[u_a, "canon_smiles"]
+        smiles_b = df_smiles.loc[u_b, "canon_smiles"]
+        for src_a, orig_idxs_a in sources_for[u_a].items():
+            for src_b, orig_idxs_b in sources_for[u_b].items():
+                v_a = virtual_idx_map[(u_a, src_a)]
+                v_b = virtual_idx_map[(u_b, src_b)]
+                expanded_pairs.append([v_a, v_b, ed, mces])
+                mgf_a = getattr(original_spectra[orig_idxs_a[0]], "mgf_index", None)
+                mgf_b = getattr(original_spectra[orig_idxs_b[0]], "mgf_index", None)
+                metadata_rows.append(
+                    {
+                        "smiles1": smiles_a,
+                        "smiles2": smiles_b,
+                        "source1": src_a,
+                        "source2": src_b,
+                        "mgf_index1": mgf_a,
+                        "mgf_index2": mgf_b,
+                    }
+                )
+
+    expanded_pairs_arr = np.array(expanded_pairs, dtype=pair_distances.dtype)
+    pair_metadata = pd.DataFrame(metadata_rows)
+
+    expanded_mp = copy.deepcopy(molecule_pairs)
+    expanded_mp.df_smiles = expanded_df
+    expanded_mp.pair_distances = expanded_pairs_arr[:, :3]
+    expanded_mp.extra_distances = expanded_pairs_arr[:, 3]
+
+    logger.info(
+        f"expand_pairs_by_source: {len(pair_distances):,} molecular pairs → "
+        f"{len(expanded_pairs_arr):,} spectrum-pair combinations"
+    )
+    return expanded_mp, pair_metadata
 
 
 def load_inference_data(cfg: DictConfig):
@@ -143,7 +243,13 @@ def load_inference_data(cfg: DictConfig):
     molecule_pairs_mces.pair_distances = pair_distances[:, [0, 1, 3]]
     molecule_pairs_mces.extra_distances = pair_distances[:, 3]
 
-    return molecule_pairs_ed, molecule_pairs_mces, pair_distances
+    # Expand by source dataset (no-op when DATASET= field is absent)
+    molecule_pairs_ed, pair_metadata = expand_pairs_by_source(
+        molecule_pairs_ed, pair_distances
+    )
+    molecule_pairs_mces, _ = expand_pairs_by_source(molecule_pairs_mces, pair_distances)
+
+    return molecule_pairs_ed, molecule_pairs_mces, pair_distances, pair_metadata
 
 
 def prepare_inference_dataloaders(
@@ -294,6 +400,7 @@ def evaluate_predictions(
     dataloader_ed,
     dataloader_mces,
     output_dir: str,
+    pair_metadata=None,
 ):
     """Evaluate predictions and generate visualizations.
 
@@ -395,6 +502,16 @@ def evaluate_predictions(
     # Plot performance
     _plot_performance(mces_true, pred_mces_mces_flat, cfg, output_dir)
 
+    # Save per-pair predictions CSV
+    if pair_metadata is not None:
+        df_out = pair_metadata.copy()
+    else:
+        df_out = pd.DataFrame()
+    df_out["pred_ed"] = pred_ed_ed_flat
+    df_out["pred_mces"] = pred_mces_mces_flat
+    df_out.to_csv(os.path.join(output_dir, "predictions.csv"), index=False)
+    logger.info(f"Saved {len(df_out):,} predictions to {output_dir}/predictions.csv")
+
     return {
         "ed_correlation": corr_model_ed,
         "mces_correlation": corr_model_mces,
@@ -430,7 +547,7 @@ def inference(cfg: DictConfig) -> dict:
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Load data
-    molecule_pairs_ed, molecule_pairs_mces, _ = load_inference_data(cfg)
+    molecule_pairs_ed, molecule_pairs_mces, _, pair_metadata = load_inference_data(cfg)
 
     # Prepare dataloaders
     dataloader_ed, dataloader_mces = prepare_inference_dataloaders(
@@ -445,7 +562,13 @@ def inference(cfg: DictConfig) -> dict:
 
     # Evaluate
     metrics = evaluate_predictions(
-        cfg, pred_ed, pred_mces, dataloader_ed, dataloader_mces, output_dir
+        cfg,
+        pred_ed,
+        pred_mces,
+        dataloader_ed,
+        dataloader_mces,
+        output_dir,
+        pair_metadata,
     )
 
     logger.info(f"Results saved to: {output_dir}")

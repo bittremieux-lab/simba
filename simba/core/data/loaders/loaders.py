@@ -110,6 +110,9 @@ class LoadData:
                     if spec is not None:
                         # Assign the original MGF index before filtering
                         spec.mgf_index = mgf_index
+                        spec.dataset = spec.params.get("dataset") or spec.params.get(
+                            "DATASET"
+                        )
                         spectra_yielded += 1
                         yield spec
                 else:
@@ -156,8 +159,12 @@ class LoadData:
                         condition_fails["inchi_smiles"] += 1
 
                 # Log conditions causing most failures
-                logger.info("Validation condition failures (spectra rejected for each condition):")
-                for condition, count in sorted(condition_fails.items(), key=lambda x: x[1], reverse=True):
+                logger.info(
+                    "Validation condition failures (spectra rejected for each condition):"
+                )
+                for condition, count in sorted(
+                    condition_fails.items(), key=lambda x: x[1], reverse=True
+                ):
                     if count > 0:
                         pct = 100.0 * count / spectra_processed
                         logger.info(f"  {condition}: {count} spectra ({pct:.1f}%)")
@@ -579,8 +586,12 @@ class LoadData:
                 break
             # go to next iteration
 
-        logger.info(f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)")
-        unique_molecules = len(set(s.params["smiles"] for s in spectra if "smiles" in s.params))
+        logger.info(
+            f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)"
+        )
+        unique_molecules = len(
+            set(s.params["smiles"] for s in spectra if "smiles" in s.params)
+        )
         logger.info(f"Unique molecules in loaded spectra: {unique_molecules}")
         return spectra
 

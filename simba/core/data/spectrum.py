@@ -34,6 +34,7 @@ class SpectrumExt(MsmsSpectrum):
         spectrum_hash: str = None,
         mgf_index: int = None,
         fold: str = None,
+        dataset: str = None,
     ):
 
         super().__init__(
@@ -71,6 +72,9 @@ class SpectrumExt(MsmsSpectrum):
         self.spectrum_hash = spectrum_hash
         self.mgf_index = mgf_index  # Original index in MGF file before filtering
         self.fold = fold  # Predefined split label (e.g. "train"/"val"/"test")
+        self.dataset = (
+            dataset  # Source dataset name (e.g. "MassSpecGym"), None if not tagged
+        )
 
     def set_params(self, params):
         self.params = params
@@ -103,6 +107,7 @@ class SpectrumExt(MsmsSpectrum):
                 "spectrum_hash": self.spectrum_hash,
                 "mgf_index": self.mgf_index,
                 "fold": self.fold,
+                "dataset": self.dataset,
             }
         )
         return state
@@ -155,6 +160,7 @@ class SpectrumExt(MsmsSpectrum):
             self.mgf_index = None
 
         self.fold = state.get("fold", None)
+        self.dataset = state.get("dataset", None)
 
     def set_spectrum_vector(self, spectrum_vector):
         self.spectrum_vector = spectrum_vector
