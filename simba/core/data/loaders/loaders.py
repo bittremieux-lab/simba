@@ -458,7 +458,9 @@ class LoadData:
         else:
             adduct = None
 
-        ce = params.get("ce")
+        # Try common MGF key variants: COLLISION_ENERGY (MSG/MassSpecGym),
+        # COLLISION_ENERGY_1 (Spectraverse stepped CE), CE (legacy)
+        ce = params.get("collision_energy") or params.get("collision_energy_1") or params.get("ce")
         ia = params.get("ion_activation")
         im = params.get("ionization_method")
 
