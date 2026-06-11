@@ -1,8 +1,7 @@
 import torch
-import torch.nn as nn
 from depthcharge.encoders import FloatEncoder
 from depthcharge.transformers import SpectrumTransformerEncoder
-from metabo_depthcharge.spec.adducts import N_ADDUCTS
+from metabo_depthcharge.encoders.spectra import MetadataEncoder
 
 
 class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
@@ -24,9 +23,10 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_adduct: bool
             Whether to include adduct information in the encoding (default: False).
             Adduct is encoded as a categorical index using the metabo-depthcharge
-            vocabulary via nn.Embedding.
+            vocabulary via MetadataEncoder.
         use_ce: bool
             Whether to include collision energy in the encoding (default: False).
+            CE=0 is treated as missing and masked to zero (no bias leakage).
         use_ion_activation: bool
             Whether to include ion activation information in the encoding (default: False).
         use_ion_method: bool
@@ -41,11 +41,16 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         self.use_ion_method = use_ion_method
         self.use_ion_mode = use_ion_mode
 
+        metadata_fields = []
         if use_adduct:
-            # Categorical embedding; index 0 = unknown, padding_idx=0 → zero vector
-            self.adduct_embedding = nn.Embedding(N_ADDUCTS, self.d_model, padding_idx=0)
+            metadata_fields.append("adduct")
         if use_ce:
-            self.ce_encoder = FloatEncoder(self.d_model)
+            metadata_fields.append("collision_energy")
+        if metadata_fields:
+            self.metadata_encoder = MetadataEncoder(self.d_model, metadata_fields)
+        else:
+            self.metadata_encoder = None
+
         if use_ion_activation:
             self.ion_activation_encoder = FloatEncoder(self.d_model)
         if use_ion_method:
@@ -76,13 +81,13 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         if self.use_ion_mode:
             placeholder[:, 2] = ionmode
 
-        if self.use_adduct:
-            adduct_idx = kwargs["adduct"].long().to(device).view(batch_size)
-            placeholder = placeholder + self.adduct_embedding(adduct_idx)
-
-        if self.use_ce:
-            ce = kwargs["ce"].float().to(device).view(batch_size)
-            placeholder = placeholder + self.ce_encoder(ce[:, None]).squeeze(1)
+        if self.metadata_encoder is not None:
+            metadata = {}
+            if self.use_adduct:
+                metadata["adduct"] = kwargs["adduct"].long().to(device).view(batch_size)
+            if self.use_ce:
+                metadata["collision_energy"] = kwargs["ce"].float().to(device).view(batch_size)
+            placeholder = placeholder + self.metadata_encoder(metadata)
 
         if self.use_ion_activation:
             ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
