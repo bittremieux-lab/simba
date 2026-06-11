@@ -1,8 +1,8 @@
 import copy
 
 import numpy as np
+from metabo_depthcharge.spec.adducts import encode_adduct
 
-from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
 from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.datasets.multitask_dataset import (
     CustomDatasetMultitasking,
@@ -10,7 +10,6 @@ from simba.core.data.datasets.multitask_dataset import (
 from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
-    encode_adduct_mass,
     encode_ion_activation,
     encode_ionization_method,
 )
@@ -103,11 +102,8 @@ class MultitaskDataBuilder:
             (len(molecule_pairs.original_spectra), 1), dtype=np.float32
         )
         adduct = np.zeros(
-            (
-                len(molecule_pairs.original_spectra),
-                len(ADDUCT_TO_MASS.keys()),
-            ),
-            dtype=np.float32,
+            len(molecule_pairs.original_spectra),
+            dtype=np.int64,
         )
         ce = np.zeros(
             (len(molecule_pairs.original_spectra), 1), dtype=np.int32
@@ -147,7 +143,7 @@ class MultitaskDataBuilder:
                 else:
                     ionmode[i] = 1.0 if spec.ionmode == "positive" else -1.0
             if use_adduct:
-                adduct[i] = encode_adduct_mass(spec.params["adduct"])
+                adduct[i] = encode_adduct(spec.adduct or "")
 
             if use_ce:
                 if (spec.ce is None) or (spec.ce == "None"):

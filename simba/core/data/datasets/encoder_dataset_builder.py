@@ -1,19 +1,16 @@
 import copy
 
 import numpy as np
+from metabo_depthcharge.spec.adducts import encode_adduct
 
 from simba.core.data.datasets.encoder_dataset import CustomDatasetEncoder
-from simba.core.data.preprocessor import Preprocessor
-from simba.core.chemistry.chem_utils import (
-    ADDUCT_TO_MASS,
-)
 from simba.core.data.encoding import (
-    IONIZATION_METHODS,
     ION_ACTIVATION,
-    encode_adduct_mass,
-    encode_ionization_method,
+    IONIZATION_METHODS,
     encode_ion_activation,
+    encode_ionization_method,
 )
+from simba.core.data.preprocessor import Preprocessor
 
 
 def prepare_encoder_dataset(spectra, max_num_peaks=100):
@@ -37,10 +34,10 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
     intensity = np.zeros((len(spectra), max_num_peaks), dtype=np.float32)
     precursor_mass = np.zeros((len(spectra), 1), dtype=np.float32)
     precursor_charge = np.zeros((len(spectra), 1), dtype=np.int32)
-    
+
     # Metadata fields (initialized with default values)
     ionmode = np.zeros((len(spectra), 1), dtype=np.float32)
-    adduct = np.zeros((len(spectra), len(ADDUCT_TO_MASS.keys())), dtype=np.float32)
+    adduct = np.zeros(len(spectra), dtype=np.int64)
     ce = np.zeros((len(spectra), 1), dtype=np.int32)
     ia = np.zeros((len(spectra), len(ION_ACTIVATION)), dtype=np.int32)
     im = np.zeros((len(spectra), len(IONIZATION_METHODS)), dtype=np.int32)
@@ -57,32 +54,30 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
 
         precursor_mass[i] = spectrum.precursor_mz
         precursor_charge[i] = spectrum.precursor_charge
-        
+
         # Extract metadata if available
         # Ion mode
         if hasattr(spectrum, 'ionmode') and spectrum.ionmode is not None and spectrum.ionmode != "None":
             ionmode[i] = 1.0 if spectrum.ionmode.lower() == "positive" else -1.0
         else:
             ionmode[i] = 0.0
-        
-        # Adduct
-        if hasattr(spectrum, 'params') and 'adduct' in spectrum.params:
-            adduct[i] = encode_adduct_mass(spectrum.params['adduct'])
-        elif hasattr(spectrum, 'adduct') and spectrum.adduct is not None:
-            adduct[i] = encode_adduct_mass(spectrum.adduct)
-        
+
+        # Adduct — categorical index using metabo-depthcharge vocabulary
+        adduct_str = getattr(spectrum, "adduct", None) or ""
+        adduct[i] = encode_adduct(adduct_str)
+
         # Collision Energy
         if hasattr(spectrum, 'ce') and spectrum.ce is not None and spectrum.ce != "None":
             ce[i] = spectrum.ce
         else:
             ce[i] = 0
-        
+
         # Ion Activation
         if hasattr(spectrum, 'ion_activation') and spectrum.ion_activation is not None and spectrum.ion_activation != "None":
             ia[i] = encode_ion_activation(spectrum.ion_activation)
         else:
             ia[i] = np.zeros(len(ION_ACTIVATION), dtype=np.int32)
-        
+
         # Ionization Method
         if hasattr(spectrum, 'ionization_method') and spectrum.ionization_method is not None and spectrum.ionization_method != "None":
             im[i] = encode_ionization_method(spectrum.ionization_method)

@@ -120,8 +120,8 @@ class SimilarityModel(pl.LightningModule):
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct"] = batch["adduct_0"].float()
-            kwargs_1["adduct"] = batch["adduct_1"].float()
+            kwargs_0["adduct"] = batch["adduct_0"].long()
+            kwargs_1["adduct"] = batch["adduct_1"].long()
 
         if self.use_ce:
             logger.info("Using CE in the model")
@@ -474,15 +474,8 @@ class SimilarityModelMultitask(SimilarityModel):
         )
         kwargs_0["ionmode"] = batch["ionmode_0"].float()
         kwargs_1["ionmode"] = batch["ionmode_1"].float()
-        batch["adduct_0"] = torch.nan_to_num(
-            batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["adduct_1"] = torch.nan_to_num(
-            batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-
-        kwargs_0["adduct"] = batch["adduct_0"].float()
-        kwargs_1["adduct"] = batch["adduct_1"].float()
+        kwargs_0["adduct"] = batch["adduct_0"].long()
+        kwargs_1["adduct"] = batch["adduct_1"].long()
 
         batch["ce_0"] = torch.nan_to_num(batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0)
         batch["ce_1"] = torch.nan_to_num(batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0)
@@ -828,7 +821,7 @@ class EmbeddingExtractor(pl.LightningModule):
         if "ionmode" in batch:
             kwargs["ionmode"] = batch["ionmode"].float()
         if "adduct" in batch:
-            kwargs["adduct"] = batch["adduct"].float()
+            kwargs["adduct"] = batch["adduct"].long()
         if "ce" in batch:
             kwargs["ce"] = batch["ce"].float()
         if "ion_activation" in batch:
