@@ -6,7 +6,6 @@ import numpy as np
 from pyteomics import mgf
 from tqdm import tqdm
 
-from simba.core.chemistry import chem_utils
 from simba.core.chemistry.scaffolds import MurckoScaffold
 from simba.core.data.loaders.nist_loader import NistLoader
 from simba.core.data.preprocessor import PreprocessingUtils
