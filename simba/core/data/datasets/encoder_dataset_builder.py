@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 from metabo_depthcharge.spec.adducts import encode_adduct
+from metabo_depthcharge.spec.metadata_parsers import encode_collision_energy
 
 from simba.core.data.datasets.encoder_dataset import CustomDatasetEncoder
 from simba.core.data.encoding import (
@@ -38,7 +39,7 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
     # Metadata fields (initialized with default values)
     ionmode = np.zeros((len(spectra), 1), dtype=np.float32)
     adduct = np.zeros(len(spectra), dtype=np.int64)
-    ce = np.zeros((len(spectra), 1), dtype=np.int32)
+    ce = np.zeros((len(spectra), 1), dtype=np.float32)
     ia = np.zeros((len(spectra), len(ION_ACTIVATION)), dtype=np.int32)
     im = np.zeros((len(spectra), len(IONIZATION_METHODS)), dtype=np.int32)
 
@@ -67,10 +68,7 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
         adduct[i] = encode_adduct(adduct_str)
 
         # Collision Energy
-        if hasattr(spectrum, 'ce') and spectrum.ce is not None and spectrum.ce != "None":
-            ce[i] = spectrum.ce
-        else:
-            ce[i] = 0
+        ce[i] = encode_collision_energy(getattr(spectrum, "ce", None))
 
         # Ion Activation
         if hasattr(spectrum, 'ion_activation') and spectrum.ion_activation is not None and spectrum.ion_activation != "None":

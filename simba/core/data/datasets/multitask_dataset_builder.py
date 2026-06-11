@@ -2,6 +2,7 @@ import copy
 
 import numpy as np
 from metabo_depthcharge.spec.adducts import encode_adduct
+from metabo_depthcharge.spec.metadata_parsers import encode_collision_energy
 
 from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.datasets.multitask_dataset import (
@@ -106,7 +107,7 @@ class MultitaskDataBuilder:
             dtype=np.int64,
         )
         ce = np.zeros(
-            (len(molecule_pairs.original_spectra), 1), dtype=np.int32
+            (len(molecule_pairs.original_spectra), 1), dtype=np.float32
         )
         ia = np.zeros(
             (
@@ -146,10 +147,7 @@ class MultitaskDataBuilder:
                 adduct[i] = encode_adduct(spec.adduct or "")
 
             if use_ce:
-                if (spec.ce is None) or (spec.ce == "None"):
-                    ce[i] = 0  # TODO: array dtype -> int
-                else:
-                    ce[i] = spec.ce
+                ce[i] = encode_collision_energy(spec.ce)
 
             if use_ion_activation:
                 if (spec.ion_activation is None) or (spec.ion_activation == "None"):
