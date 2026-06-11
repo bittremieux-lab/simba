@@ -62,7 +62,7 @@ class PreprocessingUtils:
         spectra_by_charge = PreprocessingUtils.order_by_charge(spectra)
 
         all_spectra = []
-        for charge, spectra_group in spectra_by_charge.items():
+        for _charge, spectra_group in spectra_by_charge.items():
             # order by mz
             mzs = np.array([s.precursor_mz for s in spectra_group])
             ordered_indexes = np.argsort(mzs)
@@ -71,12 +71,14 @@ class PreprocessingUtils:
 
         return all_spectra
 
+    @staticmethod
     def _smiles_to_mol(smiles):
         try:
             return Chem.MolFromSmiles(smiles)
-        except ArgumentError:
+        except Exception:
             return None
 
+    @staticmethod
     @functools.lru_cache
     def get_class(inchi: str, smiles: str) -> tuple[str | None, str | None, str | None]:
         """
@@ -110,6 +112,7 @@ class PreprocessingUtils:
             )
         return clss if clss is not None else (None, None, None)
 
+    @staticmethod
     @functools.lru_cache
     def _get_class(mol_type: str, mol_val: str) -> tuple[str, str, str] | None:
         """

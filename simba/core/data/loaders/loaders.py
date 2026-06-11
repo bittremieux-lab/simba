@@ -15,6 +15,7 @@ from simba.utils.logger_setup import logger
 
 
 class LoadData:
+    @staticmethod
     def get_spectra(
         source: IO | str,
         scan_nrs: Sequence[int] = None,
@@ -62,8 +63,7 @@ class LoadData:
             else:
 
                 def spectrum_it():
-                    for scan_nr, spectrum_dict in enumerate(f_in):
-                        yield scan_nr, spectrum_dict
+                    yield from enumerate(f_in)
 
             total_results = []
             spectra_processed = 0
@@ -312,7 +312,7 @@ class LoadData:
         """
         spectrum_name = spectrum["params"].get("name", "UNKNOWN")
 
-        if "libraryquality" in spectrum["params"].keys():
+        if "libraryquality" in spectrum["params"]:
             cond_library = int(spectrum["params"]["libraryquality"]) <= 3
         else:
             cond_library = True
@@ -326,7 +326,7 @@ class LoadData:
         # try to convert to float the pep mass
         try:
             cond_pepmass = float(spectrum["params"]["pepmass"][0]) > 0
-        except:
+        except Exception:
             cond_pepmass = False
 
         cond_mz_array = len(spectrum["m/z array"]) >= cfg.data.preprocessing.min_n_peaks
@@ -395,6 +395,7 @@ class LoadData:
 
         return total_condition, dict_results
 
+    @staticmethod
     def _parse_spectrum(
         spectrum_dict: dict,
         compute_classes: bool = False,
@@ -438,7 +439,7 @@ class LoadData:
 
         library = library
         inchi = inchi
-        smiles = params["smiles"] if "smiles" in params else ""
+        smiles = params.get("smiles", "")
 
         precursor_mz = LoadData.get_precursor_mz(spectrum_dict)
         if precursor_mz is None:
@@ -457,11 +458,11 @@ class LoadData:
         else:
             adduct = None
 
-        ce = params["ce"] if "ce" in params else None
-        ia = params["ion_activation"] if "ion_activation" in params else None
-        im = params["ionization_method"] if "ionization_method" in params else None
+        ce = params.get("ce")
+        ia = params.get("ion_activation")
+        im = params.get("ionization_method")
 
-        inchi_key = params["inchikey"] if "inchikey" in params else None
+        inchi_key = params.get("inchikey")
 
         # compute hash id value
         spectrum_hash_result = spectrum_hash(
@@ -514,6 +515,7 @@ class LoadData:
 
         return spec
 
+    @staticmethod
     def get_all_spectra_mgf(
         file: IO | str,
         num_samples: int = -1,
@@ -579,10 +581,11 @@ class LoadData:
             # go to next iteration
 
         logger.info(f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)")
-        unique_molecules = len(set(s.params["smiles"] for s in spectra if "smiles" in s.params))
+        unique_molecules = len({s.params["smiles"] for s in spectra if "smiles" in s.params})
         logger.info(f"Unique molecules in loaded spectra: {unique_molecules}")
         return spectra
 
+    @staticmethod
     def get_all_spectra_nist(
         file,
         num_samples=10,
@@ -639,6 +642,7 @@ class LoadData:
 
         return all_spectra, current_line_number
 
+    @staticmethod
     def get_all_spectra_casmi(
         file,
         num_samples=10,
@@ -652,7 +656,7 @@ class LoadData:
             spectra_df = pickle.load(f)
         all_spectra_parsed = []
 
-        for index, spectra_row in spectra_df.iterrows():
+        for _index, spectra_row in spectra_df.iterrows():
             # initialize
             spectrum_dict = {}
             spectrum_dict["params"] = {}
@@ -704,6 +708,7 @@ class LoadData:
 
         return all_spectra
 
+    @staticmethod
     def get_all_spectra(
         file: IO | str,
         num_samples: int = 10,
