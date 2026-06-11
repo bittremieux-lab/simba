@@ -60,7 +60,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             ):
                 self.precursor_mz_encoder = FloatEncoder(self.d_model)
 
-    def precursor_hook(
+    def global_token_hook(
         self,
         mz_array: torch.Tensor,
         intensity_array: torch.Tensor,
