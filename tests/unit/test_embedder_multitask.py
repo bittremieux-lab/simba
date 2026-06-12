@@ -101,7 +101,6 @@ class TestEmbedderMultitask:
     def sample_batch(self):
         batch_size = 2
         n_peaks = 10
-        n_adducts = 48  # Length of ADDUCT_TO_MASS dictionary
 
         return {
             "mz_0": torch.randn(batch_size, n_peaks),
@@ -112,8 +111,8 @@ class TestEmbedderMultitask:
             "precursor_charge_0": torch.ones(batch_size, 1),
             "precursor_mass_1": torch.randn(batch_size, 1),
             "precursor_charge_1": torch.ones(batch_size, 1),
-            "adduct_0": torch.zeros(batch_size, n_adducts),  # One-hot encoded
-            "adduct_1": torch.zeros(batch_size, n_adducts),  # One-hot encoded
+            "adduct_0": torch.zeros(batch_size, dtype=torch.int64),  # Integer index
+            "adduct_1": torch.zeros(batch_size, dtype=torch.int64),  # Integer index
             "ionmode_0": torch.ones(batch_size, 1),
             "ionmode_1": torch.ones(batch_size, 1),
             "ce_0": torch.ones(batch_size, 1) * 30.0,

@@ -4,12 +4,11 @@ import numpy as np
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+from simba.core.data.augmentation import Augmentation
 from simba.core.data.encoding import (
     ION_ACTIVATION,
     IONIZATION_METHODS,
 )
-from simba.core.data.augmentation import Augmentation
 
 
 class CustomDatasetMultitasking(Dataset):
@@ -109,12 +108,8 @@ class CustomDatasetMultitasking(Dataset):
         if self.use_adduct:
             dictionary["ionmode_0"] = np.zeros((len_data, 1), dtype=np.float32)
             dictionary["ionmode_1"] = np.zeros((len_data, 1), dtype=np.float32)
-            dictionary["adduct_0"] = np.zeros(
-                (len_data, len(ADDUCT_TO_MASS.keys())), dtype=np.float32
-            )
-            dictionary["adduct_1"] = np.zeros(
-                (len_data, len(ADDUCT_TO_MASS.keys())), dtype=np.float32
-            )
+            dictionary["adduct_0"] = np.zeros(len_data, dtype=np.int64)
+            dictionary["adduct_1"] = np.zeros(len_data, dtype=np.int64)
 
         if self.use_ce:
             dictionary["ce_0"] = np.zeros((len_data, 1), dtype=np.float32)
@@ -192,12 +187,8 @@ class CustomDatasetMultitasking(Dataset):
                     indexes_original_1
                 ].astype(np.float32)
             if self.use_adduct:
-                dictionary["adduct_0"][idx] = self.adduct_mass[
-                    indexes_original_0
-                ].astype(np.float32)
-                dictionary["adduct_1"][idx] = self.adduct_mass[
-                    indexes_original_1
-                ].astype(np.float32)
+                dictionary["adduct_0"][idx] = self.adduct_mass[indexes_original_0]
+                dictionary["adduct_1"][idx] = self.adduct_mass[indexes_original_1]
 
             if self.use_ce:
                 dictionary["ce_0"][idx] = self.ce[indexes_original_0].astype(
@@ -309,19 +300,11 @@ class CustomDatasetMultitasking(Dataset):
             ].astype(np.float32)
 
         if self.use_adduct:
-            spectrum_sample["adduct_0"] = self.adduct_mass[
-                idx_0_original
-            ].astype(np.float32)
-            spectrum_sample["adduct_1"] = self.adduct_mass[
-                idx_1_original
-            ].astype(np.float32)
+            spectrum_sample["adduct_0"] = self.adduct_mass[idx_0_original]
+            spectrum_sample["adduct_1"] = self.adduct_mass[idx_1_original]
         else:
-            spectrum_sample["adduct_0"] = 0 * self.adduct_mass[
-                idx_0_original
-            ].astype(np.float32)
-            spectrum_sample["adduct_1"] = 0 * self.adduct_mass[
-                idx_1_original
-            ].astype(np.float32)
+            spectrum_sample["adduct_0"] = np.int64(0)
+            spectrum_sample["adduct_1"] = np.int64(0)
         if self.use_ce:
             spectrum_sample["ce_0"] = self.ce[idx_0_original].astype(
                 np.float32

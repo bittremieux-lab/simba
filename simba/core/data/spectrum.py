@@ -5,9 +5,7 @@ from spectrum_utils.spectrum import MsmsSpectrum
 
 
 class SpectrumExt(MsmsSpectrum):
-    """'
-    extended spectrum class that incorporates the binned vector
-    """
+    """Extended spectrum class with MS/MS metadata fields."""
 
     def __init__(
         self,
@@ -48,12 +46,8 @@ class SpectrumExt(MsmsSpectrum):
 
         # extra variables
         self.params = params
-        self.mz_array = None
-        self.intensity_array = None
         self.retention_time = retention_time
-        self.spectrum_vector = ""
         self.smiles = smiles
-        self.max_peak = ""
         self.library = library
         self.inchi = inchi
         self.ionmode = ionmode
@@ -81,16 +75,12 @@ class SpectrumExt(MsmsSpectrum):
 
     def __getstate__(self):
         # Get the state of the base class
-        state = super(SpectrumExt, self).__getstate__()
+        state = super().__getstate__()
         # Add state for the derived class
         state.update(
             {
                 "params": self.params,
-                "intensity_array": self.intensity_array,
-                "mz_array": self.mz_array,
-                "spectrum_vector": self.spectrum_vector,
                 "smiles": self.smiles,
-                "max_peak": self.max_peak,
                 "library": self.library,
                 "inchi": self.inchi,
                 "ionmode": self.ionmode,
@@ -118,15 +108,11 @@ class SpectrumExt(MsmsSpectrum):
 
         # Restore derived class state
         self.params = state["params"]
-        self.intensity_array = state["intensity_array"]
-        self.mz_array = state["mz_array"]
-        self.spectrum_vector = state["spectrum_vector"]
         self.smiles = state["smiles"]
-        self.max_peak = state["max_peak"]
         self.library = state["library"]
         self.inchi = state["inchi"]
         self.ionmode = state["ionmode"]
-        self.adduct = state["adduct"] if "adduct" in state.keys() else None
+        self.adduct = state.get("adduct")
         try:
             self.ce = state["ce"]
         except KeyError:
@@ -144,35 +130,15 @@ class SpectrumExt(MsmsSpectrum):
         self.classe = state["classe"]
         self.subclass = state["subclass"]
         self.murcko_scaffold = state["murcko_scaffold"]
-        try:  # in other versions, the inchi key is not present
-            self.inchi_key = state["inchi_key"]
-        except:
-            self.inchi_key = ""
-
-        try:
-            self.spectrum_hash = state["spectrum_hash"]
-        except:
-            self.spectrum_hash = None
-
-        try:
-            self.mgf_index = state["mgf_index"]
-        except:
-            self.mgf_index = None
+        self.inchi_key = state.get("inchi_key", "")
+        self.spectrum_hash = state.get("spectrum_hash")
+        self.mgf_index = state.get("mgf_index")
 
         self.fold = state.get("fold", None)
         self.dataset = state.get("dataset", None)
-
-    def set_spectrum_vector(self, spectrum_vector):
-        self.spectrum_vector = spectrum_vector
 
     def set_murcko_scaffold(self, murcko_scaffold):
         self.murcko_scaffold = murcko_scaffold
 
     def set_smiles(self, smiles):
         self.smiles = smiles
-
-    def set_max_peak(self, max_peak):
-        """
-        set the maximum amplitude in the spectrum
-        """
-        self.max_peak = max_peak

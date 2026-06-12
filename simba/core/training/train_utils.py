@@ -820,18 +820,6 @@ class TrainUtils:
             return uniform_molecule_pairs
 
     @staticmethod
-    def get_data_from_indexes(spectrums, indexes):
-        return [
-            (
-                spectrums[p[0]].spectrum_vector,
-                TrainUtils.get_global_variables(spectrums[p[0]]),
-                spectrums[p[1]].spectrum_vector,
-                TrainUtils.get_global_variables(spectrums[p[1]]),
-            )
-            for p in indexes
-        ]
-
-    @staticmethod
     def get_global_variables(spectrum):
         """
         get global variables from a spectrum such as precursor mass

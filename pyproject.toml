@@ -44,7 +44,7 @@ dependencies = [
     "matchms>=0.24.0",
     "spectrum-utils>=0.4.0",
     "pyteomics>=4.6.0",
-    "depthcharge-ms @ git+https://github.com/wfondrie/depthcharge.git@bd2861f",
+    "depthcharge-ms>=0.4.9",
     "myopic-mces>=1.0.0,<2.0.0",
     "highspy>=1.13.1",
     # Data processing
@@ -69,6 +69,7 @@ dependencies = [
     "hydra-optuna-sweeper>=1.2.0",
     "hydra-submitit-launcher>=1.2.0",
     "optuna>=2.10.1",
+    "metabo-depthcharge @ git+https://github.com/bittremieuxlab/metabo-depthcharge.git",
 ]
 
 [project.optional-dependencies]

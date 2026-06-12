@@ -1,8 +1,8 @@
 import numpy as np
-from simba.utils.binning import round_to_ordinal
-import numpy as np
 import torch
 from torch.utils.data import WeightedRandomSampler
+
+from simba.utils.binning import round_to_ordinal
 
 
 class SimilarityWeightSampler:
