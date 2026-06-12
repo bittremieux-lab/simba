@@ -810,7 +810,9 @@ def simba_solve_pair_mces(
             time_taken = result[2]
             exact_answer = result[3]
 
-            if distance == -1 or (time_taken >= (0.9 * TIME_LIMIT) and (exact_answer != 1)):
+            if distance == -1 or (
+                time_taken >= (0.9 * TIME_LIMIT) and (exact_answer != 1)
+            ):
                 distance = np.nan
 
     return distance, tanimoto

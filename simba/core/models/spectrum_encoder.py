@@ -51,9 +51,13 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
             metadata_fields.append("adduct")
         if use_ce:
             metadata_fields.append("collision_energy")
-        metadata_enc = MetadataEncoder(d_model, metadata_fields) if metadata_fields else None
+        metadata_enc = (
+            MetadataEncoder(d_model, metadata_fields) if metadata_fields else None
+        )
 
-        super().__init__(*args, pool="attention", metadata_encoder=metadata_enc, **kwargs)
+        super().__init__(
+            *args, pool="attention", metadata_encoder=metadata_enc, **kwargs
+        )
 
         self.use_adduct = use_adduct
         self.use_ce = use_ce
@@ -98,7 +102,9 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
         if self.use_adduct and "adduct" in kwargs:
             metadata["adduct"] = kwargs["adduct"].long().to(device).view(batch_size)
         if self.use_ce and "ce" in kwargs:
-            metadata["collision_energy"] = kwargs["ce"].float().to(device).view(batch_size)
+            metadata["collision_energy"] = (
+                kwargs["ce"].float().to(device).view(batch_size)
+            )
 
         precursor_mz = kwargs["precursor_mass"].float().to(device).view(batch_size)
 
