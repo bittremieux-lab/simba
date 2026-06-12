@@ -1,10 +1,39 @@
 import torch
-from depthcharge.encoders import FloatEncoder
-from depthcharge.transformers import SpectrumTransformerEncoder
-from metabo_depthcharge.encoders.spectra import MetadataEncoder
+import torch.nn as nn
+from metabo_depthcharge.encoders.spectra import MetadataEncoder, SpectrumEncoder
 
 
-class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
+N_ION_ACTIVATIONS = 2  # HCD, CID
+N_ION_METHODS = 3  # NSI, ESI, APCI
+
+
+class SpectrumTransformerEncoderCustom(SpectrumEncoder):
+    """Spectrum encoder based on metabo-depthcharge's SpectrumEncoder.
+
+    Extends it with simba-specific fields (ion_mode, ion_activation,
+    ion_method) injected into the global token via global_token_hook.
+    Uses attention pooling — forward() returns (B, d_model).
+
+    Parameters
+    ----------
+    d_model : int
+        Transformer hidden dimension.
+    n_layers : int
+        Number of transformer layers.
+    dropout : float
+        Dropout rate.
+    use_adduct : bool
+        Adduct encoded via MetadataEncoder (categorical embedding).
+    use_ce : bool
+        Collision energy encoded via MetadataEncoder (linear, zero-masked).
+    use_ion_activation : bool
+        Ion activation one-hot (HCD/CID), projected via nn.Linear.
+    use_ion_method : bool
+        Ionization method one-hot (NSI/ESI/APCI), projected via nn.Linear.
+    use_ion_mode : bool
+        Ion mode scalar (+1/-1/0), projected via nn.Linear.
+    """
+
     def __init__(
         self,
         *args,
@@ -15,86 +44,94 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ion_mode: bool = False,
         **kwargs,
     ):
-        """
-        Custom Spectrum Transformer Encoder with optional metadata usage.
-
-        Parameters
-        ----------
-        use_adduct: bool
-            Whether to include adduct information in the encoding (default: False).
-            Adduct is encoded as a categorical index using the metabo-depthcharge
-            vocabulary via MetadataEncoder.
-        use_ce: bool
-            Whether to include collision energy in the encoding (default: False).
-            CE=0 is treated as missing and masked to zero (no bias leakage).
-        use_ion_activation: bool
-            Whether to include ion activation information in the encoding (default: False).
-        use_ion_method: bool
-            Whether to include ionization method in the encoding (default: False).
-        use_ion_mode: bool
-            Whether to include ion mode in the encoding (default: False).
-        """
-        super().__init__(*args, **kwargs)
-        self.use_adduct = use_adduct
-        self.use_ce = use_ce
-        self.use_ion_activation = use_ion_activation
-        self.use_ion_method = use_ion_method
-        self.use_ion_mode = use_ion_mode
+        d_model = kwargs.get("d_model", args[0] if args else 512)
 
         metadata_fields = []
         if use_adduct:
             metadata_fields.append("adduct")
         if use_ce:
             metadata_fields.append("collision_energy")
-        if metadata_fields:
-            self.metadata_encoder = MetadataEncoder(self.d_model, metadata_fields)
-        else:
-            self.metadata_encoder = None
+        metadata_enc = MetadataEncoder(d_model, metadata_fields) if metadata_fields else None
 
+        super().__init__(*args, pool="attention", metadata_encoder=metadata_enc, **kwargs)
+
+        self.use_adduct = use_adduct
+        self.use_ce = use_ce
+        self.use_ion_activation = use_ion_activation
+        self.use_ion_method = use_ion_method
+        self.use_ion_mode = use_ion_mode
+        self._extra_kwargs: dict = {}
+
+        if use_ion_mode:
+            self.ion_mode_proj = nn.Linear(1, self.d_model)
         if use_ion_activation:
-            self.ion_activation_encoder = FloatEncoder(self.d_model)
+            self.ion_activation_proj = nn.Linear(N_ION_ACTIVATIONS, self.d_model)
         if use_ion_method:
-            self.ion_method_encoder = FloatEncoder(self.d_model)
+            self.ion_method_proj = nn.Linear(N_ION_METHODS, self.d_model)
+
+    def forward(
+        self,
+        mz_array: torch.Tensor,
+        intensity_array: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Encode a batch of spectra.
+
+        Accepts the simba-style keyword arguments that similarity_models passes
+        (precursor_mass, adduct, ce, ionmode, ...) and returns a (B, d_model)
+        tensor of spectrum embeddings via attention pooling.
+
+        Parameters
+        ----------
+        mz_array : torch.Tensor of shape (B, L)
+        intensity_array : torch.Tensor of shape (B, L)
+        **kwargs : dict
+            precursor_mass, precursor_charge, ionmode, adduct, ce,
+            ion_activation, ion_method as passed by SimilarityModelMultitask.
+        """
+        device = mz_array.device
+        batch_size = mz_array.shape[0]
+
+        self._extra_kwargs = kwargs
+
+        metadata = {}
+        if self.use_adduct and "adduct" in kwargs:
+            metadata["adduct"] = kwargs["adduct"].long().to(device).view(batch_size)
+        if self.use_ce and "ce" in kwargs:
+            metadata["collision_energy"] = kwargs["ce"].float().to(device).view(batch_size)
+
+        precursor_mz = kwargs["precursor_mass"].float().to(device).view(batch_size)
+
+        return super().forward(
+            mz=mz_array,
+            intensity=intensity_array,
+            precursor_mz=precursor_mz,
+            metadata=metadata if metadata else None,
+        )
 
     def global_token_hook(
         self,
         mz_array: torch.Tensor,
         intensity_array: torch.Tensor,
-        **kwargs: dict,
-    ):
+        precursor_mzs: torch.Tensor,
+    ) -> torch.Tensor:
+        """Global token = parent CLS + precursor_mz + simba-specific metadata."""
+        latent = super().global_token_hook(mz_array, intensity_array, precursor_mzs)
+
+        kwargs = self._extra_kwargs
         device = mz_array.device
-        dtype = mz_array.dtype
         batch_size = mz_array.shape[0]
 
-        placeholder = torch.zeros(
-            (batch_size, self.d_model), dtype=dtype, device=device
-        )
+        if self.use_ion_mode and "ionmode" in kwargs:
+            ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
+            latent = latent + self.ion_mode_proj(ionmode[:, None]).squeeze(1)
 
-        precursor_mass = kwargs["precursor_mass"].float().to(device).view(batch_size)
-        placeholder[:, 0] = precursor_mass
-
-        precursor_charge = kwargs["precursor_charge"].float().to(device).view(batch_size)
-        if self.use_ion_mode:
-            placeholder[:, 1] = precursor_charge
-
-        ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
-        if self.use_ion_mode:
-            placeholder[:, 2] = ionmode
-
-        if self.metadata_encoder is not None:
-            metadata = {}
-            if self.use_adduct:
-                metadata["adduct"] = kwargs["adduct"].long().to(device).view(batch_size)
-            if self.use_ce:
-                metadata["collision_energy"] = kwargs["ce"].float().to(device).view(batch_size)
-            placeholder = placeholder + self.metadata_encoder(metadata)
-
-        if self.use_ion_activation:
+        if self.use_ion_activation and "ion_activation" in kwargs:
             ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
-            placeholder = placeholder + self.ion_activation_encoder(ia).mean(dim=1)
+            latent = latent + self.ion_activation_proj(ia)
 
-        if self.use_ion_method:
+        if self.use_ion_method and "ion_method" in kwargs:
             im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
-            placeholder = placeholder + self.ion_method_encoder(im).mean(dim=1)
+            latent = latent + self.ion_method_proj(im)
 
-        return torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)
+        return latent

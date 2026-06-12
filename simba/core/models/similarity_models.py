@@ -146,19 +146,16 @@ class SimilarityModel(pl.LightningModule):
             batch["intensity_1"], nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        emb0, _ = self.spectrum_encoder(
+        emb0 = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),
             **kwargs_0,
         )
-        emb1, _ = self.spectrum_encoder(
+        emb1 = self.spectrum_encoder(
             mz_array=batch["mz_1"].float(),
             intensity_array=batch["intensity_1"].float(),
             **kwargs_1,
         )
-
-        emb0 = emb0[:, 0, :]
-        emb1 = emb1[:, 0, :]
 
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
@@ -510,19 +507,17 @@ class SimilarityModelMultitask(SimilarityModel):
         batch["mz_0"] = torch.nan_to_num(batch["mz_0"], nan=0.0, posinf=0.0, neginf=0.0)
         batch["mz_1"] = torch.nan_to_num(batch["mz_1"], nan=0.0, posinf=0.0, neginf=0.0)
 
-        emb0, _ = self.spectrum_encoder(
+        emb0 = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),
             **kwargs_0,
         )
-        emb1, _ = self.spectrum_encoder(
+        emb1 = self.spectrum_encoder(
             mz_array=batch["mz_1"].float(),
             intensity_array=batch["intensity_1"].float(),
             **kwargs_1,
         )
 
-        emb0 = emb0[:, 0, :]
-        emb1 = emb1[:, 0, :]
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
 
@@ -829,13 +824,12 @@ class EmbeddingExtractor(pl.LightningModule):
         if "ion_method" in batch:
             kwargs["ion_method"] = batch["ion_method"].float()
 
-        emb, _ = self.model(
+        emb = self.model(
             mz_array=batch["mz"].float(),
             intensity_array=batch["intensity"].float(),
             **kwargs,
         )
 
-        emb = emb[:, 0, :]
         emb = self.relu(emb)
 
         return emb

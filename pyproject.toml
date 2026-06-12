@@ -230,7 +230,7 @@ exclude_lines = [
 ]
 
 [tool.uv.sources]
-metabo-depthcharge = { path = "../metabo-depthcharge", editable = true }
+metabo-depthcharge = { git = "https://github.com/bittremieuxlab/metabo-depthcharge.git" }
 
 [dependency-groups]
 dev = [
