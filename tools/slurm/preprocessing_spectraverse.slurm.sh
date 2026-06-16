@@ -18,7 +18,7 @@
 #   mkdir -p logs
 #   sbatch tools/slurm/preprocessing_spectraverse.slurm.sh
 
-set -e
+set -euo pipefail
 
 SIMBA_DIR=/home/nkubrakov/simba
 MGF_PATH=/mnt/data2/nkubrakov/spectraverse/spectraverse-1.0.1.mgf
@@ -29,7 +29,7 @@ PICKLE_FILE=${OUTPUT_DIR}/mapping.pkl
 mkdir -p ${SIMBA_DIR}/logs
 mkdir -p ${OUTPUT_DIR}
 
-cd ${SIMBA_DIR}
+cd ${SIMBA_DIR} || exit 1
 
 echo "=============================================="
 echo "Spectraverse preprocessing — scaffold splits v1, node ${SLURM_ARRAY_TASK_ID}/2"

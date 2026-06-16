@@ -108,12 +108,15 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
 
         precursor_mz = kwargs["precursor_mass"].float().to(device).view(batch_size)
 
-        return super().forward(
-            mz=mz_array,
-            intensity=intensity_array,
-            precursor_mz=precursor_mz,
-            metadata=metadata if metadata else None,
-        )
+        try:
+            return super().forward(
+                mz=mz_array,
+                intensity=intensity_array,
+                precursor_mz=precursor_mz,
+                metadata=metadata if metadata else None,
+            )
+        finally:
+            self._extra_kwargs = {}
 
     def global_token_hook(
         self,

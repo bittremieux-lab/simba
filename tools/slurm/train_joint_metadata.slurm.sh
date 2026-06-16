@@ -9,7 +9,7 @@
 #SBATCH -o /home/nkubrakov/simba-integration/logs/simba_train_joint_metadata_%j.out
 #SBATCH -e /home/nkubrakov/simba-integration/logs/simba_train_joint_metadata_%j.err
 
-set -uo pipefail
+set -euo pipefail
 
 echo "===== SIMBA Training: Joint dataset + metadata (adduct, CE, ion_mode) ====="
 echo "Job ID: $SLURM_JOB_ID"
@@ -23,7 +23,7 @@ CHECKPOINT_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/metadata_addu
 mkdir -p "$CHECKPOINT_DIR"
 mkdir -p /home/nkubrakov/simba-integration/logs
 
-cd /home/nkubrakov/simba-integration
+cd /home/nkubrakov/simba-integration || exit 1
 
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 

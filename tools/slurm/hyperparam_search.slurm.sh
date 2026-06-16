@@ -20,9 +20,9 @@
 #   same folder. Optuna skips completed trials and continues.
 # ============================================================
 
-set -e
+set -euo pipefail
 
-cd /scratch/gent/vo/000/gvo00017/vsc21162/simba
+cd /scratch/gent/vo/000/gvo00017/vsc21162/simba || exit 1
 mkdir -p logs
 source .venv/bin/activate
 

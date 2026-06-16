@@ -20,7 +20,7 @@
 #   mkdir -p logs
 #   sbatch tools/slurm/inference_joint_metadata_cls.slurm.sh
 
-set -uo pipefail
+set -euo pipefail
 
 echo "===== SIMBA Inference — Joint Dataset (metadata CLS-pool model) ====="
 echo "Job ID: $SLURM_JOB_ID"
@@ -34,7 +34,7 @@ OUTPUT_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/metadata_adduct_ce_ionmode
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p /home/nkubrakov/simba-integration/logs
 
-cd /home/nkubrakov/simba-integration
+cd /home/nkubrakov/simba-integration || exit 1
 
 uv run simba inference \
   paths.preprocessing_dir="${PREPRO_DIR}" \

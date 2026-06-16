@@ -9,7 +9,7 @@
 #SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.out
 #SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.err
 
-set -uo pipefail
+set -euo pipefail
 
 echo "===== SIMBA Training: MSG scaffold_v2 ====="
 echo "Job ID: $SLURM_JOB_ID"
@@ -22,7 +22,7 @@ CHECKPOINT_DIR=/mnt/data2/nkubrakov/massspecgym/checkpoints_scaffold_v2
 
 mkdir -p "$CHECKPOINT_DIR"
 
-cd /home/nkubrakov/simba
+cd /home/nkubrakov/simba || exit 1
 
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
