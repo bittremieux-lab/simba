@@ -155,8 +155,12 @@ class LoadData:
                         condition_fails["inchi_smiles"] += 1
 
                 # Log conditions causing most failures
-                logger.info("Validation condition failures (spectra rejected for each condition):")
-                for condition, count in sorted(condition_fails.items(), key=lambda x: x[1], reverse=True):
+                logger.info(
+                    "Validation condition failures (spectra rejected for each condition):"
+                )
+                for condition, count in sorted(
+                    condition_fails.items(), key=lambda x: x[1], reverse=True
+                ):
                     if count > 0:
                         pct = 100.0 * count / spectra_processed
                         logger.info(f"  {condition}: {count} spectra ({pct:.1f}%)")
@@ -458,9 +462,24 @@ class LoadData:
         else:
             adduct = None
 
-        # Try common MGF key variants: COLLISION_ENERGY (MSG/MassSpecGym),
-        # COLLISION_ENERGY_1 (Spectraverse stepped CE), CE (legacy)
-        ce = params.get("collision_energy") or params.get("collision_energy_1") or params.get("ce")
+        # Normalized CE: average NORMALIZED_COLLISION_ENERGY_N (SpectraVerse).
+        # Fall back to COLLISION_ENERGY (MassSpecGym), then absolute CE_1 or CE (legacy).
+        norm_vals = [
+            float(v)
+            for k, v in params.items()
+            if k.startswith("normalized_collision_energy") and v is not None
+        ]
+        if norm_vals:
+            ce = sum(norm_vals) / len(norm_vals)
+        else:
+            ce = next(
+                (
+                    params[k]
+                    for k in ("collision_energy", "collision_energy_1", "ce")
+                    if params.get(k) is not None
+                ),
+                None,
+            )
         ia = params.get("ion_activation")
         im = params.get("ionization_method")
 
@@ -582,8 +601,12 @@ class LoadData:
                 break
             # go to next iteration
 
-        logger.info(f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)")
-        unique_molecules = len({s.params["smiles"] for s in spectra if "smiles" in s.params})
+        logger.info(
+            f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)"
+        )
+        unique_molecules = len(
+            {s.params["smiles"] for s in spectra if "smiles" in s.params}
+        )
         logger.info(f"Unique molecules in loaded spectra: {unique_molecules}")
         return spectra
 
