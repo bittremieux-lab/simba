@@ -58,6 +58,7 @@ tasks:
   mces:
     enabled: true
     use_log_loss: false
+    predict_log_mces_direct: false
     threshold: 20
     max_value: 40
 

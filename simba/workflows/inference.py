@@ -346,6 +346,8 @@ def load_model_for_inference(cfg: DictConfig, checkpoint_path: str):
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
         "use_ion_mode": cfg.model.features.use_ion_mode,
+        "predict_log_mces_direct": cfg.model.tasks.mces.predict_log_mces_direct,
+        "mces20_max_value": float(cfg.data.mces20_max_value),
     }
 
     model = SimilarityModelMultitask.load_from_checkpoint(
@@ -425,29 +427,15 @@ def evaluate_predictions(
     ed_true, _ = _get_ground_truth(dataloader_ed)
     _, mces_true = _get_ground_truth(dataloader_mces)
 
-    # Flatten MCES predictions
-    # pred_mces is list of batches, each batch is (emb, emb_sim_2)
-    # emb_sim_2 (index 1) has shape (batch_size,) when use_cosine_distance=True
-    pred_mces_mces_flat = []
-    for batch_output in pred_mces:
-        batch_preds = batch_output[1]  # emb_sim_2 tensor of shape (batch_size,)
-        if batch_preds.dim() == 0:  # scalar tensor
-            pred_mces_mces_flat.append(batch_preds.item())
-        else:  # batch of predictions
-            pred_mces_mces_flat.extend(batch_preds.cpu().numpy().tolist())
-    pred_mces_mces_flat = np.array(pred_mces_mces_flat)
+    # Flatten MCES predictions — vectorized over batches
+    pred_mces_mces_flat = np.concatenate(
+        [np.atleast_1d(batch_output[1].cpu().numpy()) for batch_output in pred_mces]
+    )
 
-    # Flatten ED predictions
-    # pred_ed is list of batches, each batch is (emb, emb_sim_2)
-    # emb (index 0) has shape (batch_size, n_classes) - classification logits
-    pred_ed_ed_flat = []
-    for batch_output in pred_ed:
-        batch_preds = batch_output[0]  # emb tensor of shape (batch_size, n_classes)
-        # Convert logits to class predictions
-        for pred_logits in batch_preds:
-            class_idx = _which_index(pred_logits)
-            pred_ed_ed_flat.append(class_idx)
-    pred_ed_ed_flat = np.array(pred_ed_ed_flat, dtype=float)
+    # Flatten ED predictions — argmax over class dim, vectorized per batch
+    pred_ed_ed_flat = np.concatenate(
+        [batch_output[0].cpu().numpy().argmax(axis=1) for batch_output in pred_ed]
+    ).astype(float)
 
     # Clean data
     ed_true = np.array(ed_true)
@@ -476,7 +464,20 @@ def evaluate_predictions(
     logger.info(f"MCES min value: {min(mces_true):.4f}")
     logger.info(f"MCES samples per bin: {counts}")
 
-    # Remove threshold values
+    # Back-transform log-MCES model output to cosine similarity [0,1] for CSV
+    if cfg.model.tasks.mces.predict_log_mces_direct:
+        pred_mces_mces_flat = np.clip(
+            1.0
+            - np.expm1(np.clip(pred_mces_mces_flat, 0, None))
+            / cfg.data.mces20_max_value,
+            0.0,
+            1.0,
+        )
+
+    # Keep unfiltered predictions for CSV before removing threshold values
+    pred_mces_for_csv = pred_mces_mces_flat.copy()
+
+    # Remove threshold values (mces_true == 0.5 are MCES timeout/boundary pairs)
     mces_true_original = mces_true.copy()
     mces_true = mces_true[mces_true_original != 0.5]
     pred_mces_mces_flat = pred_mces_mces_flat[mces_true_original != 0.5]
@@ -494,21 +495,31 @@ def evaluate_predictions(
         f"MCES/Tanimoto mean absolute error: {cfg.data.mces20_max_value * mae_model_mces:.4f}"
     )
 
-    # Denormalize if using MCES20
+    # Denormalize to raw MCES distance for plotting
     if not cfg.data.use_tanimoto:
         mces_true = cfg.data.mces20_max_value * (1 - mces_true)
+        # pred_mces_mces_flat is already back-transformed to cosine sim [0,1] above
         pred_mces_mces_flat = cfg.data.mces20_max_value * (1 - pred_mces_mces_flat)
 
     # Plot performance
     _plot_performance(mces_true, pred_mces_mces_flat, cfg, output_dir)
 
     # Save per-pair predictions CSV
-    if pair_metadata is not None:
+    n_preds = len(pred_ed_ed_flat)
+    if pair_metadata is not None and len(pair_metadata) == n_preds:
         df_out = pair_metadata.copy()
     else:
+        if pair_metadata is not None:
+            logger.warning(
+                f"pair_metadata rows ({len(pair_metadata):,}) != predictions ({n_preds:,}); "
+                "saving predictions without metadata columns"
+            )
         df_out = pd.DataFrame()
     df_out["pred_ed"] = pred_ed_ed_flat
-    df_out["pred_mces"] = pred_mces_mces_flat
+    df_out["pred_mces"] = pred_mces_for_csv
+    # Ground truth (normalized similarity [0,1]; 1=identical)
+    df_out["true_ed"] = np.array(ed_true)
+    df_out["true_mces"] = np.array(mces_true_original)
     df_out.to_csv(os.path.join(output_dir, "predictions.csv"), index=False)
     logger.info(f"Saved {len(df_out):,} predictions to {output_dir}/predictions.csv")
 
@@ -586,12 +597,9 @@ def _get_ground_truth(dataloader) -> tuple[list[float], list[float]]:
     Returns:
         tuple: (ed_values, mces_values) as lists of floats
     """
-    ed = [[float(b) for b in batch["ed"]] for batch in dataloader]
-    mces = [[float(b) for b in batch["mces"]] for batch in dataloader]
-
-    ed = [item for sublist in ed for item in sublist]
-    mces = [item for sublist in mces for item in sublist]
-    return ed, mces
+    ed = dataloader.dataset.data["ed"].flatten().astype(float)
+    mces = dataloader.dataset.data["mces"].flatten().astype(float)
+    return ed.tolist(), mces.tolist()
 
 
 def _remove_duplicate_pairs(array):
@@ -702,11 +710,19 @@ def _plot_performance(mces_true, mces_pred, cfg: DictConfig, output_dir: str) ->
     plt.savefig(os.path.join(output_dir, f"hexbin_plot_{model_code}.png"))
     plt.close()
 
-    # Scatter plot
+    # Scatter plot — subsample for legibility at large n
+    max_scatter = 50_000
+    if len(mces_true) > max_scatter:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(mces_true), max_scatter, replace=False)
+        sc_true, sc_pred = mces_true[idx], mces_pred[idx]
+    else:
+        sc_true, sc_pred = mces_true, mces_pred
     plt.figure()
-    plt.scatter(mces_true, mces_pred, alpha=0.5)
+    plt.scatter(sc_true, sc_pred, alpha=0.1, s=2)
     plt.xlabel("ground truth")
     plt.ylabel("prediction")
+    plt.title(f"n={len(sc_true):,} (sampled from {len(mces_true):,})")
     plt.grid()
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f"scatter_plot_{model_code}.png"))

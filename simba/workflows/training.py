@@ -454,6 +454,8 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_fingerprints": cfg.model.tasks.fingerprints.enabled,
         "USE_LEARNABLE_MULTITASK": cfg.model.multitasking.learnable,
         "use_mces20_log_loss": cfg.model.tasks.mces.use_log_loss,
+        "predict_log_mces_direct": cfg.model.tasks.mces.predict_log_mces_direct,
+        "mces20_max_value": float(cfg.data.mces20_max_value),
         "tau_gumbel_softmax": cfg.model.tasks.edit_distance.tau_gumbel_softmax,
         "gumbel_reg_weight": cfg.model.tasks.edit_distance.gumbel_reg_weight,
         "weights": weights_mces,

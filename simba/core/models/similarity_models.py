@@ -363,6 +363,8 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        predict_log_mces_direct=False,
+        mces20_max_value=40.0,
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -411,6 +413,12 @@ class SimilarityModelMultitask(SimilarityModel):
             self.linear1_cossim = nn.Linear(d_model, d_model)
 
         self.use_mces20_log_loss = use_mces20_log_loss
+        self.predict_log_mces_direct = predict_log_mces_direct
+        self.mces20_max_value = mces20_max_value
+        if predict_log_mces_direct:
+            self.linear_log_mces_out = nn.Linear(d_model, 1)
+            nn.init.zeros_(self.linear_log_mces_out.weight)
+            nn.init.constant_(self.linear_log_mces_out.bias, 3.19)
         self.use_fingerprints = use_fingerprints
         if self.use_fingerprints:
             print("Fingerprints enabled!")
@@ -426,7 +434,7 @@ class SimilarityModelMultitask(SimilarityModel):
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
         if USE_LEARNABLE_MULTITASK:
             initial_log_sigma1 = 0.0
-            initial_log_sigma2 = -5.3
+            initial_log_sigma2 = -2.7 if predict_log_mces_direct else -5.3
             self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
             self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
 
@@ -634,8 +642,15 @@ class SimilarityModelMultitask(SimilarityModel):
             weight_mask = torch.tensor(weight_mask).to(self.device)
             loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
         else:
+            if self.predict_log_mces_direct:
+                # logits2 is in log1p(raw_mces_distance) space; match target.
+                target2_for_mse = torch.log1p(
+                    (1.0 - target2.clamp(0.0, 1.0)) * self.mces20_max_value
+                )
+            else:
+                target2_for_mse = target2
             squared_diff = (
-                logits2.view(-1, 1).float() - target2.view(-1, 1).float()
+                logits2.view(-1, 1).float() - target2_for_mse.view(-1, 1).float()
             ) ** 2
             loss2 = squared_diff.view(-1, 1).mean()
 
@@ -714,11 +729,18 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = self.step(batch, batch_idx)
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
+        mces_pred_plot = logits2.view(-1).cpu()
+        if self.predict_log_mces_direct:
+            # model outputs log1p(dist); back-transform to cosine similarity [0,1] for plots
+            mces_pred_plot = (
+                1.0 - torch.expm1(mces_pred_plot.clamp(min=0.0)) / self.mces20_max_value
+            ).clamp(0.0, 1.0)
+
         return {
             "loss": loss,
             "ed_pred": torch.argmax(logits1, dim=1).cpu(),
             "ed_target": target1.cpu(),
-            "mces_pred": logits2.view(-1).cpu(),
+            "mces_pred": mces_pred_plot,
             "mces_target": target2.cpu(),
         }
 
@@ -727,16 +749,10 @@ class SimilarityModelMultitask(SimilarityModel):
         return optimizer
 
     def compute_from_embeddings(self, emb0: torch.Tensor, emb1: torch.Tensor):
-        """
-        Take two activated embeddings (after ReLU, fingerprint fusion, etc.)
-        and run all the FC layers + similarity heads to produce:
-
-        - emb: the class–probability (or regression) output
-        - emb_sim_2: the second similarity score (cosine or regression)
-        """
-        # note: assume emb0/emb1 already had model.relu and fingerprint logic applied
-        # now do exactly what you had in compute_emb_from_existing_embeddings:
-        if self.use_cosine_distance:
+        if self.predict_log_mces_direct:
+            x = self.relu(self.linear2(emb0 + emb1))
+            emb_sim_2 = self.linear_log_mces_out(x).squeeze(-1)
+        elif self.use_cosine_distance:
             # transform for cos-sim
             def transform(x):
                 x = self.linear2(x)
