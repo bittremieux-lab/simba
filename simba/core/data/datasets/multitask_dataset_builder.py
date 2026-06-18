@@ -136,10 +136,10 @@ class MultitaskDataBuilder:
                 ce[i] = encode_collision_energy(spec.ce)
 
             if use_ion_activation:
-                ia[i] = encode_ion_activation(spec.ion_activation)
+                ia[i] = encode_ion_activation(getattr(spec, "ion_activation", None))
 
             if use_ion_method:
-                im[i] = encode_ionization_method(spec.ionization_method)
+                im[i] = encode_ionization_method(getattr(spec, "ionization_method", None))
 
         # logger.info("Normalizing intensities")
         # Normalize the intensity array
