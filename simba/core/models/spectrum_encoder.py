@@ -60,9 +60,7 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
             MetadataEncoder(d_model, metadata_fields) if metadata_fields else None
         )
 
-        super().__init__(
-            *args, pool=pool, metadata_encoder=metadata_enc, **kwargs
-        )
+        super().__init__(*args, pool=pool, metadata_encoder=metadata_enc, **kwargs)
 
         self.use_adduct = use_adduct
         self.use_ce = use_ce
