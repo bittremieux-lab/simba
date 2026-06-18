@@ -2,15 +2,13 @@ import copy
 
 import numpy as np
 from metabo_depthcharge.spec.adducts import encode_adduct
-from metabo_depthcharge.spec.metadata_parsers import encode_collision_energy
-
-from simba.core.data.datasets.encoder_dataset import CustomDatasetEncoder
-from simba.core.data.encoding import (
-    ION_ACTIVATION,
-    IONIZATION_METHODS,
+from metabo_depthcharge.spec.metadata_parsers import (
+    encode_collision_energy,
     encode_ion_activation,
     encode_ionization_method,
 )
+
+from simba.core.data.datasets.encoder_dataset import CustomDatasetEncoder
 from simba.core.data.preprocessor import Preprocessor
 
 
@@ -40,8 +38,8 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
     ionmode = np.zeros((len(spectra), 1), dtype=np.float32)
     adduct = np.zeros(len(spectra), dtype=np.int64)
     ce = np.zeros((len(spectra), 1), dtype=np.float32)
-    ia = np.zeros((len(spectra), len(ION_ACTIVATION)), dtype=np.int32)
-    im = np.zeros((len(spectra), len(IONIZATION_METHODS)), dtype=np.int32)
+    ia = np.zeros(len(spectra), dtype=np.int64)
+    im = np.zeros(len(spectra), dtype=np.int64)
 
     for i, spectrum in enumerate(spectra):
         # check for maximum length
@@ -71,16 +69,10 @@ def prepare_encoder_dataset(spectra, max_num_peaks=100):
         ce[i] = encode_collision_energy(getattr(spectrum, "ce", None))
 
         # Ion Activation
-        if hasattr(spectrum, 'ion_activation') and spectrum.ion_activation is not None and spectrum.ion_activation != "None":
-            ia[i] = encode_ion_activation(spectrum.ion_activation)
-        else:
-            ia[i] = np.zeros(len(ION_ACTIVATION), dtype=np.int32)
+        ia[i] = encode_ion_activation(getattr(spectrum, "ion_activation", None))
 
         # Ionization Method
-        if hasattr(spectrum, 'ionization_method') and spectrum.ionization_method is not None and spectrum.ionization_method != "None":
-            im[i] = encode_ionization_method(spectrum.ionization_method)
-        else:
-            im[i] = np.zeros(len(IONIZATION_METHODS), dtype=np.int32)
+        im[i] = encode_ionization_method(getattr(spectrum, "ionization_method", None))
 
     # Normalize the intensity array
     intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))

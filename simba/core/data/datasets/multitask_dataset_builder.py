@@ -2,17 +2,15 @@ import copy
 
 import numpy as np
 from metabo_depthcharge.spec.adducts import encode_adduct
-from metabo_depthcharge.spec.metadata_parsers import encode_collision_energy
+from metabo_depthcharge.spec.metadata_parsers import (
+    encode_collision_energy,
+    encode_ion_activation,
+    encode_ionization_method,
+)
 
 from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.datasets.multitask_dataset import (
     CustomDatasetMultitasking,
-)
-from simba.core.data.encoding import (
-    ION_ACTIVATION,
-    IONIZATION_METHODS,
-    encode_ion_activation,
-    encode_ionization_method,
 )
 from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.preprocessor import Preprocessor
@@ -109,20 +107,8 @@ class MultitaskDataBuilder:
         ce = np.zeros(
             (len(molecule_pairs.original_spectra), 1), dtype=np.float32
         )
-        ia = np.zeros(
-            (
-                len(molecule_pairs.original_spectra),
-                len(ION_ACTIVATION),
-            ),
-            dtype=np.int32,
-        )
-        im = np.zeros(
-            (
-                len(molecule_pairs.original_spectra),
-                len(IONIZATION_METHODS),
-            ),
-            dtype=np.int32,
-        )
+        ia = np.zeros(len(molecule_pairs.original_spectra), dtype=np.int64)
+        im = np.zeros(len(molecule_pairs.original_spectra), dtype=np.int64)
 
         logger.info("Loading mz, intensity and precursor data ...")
         for i, spec in enumerate(molecule_pairs.original_spectra):
@@ -150,21 +136,10 @@ class MultitaskDataBuilder:
                 ce[i] = encode_collision_energy(spec.ce)
 
             if use_ion_activation:
-                if (spec.ion_activation is None) or (spec.ion_activation == "None"):
-                    ia[i] = np.zeros(len(ION_ACTIVATION), dtype=np.int32)
-                else:
-                    ia[i] = encode_ion_activation(spec.ion_activation)
+                ia[i] = encode_ion_activation(spec.ion_activation)
 
             if use_ion_method:
-                if (spec.ionization_method is None) or (
-                    spec.ionization_method == "None"
-                ):
-                    im[i] = np.zeros(
-                        len(IONIZATION_METHODS),
-                        dtype=np.int32,
-                    )
-                else:
-                    im[i] = encode_ionization_method(spec.ionization_method)
+                im[i] = encode_ionization_method(spec.ionization_method)
 
         # logger.info("Normalizing intensities")
         # Normalize the intensity array

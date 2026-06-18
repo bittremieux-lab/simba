@@ -3,16 +3,13 @@ import torch.nn as nn
 from metabo_depthcharge.encoders.spectra import MetadataEncoder, SpectrumEncoder
 
 
-N_ION_ACTIVATIONS = 2  # HCD, CID
-N_ION_METHODS = 3  # NSI, ESI, APCI
-
-
 class SpectrumTransformerEncoderCustom(SpectrumEncoder):
     """Spectrum encoder based on metabo-depthcharge's SpectrumEncoder.
 
-    Extends it with simba-specific fields (ion_mode, ion_activation,
-    ion_method) injected into the global token via global_token_hook.
-    Uses attention pooling — forward() returns (B, d_model).
+    Extends it with simba-specific fields (ion_mode) injected into the global
+    token via global_token_hook. Adduct, CE, ion_activation, and
+    ionization_method are handled by MetadataEncoder. Pool mode is
+    configurable: "attention" (default) or "cls".
 
     Parameters
     ----------
@@ -22,21 +19,25 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
         Number of transformer layers.
     dropout : float
         Dropout rate.
+    pool : str
+        Pooling mode passed to SpectrumEncoder: ``"attention"`` (weighted sum
+        over all tokens via AttnAggregator) or ``"cls"`` (CLS token only).
     use_adduct : bool
         Adduct encoded via MetadataEncoder (categorical embedding).
     use_ce : bool
         Collision energy encoded via MetadataEncoder (linear, zero-masked).
     use_ion_activation : bool
-        Ion activation one-hot (HCD/CID), projected via nn.Linear.
+        Ion activation encoded via MetadataEncoder (categorical embedding).
     use_ion_method : bool
-        Ionization method one-hot (NSI/ESI/APCI), projected via nn.Linear.
+        Ionization method encoded via MetadataEncoder (categorical embedding).
     use_ion_mode : bool
-        Ion mode scalar (+1/-1/0), projected via nn.Linear.
+        Ion mode scalar (+1/-1/0), projected via nn.Linear into global token.
     """
 
     def __init__(
         self,
         *args,
+        pool: str = "attention",
         use_adduct: bool = False,
         use_ce: bool = False,
         use_ion_activation: bool = False,
@@ -51,12 +52,16 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
             metadata_fields.append("adduct")
         if use_ce:
             metadata_fields.append("collision_energy")
+        if use_ion_activation:
+            metadata_fields.append("ion_activation")
+        if use_ion_method:
+            metadata_fields.append("ionization_method")
         metadata_enc = (
             MetadataEncoder(d_model, metadata_fields) if metadata_fields else None
         )
 
         super().__init__(
-            *args, pool="attention", metadata_encoder=metadata_enc, **kwargs
+            *args, pool=pool, metadata_encoder=metadata_enc, **kwargs
         )
 
         self.use_adduct = use_adduct
@@ -68,10 +73,6 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
 
         if use_ion_mode:
             self.ion_mode_proj = nn.Linear(1, self.d_model)
-        if use_ion_activation:
-            self.ion_activation_proj = nn.Linear(N_ION_ACTIVATIONS, self.d_model)
-        if use_ion_method:
-            self.ion_method_proj = nn.Linear(N_ION_METHODS, self.d_model)
 
     def forward(
         self,
@@ -105,6 +106,14 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
             metadata["collision_energy"] = (
                 kwargs["ce"].float().to(device).view(batch_size)
             )
+        if self.use_ion_activation and "ion_activation" in kwargs:
+            metadata["ion_activation"] = (
+                kwargs["ion_activation"].long().to(device).view(batch_size)
+            )
+        if self.use_ion_method and "ion_method" in kwargs:
+            metadata["ionization_method"] = (
+                kwargs["ion_method"].long().to(device).view(batch_size)
+            )
 
         precursor_mz = kwargs["precursor_mass"].float().to(device).view(batch_size)
 
@@ -134,13 +143,5 @@ class SpectrumTransformerEncoderCustom(SpectrumEncoder):
         if self.use_ion_mode and "ionmode" in kwargs:
             ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
             latent = latent + self.ion_mode_proj(ionmode[:, None]).squeeze(1)
-
-        if self.use_ion_activation and "ion_activation" in kwargs:
-            ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
-            latent = latent + self.ion_activation_proj(ia)
-
-        if self.use_ion_method and "ion_method" in kwargs:
-            im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
-            latent = latent + self.ion_method_proj(im)
 
         return latent

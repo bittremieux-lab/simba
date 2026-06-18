@@ -48,6 +48,7 @@ class SimilarityModel(pl.LightningModule):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        pool: str = "attention",
     ):
         """Initialize the CCSPredictor"""
         super().__init__()
@@ -70,6 +71,7 @@ class SimilarityModel(pl.LightningModule):
             d_model=d_model,
             n_layers=n_layers,
             dropout=dropout,
+            pool=pool,
             use_adduct=use_adduct,
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
@@ -488,24 +490,12 @@ class SimilarityModelMultitask(SimilarityModel):
             kwargs_1["ce"] = batch["ce_1"].float()
 
         if self.use_ion_activation:
-            batch["ion_activation_0"] = torch.nan_to_num(
-                batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ion_activation_1"] = torch.nan_to_num(
-                batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-            kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+            kwargs_0["ion_activation"] = batch["ion_activation_0"].long()
+            kwargs_1["ion_activation"] = batch["ion_activation_1"].long()
 
         if self.use_ion_method:
-            batch["ion_method_0"] = torch.nan_to_num(
-                batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            batch["ion_method_1"] = torch.nan_to_num(
-                batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
-            )
-            kwargs_0["ion_method"] = batch["ion_method_0"].float()
-            kwargs_1["ion_method"] = batch["ion_method_1"].float()
+            kwargs_0["ion_method"] = batch["ion_method_0"].long()
+            kwargs_1["ion_method"] = batch["ion_method_1"].long()
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(
             batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
@@ -804,6 +794,7 @@ class EmbeddingExtractor(pl.LightningModule):
                 use_ion_mode=features.get("use_ion_mode", False),
                 use_ion_activation=features.get("use_ion_activation", False),
                 use_ion_method=features.get("use_ion_method", False),
+                pool=features.get("pool", "attention"),
                 strict=strict,
             )
 
