@@ -365,6 +365,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        pool: str = "attention",
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -380,6 +381,7 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
             use_ion_mode=use_ion_mode,
+            pool=pool,
         )
         self.weights = weights
 
