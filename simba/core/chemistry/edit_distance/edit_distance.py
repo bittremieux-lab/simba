@@ -804,13 +804,15 @@ def simba_solve_pair_mces(
                 # solver_options={'threads': 1, 'msg': False},  # use single thread + no console messages
                 no_ilp_threshold=False,  # allow the ILP to stop early once the threshold is exceeded
                 always_stronger_bound=True,
-                catch_errors=False,  # typically raise exceptions if something goes wrong
+                catch_errors=True,  # return distance=-1 on solver failure instead of raising
             )
             distance = result[1]
             time_taken = result[2]
             exact_answer = result[3]
 
-            if time_taken >= (0.9 * TIME_LIMIT) and (exact_answer != 1):
+            if distance == -1 or (
+                time_taken >= (0.9 * TIME_LIMIT) and (exact_answer != 1)
+            ):
                 distance = np.nan
 
     return distance, tanimoto

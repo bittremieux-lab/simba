@@ -18,7 +18,7 @@
 #   mkdir -p logs
 #   sbatch tools/slurm/preprocessing_scaffold_v2.slurm.sh
 
-set -e
+set -euo pipefail
 
 SIMBA_DIR=/home/nkubrakov/simba
 MGF_PATH=/mnt/data2/nkubrakov/massspecgym/data/auxiliary/MassSpecGym.mgf
@@ -30,7 +30,7 @@ PICKLE_FILE=${OUTPUT_DIR}/mapping.pkl
 mkdir -p ${SIMBA_DIR}/logs
 mkdir -p ${OUTPUT_DIR}
 
-cd ${SIMBA_DIR}
+cd ${SIMBA_DIR} || exit 1
 
 echo "=============================================="
 echo "MassSpecGym preprocessing — scaffold splits v2, node ${SLURM_ARRAY_TASK_ID}/2"

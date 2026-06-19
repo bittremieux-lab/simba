@@ -20,7 +20,7 @@
 #   mkdir -p logs
 #   sbatch tools/slurm/preprocessing_nist20.slurm.sh
 
-set -e
+set -euo pipefail
 
 SIMBA_DIR=/home/nkubrakov/simba
 MGF_PATH=/mnt/data/nkubrakov/nist20/nist20.mgf
@@ -30,7 +30,7 @@ PICKLE_FILE=${OUTPUT_DIR}/mapping.pkl
 mkdir -p ${SIMBA_DIR}/logs
 mkdir -p ${OUTPUT_DIR}
 
-cd ${SIMBA_DIR}
+cd ${SIMBA_DIR} || exit 1
 
 echo "=============================================="
 echo "NIST20 preprocessing — scaffold splits, single node"

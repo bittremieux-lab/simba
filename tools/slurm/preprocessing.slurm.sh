@@ -16,7 +16,7 @@
 #   mkdir -p logs
 #   sbatch tools/slurm/script_massspecgym_preprocessing_th20_asb.slurm.sh
 
-set -e
+set -euo pipefail
 
 SIMBA_DIR=/home/nkubrakov/simba
 MGF_PATH=/mnt/data2/nkubrakov/massspecgym/data/auxiliary/MassSpecGym.mgf
@@ -27,7 +27,7 @@ PICKLE_FILE=${OUTPUT_DIR}/mapping.pkl
 mkdir -p ${SIMBA_DIR}/logs
 mkdir -p ${OUTPUT_DIR}
 
-cd ${SIMBA_DIR}
+cd ${SIMBA_DIR} || exit 1
 
 echo "=============================================="
 echo "MassSpecGym preprocessing — TH=20, asb=True, node ${SLURM_ARRAY_TASK_ID}/2"

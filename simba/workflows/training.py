@@ -464,6 +464,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
         "use_ion_mode": cfg.model.features.use_ion_mode,
+        "pool": cfg.model.features.get("pool", "attention"),
     }
 
     # Load pretrained weights if specified

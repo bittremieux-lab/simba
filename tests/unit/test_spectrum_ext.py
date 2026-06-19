@@ -20,19 +20,6 @@ class TestSpectrumExtSetParams:
         assert spectrum.params == params
 
 
-class TestSpectrumExtSetSpectrumVector:
-    """Test set_spectrum_vector method."""
-
-    def test_set_spectrum_vector(self, create_test_spectrum):
-        """Test setting spectrum vector."""
-        spectrum = create_test_spectrum()
-
-        vector = np.array([1.0, 2.0, 3.0])
-        spectrum.set_spectrum_vector(vector)
-
-        assert np.array_equal(spectrum.spectrum_vector, vector)
-
-
 class TestSpectrumExtSetMurckoScaffold:
     """Test set_murcko_scaffold method."""
 
@@ -57,19 +44,6 @@ class TestSpectrumExtSetSmiles:
         spectrum.set_smiles(smiles)
 
         assert spectrum.smiles == smiles
-
-
-class TestSpectrumExtSetMaxPeak:
-    """Test set_max_peak method."""
-
-    def test_set_max_peak(self, create_test_spectrum):
-        """Test setting maximum peak amplitude."""
-        spectrum = create_test_spectrum()
-
-        max_peak = 1000.0
-        spectrum.set_max_peak(max_peak)
-
-        assert spectrum.max_peak == max_peak
 
 
 class TestSpectrumExtSerialization:

@@ -9,7 +9,7 @@
 #SBATCH -o /home/nkubrakov/simba/logs/simba_inference_%j.out
 #SBATCH -e /home/nkubrakov/simba/logs/simba_inference_%j.err
 
-set -uo pipefail
+set -euo pipefail
 
 echo "===== SIMBA Inference ====="
 echo "Job ID: $SLURM_JOB_ID"
@@ -19,7 +19,7 @@ echo "Date:   $(date)"
 PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_th20_asb
 CHECKPOINT_DIR=/mnt/data2/nkubrakov/massspecgym/checkpoints_th20_asb
 
-cd /home/nkubrakov/simba
+cd /home/nkubrakov/simba || exit 1
 source .venv/bin/activate
 
 simba inference \

@@ -39,6 +39,7 @@ features:
   use_ce: false
   use_ion_activation: false
   use_ion_method: false
+  pool: "attention"
 
 # Task configuration
 tasks:

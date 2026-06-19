@@ -48,6 +48,7 @@ class SimilarityModel(pl.LightningModule):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        pool: str = "attention",
     ):
         """Initialize the CCSPredictor"""
         super().__init__()
@@ -70,6 +71,7 @@ class SimilarityModel(pl.LightningModule):
             d_model=d_model,
             n_layers=n_layers,
             dropout=dropout,
+            pool=pool,
             use_adduct=use_adduct,
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
@@ -120,8 +122,8 @@ class SimilarityModel(pl.LightningModule):
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["adduct"] = batch["adduct_0"].float()
-            kwargs_1["adduct"] = batch["adduct_1"].float()
+            kwargs_0["adduct"] = batch["adduct_0"].long()
+            kwargs_1["adduct"] = batch["adduct_1"].long()
 
         if self.use_ce:
             logger.info("Using CE in the model")
@@ -146,19 +148,16 @@ class SimilarityModel(pl.LightningModule):
             batch["intensity_1"], nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        emb0, _ = self.spectrum_encoder(
+        emb0 = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),
             **kwargs_0,
         )
-        emb1, _ = self.spectrum_encoder(
+        emb1 = self.spectrum_encoder(
             mz_array=batch["mz_1"].float(),
             intensity_array=batch["intensity_1"].float(),
             **kwargs_1,
         )
-
-        emb0 = emb0[:, 0, :]
-        emb1 = emb1[:, 0, :]
 
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
@@ -366,6 +365,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        pool: str = "attention",
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -381,6 +381,7 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
             use_ion_mode=use_ion_mode,
+            pool=pool,
         )
         self.weights = weights
 
@@ -466,47 +467,37 @@ class SimilarityModelMultitask(SimilarityModel):
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
-        batch["ionmode_0"] = torch.nan_to_num(
-            batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ionmode_1"] = torch.nan_to_num(
-            batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ionmode"] = batch["ionmode_0"].float()
-        kwargs_1["ionmode"] = batch["ionmode_1"].float()
-        batch["adduct_0"] = torch.nan_to_num(
-            batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["adduct_1"] = torch.nan_to_num(
-            batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
+        if self.use_ion_mode:
+            batch["ionmode_0"] = torch.nan_to_num(
+                batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ionmode_1"] = torch.nan_to_num(
+                batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ionmode"] = batch["ionmode_0"].float()
+            kwargs_1["ionmode"] = batch["ionmode_1"].float()
 
-        kwargs_0["adduct"] = batch["adduct_0"].float()
-        kwargs_1["adduct"] = batch["adduct_1"].float()
+        if self.use_adduct:
+            kwargs_0["adduct"] = batch["adduct_0"].long()
+            kwargs_1["adduct"] = batch["adduct_1"].long()
 
-        batch["ce_0"] = torch.nan_to_num(batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0)
-        batch["ce_1"] = torch.nan_to_num(batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0)
-        kwargs_0["ce"] = batch["ce_0"].float()
-        kwargs_1["ce"] = batch["ce_1"].float()
+        if self.use_ce:
+            batch["ce_0"] = torch.nan_to_num(
+                batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ce_1"] = torch.nan_to_num(
+                batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ce"] = batch["ce_0"].float()
+            kwargs_1["ce"] = batch["ce_1"].float()
 
-        batch["ion_activation_0"] = torch.nan_to_num(
-            batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_activation_1"] = torch.nan_to_num(
-            batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-        kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+        if self.use_ion_activation:
+            kwargs_0["ion_activation"] = batch["ion_activation_0"].long()
+            kwargs_1["ion_activation"] = batch["ion_activation_1"].long()
 
-        batch["ion_method_0"] = torch.nan_to_num(
-            batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_method_1"] = torch.nan_to_num(
-            batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-
-        kwargs_0["ion_method"] = batch["ion_method_0"].float()
-        kwargs_1["ion_method"] = batch["ion_method_1"].float()
+        if self.use_ion_method:
+            kwargs_0["ion_method"] = batch["ion_method_0"].long()
+            kwargs_1["ion_method"] = batch["ion_method_1"].long()
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(
             batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
@@ -517,19 +508,17 @@ class SimilarityModelMultitask(SimilarityModel):
         batch["mz_0"] = torch.nan_to_num(batch["mz_0"], nan=0.0, posinf=0.0, neginf=0.0)
         batch["mz_1"] = torch.nan_to_num(batch["mz_1"], nan=0.0, posinf=0.0, neginf=0.0)
 
-        emb0, _ = self.spectrum_encoder(
+        emb0 = self.spectrum_encoder(
             mz_array=batch["mz_0"].float(),
             intensity_array=batch["intensity_0"].float(),
             **kwargs_0,
         )
-        emb1, _ = self.spectrum_encoder(
+        emb1 = self.spectrum_encoder(
             mz_array=batch["mz_1"].float(),
             intensity_array=batch["intensity_1"].float(),
             **kwargs_1,
         )
 
-        emb0 = emb0[:, 0, :]
-        emb1 = emb1[:, 0, :]
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
 
@@ -792,6 +781,7 @@ class EmbeddingExtractor(pl.LightningModule):
         if self.multitasking:
             n_classes = self.config.model.tasks.edit_distance.n_classes
             use_gumbel = self.config.model.tasks.edit_distance.use_gumbel
+            features = self.config.model.get("features", {})
             return SimilarityModelMultitask.load_from_checkpoint(
                 model_path,
                 d_model=int(D_MODEL),
@@ -801,6 +791,12 @@ class EmbeddingExtractor(pl.LightningModule):
                 use_gumbel=use_gumbel,
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
+                use_adduct=features.get("use_adduct", False),
+                use_ce=features.get("use_ce", False),
+                use_ion_mode=features.get("use_ion_mode", False),
+                use_ion_activation=features.get("use_ion_activation", False),
+                use_ion_method=features.get("use_ion_method", False),
+                pool=features.get("pool", "attention"),
                 strict=strict,
             )
 
@@ -828,7 +824,7 @@ class EmbeddingExtractor(pl.LightningModule):
         if "ionmode" in batch:
             kwargs["ionmode"] = batch["ionmode"].float()
         if "adduct" in batch:
-            kwargs["adduct"] = batch["adduct"].float()
+            kwargs["adduct"] = batch["adduct"].long()
         if "ce" in batch:
             kwargs["ce"] = batch["ce"].float()
         if "ion_activation" in batch:
@@ -836,13 +832,12 @@ class EmbeddingExtractor(pl.LightningModule):
         if "ion_method" in batch:
             kwargs["ion_method"] = batch["ion_method"].float()
 
-        emb, _ = self.model(
+        emb = self.model(
             mz_array=batch["mz"].float(),
             intensity_array=batch["intensity"].float(),
             **kwargs,
         )
 
-        emb = emb[:, 0, :]
         emb = self.relu(emb)
 
         return emb
