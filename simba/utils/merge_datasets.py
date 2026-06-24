@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import glob
+import json
+import traceback
 
 
 SPLITS = ["train", "val", "test"]
@@ -31,7 +33,42 @@ def find_pair_files(folder, split):
     return sorted(glob.glob(pattern))
 
 
-def merge_pair_files(folder_a, folder_b, split, unique_offset_b, output_folder):
+def safe_load_pair_file(path, expected_cols=4):
+    """
+    Try to load a pair-distance .npy file.
+    Returns:
+        arr, error
+    If corrupted or invalid:
+        None, error_message
+    """
+    path = Path(path)
+
+    try:
+        arr = np.load(path, allow_pickle=False)
+
+        if arr.ndim != 2:
+            return None, f"Invalid ndim={arr.ndim}, expected 2"
+
+        if arr.shape[1] != expected_cols:
+            return None, f"Invalid shape={arr.shape}, expected (*, {expected_cols})"
+
+        if arr.shape[0] == 0:
+            return None, f"Empty array shape={arr.shape}"
+
+        return arr, None
+
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)}"
+
+
+def merge_pair_files(
+    folder_a,
+    folder_b,
+    split,
+    unique_offset_b,
+    output_folder,
+    skip_corrupted=True,
+):
     files_a = find_pair_files(folder_a, split)
     files_b = find_pair_files(folder_b, split)
 
@@ -41,22 +78,65 @@ def merge_pair_files(folder_a, folder_b, split, unique_offset_b, output_folder):
         raise FileNotFoundError(f"No pair files found for B split={split}")
 
     arrs = []
+    skipped = []
+
+    print(f"\n[{split}] Loading pair files A: {len(files_a)}")
 
     for f in files_a:
-        arrs.append(np.load(f))
+        arr, err = safe_load_pair_file(f)
+
+        if err is not None:
+            msg = {"split": split, "source": "A", "file": str(f), "error": err}
+            skipped.append(msg)
+            print(f"[{split}] SKIP corrupted A file: {f}")
+            print(f"        {err}")
+
+            if not skip_corrupted:
+                raise ValueError(msg)
+
+            continue
+
+        arrs.append(arr)
+
+    print(f"[{split}] Loading pair files B: {len(files_b)}")
 
     for f in files_b:
-        arr = np.load(f).copy()
+        arr, err = safe_load_pair_file(f)
+
+        if err is not None:
+            msg = {"split": split, "source": "B", "file": str(f), "error": err}
+            skipped.append(msg)
+            print(f"[{split}] SKIP corrupted B file: {f}")
+            print(f"        {err}")
+
+            if not skip_corrupted:
+                raise ValueError(msg)
+
+            continue
+
+        arr = arr.copy()
         arr[:, 0] += unique_offset_b
         arr[:, 1] += unique_offset_b
         arrs.append(arr)
+
+    if len(arrs) == 0:
+        raise RuntimeError(
+            f"[{split}] No valid pair files left after skipping corrupted files."
+        )
+
+    print(f"[{split}] Valid pair arrays loaded: {len(arrs)}")
+    print(f"[{split}] Skipped corrupted/invalid files: {len(skipped)}")
 
     merged = np.vstack(arrs)
 
     out_path = Path(output_folder) / f"{PAIR_PREFIX}_{split}.npy"
     np.save(out_path, merged)
 
-    return merged
+    skipped_log = Path(output_folder) / f"skipped_corrupted_pair_files_{split}.json"
+    with open(skipped_log, "w") as f:
+        json.dump(skipped, f, indent=2)
+
+    return merged, skipped
 
 
 def merge_split(ds_a, ds_b, split, mgf_offset_b):
@@ -72,7 +152,6 @@ def merge_split(ds_a, ds_b, split, mgf_offset_b):
     spectrum_list_offset_b = len(ds_a[idx_key])
     unique_offset_b = len(df_a)
 
-    # df_smiles indexes point into spectrum_indexes_split, not raw MGF
     df_b["indexes"] = df_b["indexes"].apply(
         lambda xs: [int(x) + spectrum_list_offset_b for x in xs]
     )
@@ -111,7 +190,8 @@ def validate_split(dataset, pair_distances, split):
         )
 
     print(
-        f"[{split}] OK | molecules={n_unique}, spectra={n_spectra}, pairs={len(pair_distances)}"
+        f"[{split}] OK | molecules={n_unique}, "
+        f"spectra={n_spectra}, pairs={len(pair_distances)}"
     )
 
 
@@ -121,8 +201,9 @@ def merge_lightweight_datasets_all_splits(
     preprocessing_dir_a,
     preprocessing_dir_b,
     output_dir,
-    output_dataset_name="preprocessing_merged.pkl",
+    output_dataset_name="mapping_unique_smiles.pkl",
     output_mgf_name="merged_spectra.mgf",
+    skip_corrupted=True,
 ):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -140,7 +221,11 @@ def merge_lightweight_datasets_all_splits(
     mgf_b = Path(ds_b["mgf_path"])
     output_mgf = output_dir / output_mgf_name
 
+    print("Counting spectra in MGF A...")
     mgf_offset_b = count_mgf_spectra(mgf_a)
+    print(f"MGF offset for B: {mgf_offset_b}")
+
+    print("Concatenating MGF files...")
     concat_mgf(mgf_a, mgf_b, output_mgf)
 
     merged = dict(ds_a)
@@ -148,8 +233,11 @@ def merge_lightweight_datasets_all_splits(
     merged["merged_from"] = [str(dataset_a_pkl), str(dataset_b_pkl)]
 
     offsets = {}
+    all_skipped = {}
 
     for split in SPLITS:
+        print(f"\n========== SPLIT: {split} ==========")
+
         df_merged, spectrum_indexes_merged, unique_offset_b = merge_split(
             ds_a, ds_b, split, mgf_offset_b
         )
@@ -161,12 +249,13 @@ def merge_lightweight_datasets_all_splits(
         merged[f"df_smiles_{split}"] = df_merged
         merged[f"spectrum_indexes_{split}"] = spectrum_indexes_merged
 
-        pair_distances = merge_pair_files(
+        pair_distances, skipped = merge_pair_files(
             preprocessing_dir_a,
             preprocessing_dir_b,
             split,
             unique_offset_b,
             output_dir,
+            skip_corrupted=skip_corrupted,
         )
 
         validate_split(merged, pair_distances, split)
@@ -175,21 +264,36 @@ def merge_lightweight_datasets_all_splits(
             "mgf_offset_b": mgf_offset_b,
             "spectrum_list_offset_b": len(ds_a[f"spectrum_indexes_{split}"]),
             "unique_offset_b": unique_offset_b,
+            "valid_pairs": int(len(pair_distances)),
+            "skipped_corrupted_files": len(skipped),
         }
 
+        all_skipped[split] = skipped
+
     merged["merge_offsets"] = offsets
+    merged["skipped_corrupted_pair_files"] = all_skipped
 
     output_dataset_pkl = output_dir / output_dataset_name
+
+    print(f"\nSaving merged dataset to: {output_dataset_pkl}")
     with open(output_dataset_pkl, "wb") as f:
         dill.dump(merged, f)
+
+    skipped_global_log = output_dir / "skipped_corrupted_pair_files_all.json"
+    with open(skipped_global_log, "w") as f:
+        json.dump(all_skipped, f, indent=2)
+
+    print("\nDone.")
+    print(f"Skipped-files log: {skipped_global_log}")
 
     return merged
 
 
 merge_lightweight_datasets_all_splits(
-    dataset_a_pkl="/data/simba_files/distance_files/tfs_ms2_ref/mapping_unique_smiles.pkl",
-    dataset_b_pkl="/data/simba_files/distance_files/tfs_ms2_auto/mapping_unique_smiles.pkl",
-    preprocessing_dir_a="/data/simba_files/distance_files/tfs_ms2_ref/",
-    preprocessing_dir_b="/data/simba_files/distance_files/tfs_ms2_auto/",
-    output_dir="/data/simba_files/tfs_ms2_merged_ref_auto/",
+    dataset_a_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_ref/mapping_unique_smiles.pkl",
+    dataset_b_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_auto/mapping_unique_smiles.pkl",
+    preprocessing_dir_a="/data/simba_files/distance_files/tfs_ms2_ms3_ref/",
+    preprocessing_dir_b="/data/simba_files/distance_files/tfs_ms2_ms3_auto/",
+    output_dir="/data/simba_files/tfs_ms2_ms3_merged_ref_auto/",
+    skip_corrupted=True,
 )
