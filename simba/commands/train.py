@@ -106,14 +106,14 @@ def _train_with_hydra(cfg: DictConfig) -> None:
     click.echo(f"Batch size: {cfg.training.batch_size}")
 
     # Import training functions from workflows module
-    from simba.workflows.training_original import (
+    from simba.workflows.training import (
         create_dataloaders,
         load_dataset,
         prepare_data,
         setup_callbacks,
         setup_model,
     )
-    from simba.workflows.training_original import (
+    from simba.workflows.training import (
         train as run_training,
     )
 
