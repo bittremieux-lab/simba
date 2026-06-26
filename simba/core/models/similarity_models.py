@@ -132,7 +132,6 @@ class SimilarityModel(pl.LightningModule):
             kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
             kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
-
         if self.use_ion_method:
             kwargs_0["ion_method"] = batch["ion_method_0"].float()
             kwargs_1["ion_method"] = batch["ion_method_1"].float()
@@ -467,47 +466,55 @@ class SimilarityModelMultitask(SimilarityModel):
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
-        batch["ionmode_0"] = torch.nan_to_num(
-            batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ionmode_1"] = torch.nan_to_num(
-            batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ionmode"] = batch["ionmode_0"].float()
-        kwargs_1["ionmode"] = batch["ionmode_1"].float()
-        batch["adduct_0"] = torch.nan_to_num(
-            batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["adduct_1"] = torch.nan_to_num(
-            batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
+        if self.use_ion_mode:
+            batch["ionmode_0"] = torch.nan_to_num(
+                batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ionmode_1"] = torch.nan_to_num(
+                batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ionmode"] = batch["ionmode_0"].float()
+            kwargs_1["ionmode"] = batch["ionmode_1"].float()
 
-        kwargs_0["adduct"] = batch["adduct_0"].float()
-        kwargs_1["adduct"] = batch["adduct_1"].float()
+        if self.use_adduct:
+            batch["adduct_0"] = torch.nan_to_num(
+                batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["adduct_1"] = torch.nan_to_num(
+                batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["adduct"] = batch["adduct_0"].float()
+            kwargs_1["adduct"] = batch["adduct_1"].float()
 
-        batch["ce_0"] = torch.nan_to_num(batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0)
-        batch["ce_1"] = torch.nan_to_num(batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0)
-        kwargs_0["ce"] = batch["ce_0"].float()
-        kwargs_1["ce"] = batch["ce_1"].float()
+        if self.use_ce:
+            batch["ce_0"] = torch.nan_to_num(
+                batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ce_1"] = torch.nan_to_num(
+                batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ce"] = batch["ce_0"].float()
+            kwargs_1["ce"] = batch["ce_1"].float()
 
-        batch["ion_activation_0"] = torch.nan_to_num(
-            batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_activation_1"] = torch.nan_to_num(
-            batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-        kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+        if self.use_ion_activation:
+            batch["ion_activation_0"] = torch.nan_to_num(
+                batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_activation_1"] = torch.nan_to_num(
+                batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
+            kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
-        batch["ion_method_0"] = torch.nan_to_num(
-            batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_method_1"] = torch.nan_to_num(
-            batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-
-        kwargs_0["ion_method"] = batch["ion_method_0"].float()
-        kwargs_1["ion_method"] = batch["ion_method_1"].float()
+        if self.use_ion_method:
+            batch["ion_method_0"] = torch.nan_to_num(
+                batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_method_1"] = torch.nan_to_num(
+                batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ion_method"] = batch["ion_method_0"].float()
+            kwargs_1["ion_method"] = batch["ion_method_1"].float()
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(
             batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
@@ -665,24 +672,6 @@ class SimilarityModelMultitask(SimilarityModel):
             #    torch.log(sigma2))
         else:
             loss = loss1 + (weight_loss2 * loss2)
-
-        self.log("loss_ed", loss1, on_step=True, on_epoch=True, prog_bar=False)
-        self.log("loss_mces", loss2, on_step=True, on_epoch=True, prog_bar=False)
-        if self.USE_LEARNABLE_MULTITASK:
-            self.log(
-                "log_sigma1",
-                self.log_sigma1,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=False,
-            )
-            self.log(
-                "log_sigma2",
-                self.log_sigma2,
-                on_step=True,
-                on_epoch=False,
-                prog_bar=False,
-            )
         return loss
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
@@ -705,26 +694,6 @@ class SimilarityModelMultitask(SimilarityModel):
             target_matrix[i, : target[i] + 1] = 1.0
         loss = -torch.sum(target_matrix * F.log_softmax(pred, dim=1), dim=1).mean()
         return loss
-
-    def validation_step(self, batch, batch_idx):
-        """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
-        logits_list = self(batch)
-        logits1 = logits_list[0]  # [B, n_classes]
-        logits2 = logits_list[1]  # [B] cosine similarity
-
-        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
-        target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
-
-        loss = self.step(batch, batch_idx)
-        self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-
-        return {
-            "loss": loss,
-            "ed_pred": torch.argmax(logits1, dim=1).cpu(),
-            "ed_target": target1.cpu(),
-            "mces_pred": logits2.view(-1).cpu(),
-            "mces_target": target2.cpu(),
-        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -803,9 +772,9 @@ class EmbeddingExtractor(pl.LightningModule):
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
                 strict=strict,
-                 use_adduct=self.config.model.features.use_adduct,
+                use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,
-                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_activation=self.config.model.features.use_ion_activation,
                 use_ion_method=self.config.model.features.use_ion_method,
                 use_ion_mode=self.config.model.features.use_ion_mode,
             )
@@ -821,7 +790,7 @@ class EmbeddingExtractor(pl.LightningModule):
                 strict=strict,
                 use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,
-                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_activation=self.config.model.features.use_ion_activation,
                 use_ion_method=self.config.model.features.use_ion_method,
                 use_ion_mode=self.config.model.features.use_ion_mode,
             )
@@ -846,7 +815,6 @@ class EmbeddingExtractor(pl.LightningModule):
             kwargs["ion_activation"] = batch["ion_activation"].float()
         if "ion_method" in batch:
             kwargs["ion_method"] = batch["ion_method"].float()
-
 
         emb, _ = self.model(
             mz_array=batch["mz"].float(),

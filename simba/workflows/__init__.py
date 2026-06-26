@@ -1,6 +1,6 @@
 """Training workflows for SIMBA."""
 
-from simba.workflows.training_original import (
+from simba.workflows.training import (
     create_dataloaders,
     prepare_data,
     setup_callbacks,
