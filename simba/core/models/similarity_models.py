@@ -584,6 +584,26 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = F.binary_cross_entropy(prob, target_matrix, reduction="mean")
         return loss
 
+    def validation_step(self, batch, batch_idx):
+        """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
+        logits_list = self(batch)
+        logits1 = logits_list[0]  # [B, n_classes]
+        logits2 = logits_list[1]  # [B] cosine similarity
+
+        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
+        target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
+
+        loss = self.step(batch, batch_idx)
+        self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        return {
+            "loss": loss,
+            "ed_pred": torch.argmax(logits1, dim=1).cpu(),
+            "ed_target": target1.cpu(),
+            "mces_pred": logits2.view(-1).cpu(),
+            "mces_target": target2.cpu(),
+        }
+
     def step(self, batch, batch_idx, threshold=0.5, weight_loss2=None):
         logits_list = self(batch)
         logits1 = logits_list[0]

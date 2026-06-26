@@ -4,11 +4,13 @@ import click
 
 from simba.commands.analog_discovery import analog_discovery
 from simba.commands.inference import inference
+from simba.commands.metadata_analysis import metadata_analysis
 from simba.commands.molecular_networking import molecular_network
 from simba.commands.preprocess import preprocess
-from simba.commands.train import train
-from simba.commands.metadata_analysis import metadata_analysis
 from simba.commands.separate_msn_levels import separate_msn_levels
+from simba.commands.train import train
+
+
 @click.group()
 @click.version_option(package_name="simba-ms")
 def cli():

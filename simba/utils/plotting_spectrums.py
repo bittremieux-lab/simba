@@ -1,16 +1,13 @@
 from copy import deepcopy
+from io import BytesIO
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnchoredText
-
+import spectrum_utils.plot as sup
+from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 from rdkit.Chem.Draw import rdMolDraw2D
-
-import spectrum_utils.plot as sup
-
-from PIL import Image
 
 
 # ----------------------------
@@ -47,7 +44,7 @@ def draw_mcs_diff_png(
     drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
     opts = drawer.drawOptions()
     opts.clearBackground = True
-    opts.setBackgroundColour((1,1,1))
+    opts.setBackgroundColour((1, 1, 1))
     opts.bondLineWidth = line_width
     opts.useBWAtomPalette()
 
@@ -81,11 +78,11 @@ def draw_mcs_diff_png(
     highlight_atoms = list(common_atoms) + diff_atoms
     highlight_bonds = list(common_bonds) + diff_bonds
 
-    atom_colors = {idx: col_common for idx in common_atoms}
-    atom_colors.update({idx: col_diff for idx in diff_atoms})
+    atom_colors = dict.fromkeys(common_atoms, col_common)
+    atom_colors.update(dict.fromkeys(diff_atoms, col_diff))
 
-    bond_colors = {idx: col_common for idx in common_bonds}
-    bond_colors.update({idx: col_diff for idx in diff_bonds})
+    bond_colors = dict.fromkeys(common_bonds, col_common)
+    bond_colors.update(dict.fromkeys(diff_bonds, col_diff))
 
     rdMolDraw2D.PrepareAndDrawMolecule(
         drawer,
@@ -94,14 +91,13 @@ def draw_mcs_diff_png(
         highlightBonds=highlight_bonds,
         highlightAtomColors=atom_colors,
         highlightBondColors=bond_colors,
-        highlightAtomRadii={idx: 0.35 for idx in common_atoms},
+        highlightAtomRadii=dict.fromkeys(common_atoms, 0.35),
     )
 
     drawer.FinishDrawing()
 
-    from io import BytesIO
     return Image.open(BytesIO(drawer.GetDrawingText()))
-    
+
 
 # ----------------------------
 # MAIN (PNG pipeline)
@@ -152,11 +148,17 @@ def plot_pair_mols_plus_spectrum_png(
     ax = fig.add_subplot(111)
 
     sup.mirror(
-        s1.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode).filter_intensity(0.01),
-        s2.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode).filter_intensity(0.01),
+        s1.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode).filter_intensity(
+            0.01
+        ),
+        s2.remove_precursor_peak(fragment_tol_mass, fragment_tol_mode).filter_intensity(
+            0.01
+        ),
         ax=ax,
     )
-    ax.set_title(f"MCES ground truth: {metrics['mces_gt']:.2f} MCES pred: {metrics['mces_pred']:.2f}")
+    ax.set_title(
+        f"MCES ground truth: {metrics['mces_gt']:.2f} MCES pred: {metrics['mces_pred']:.2f}"
+    )
     ax.set_xlim(mz_min, mz_max)
     ax.grid(False)
     ax.minorticks_off()

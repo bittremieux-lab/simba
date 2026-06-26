@@ -1,10 +1,10 @@
+import glob
+import json
+from pathlib import Path
+
 import dill
 import numpy as np
 import pandas as pd
-from pathlib import Path
-import glob
-import json
-import traceback
 
 
 SPLITS = ["train", "val", "test"]
@@ -13,7 +13,7 @@ PAIR_PREFIX = "ed_mces_indexes_tani_incremental"
 
 def count_mgf_spectra(mgf_path):
     n = 0
-    with open(mgf_path, "r", errors="ignore") as f:
+    with open(mgf_path, errors="ignore") as f:
         for line in f:
             if line.strip().upper() == "BEGIN IONS":
                 n += 1
@@ -23,7 +23,7 @@ def count_mgf_spectra(mgf_path):
 def concat_mgf(mgf_a, mgf_b, output_mgf):
     with open(output_mgf, "w") as out:
         for mgf in [mgf_a, mgf_b]:
-            with open(mgf, "r", errors="ignore") as f:
+            with open(mgf, errors="ignore") as f:
                 out.write(f.read().strip())
                 out.write("\n\n")
 
