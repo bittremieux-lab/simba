@@ -4,6 +4,8 @@ from depthcharge.transformers import (
     SpectrumTransformerEncoder,
 )  # PeptideTransformerEncoder,
 
+from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+
 
 class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
     def __init__(
@@ -47,7 +49,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         # Only used when self.use_encoders = True
         if self.use_encoders:
             metadata_hidden_dim = 32
-            adduct_num_embeddings = 32
+            adduct_num_embeddings = len(ADDUCT_TO_MASS)
             adduct_embedding_dim = 8
             self.adduct_embedding = nn.Embedding(
                 num_embeddings=adduct_num_embeddings,
