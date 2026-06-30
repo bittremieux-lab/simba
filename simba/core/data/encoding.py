@@ -33,7 +33,7 @@ def encode_adduct_mass(adduct: str):
     #if adduct in adducts:
     #    response = [ADDUCT_TO_MASS[adduct]]
 
-    #response = [ADDUCT_TO_MASS[adduct] if a==adduct else 0 for a in adducts]
+    response = [ADDUCT_TO_MASS[adduct] if a==adduct else 0 for a in adducts]
     
     return response
 
