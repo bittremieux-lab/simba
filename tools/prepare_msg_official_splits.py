@@ -25,6 +25,49 @@ HDF5_PATH = "/mnt/data2/nkubrakov/massspecgym/data/auxiliary/all_smiles_mces.hdf
 OUT_DIR = Path("/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_official")
 MCES_THRESHOLD = 20.0
 
+MIN_N_PEAKS = 6  # mirrors cfg.data.preprocessing.min_n_peaks default
+PROTONIZED_ADDUCTS = {"M+", "[M+H]+", "M+H"}
+
+
+def is_valid_for_simba(spec: matchms.Spectrum) -> bool:
+    """Replicate SIMBA's is_valid_spectrum_janssen filter (use_only_protonized_adducts=True).
+
+    Mirrors: LoadData.is_valid_spectrum_janssen + NaN check in loaders.py.
+    """
+    mz = spec.peaks.mz
+    intensities = spec.peaks.intensities
+    if mz is None or intensities is None or len(mz) < MIN_N_PEAKS:
+        return False
+
+    # is_centroid: all intensities strictly positive
+    if not np.all(intensities > 0):
+        return False
+
+    # ion mode: positive only (if field present)
+    ionmode = spec.get("ionmode")
+    if ionmode and ionmode.lower() != "positive":
+        return False
+
+    # adduct: only protonized (if field present)
+    adduct = spec.get("adduct")
+    if adduct and adduct not in PROTONIZED_ADDUCTS:
+        return False
+
+    # smiles: not N/A (if field present)
+    smiles = spec.get("smiles")
+    if smiles is not None and smiles == "N/A":
+        return False
+
+    # NaN / finite / non-negative check (mirrors training.py loader NaN check)
+    return not (
+        np.isnan(mz).any()
+        or np.isnan(intensities).any()
+        or not np.isfinite(mz).all()
+        or not np.isfinite(intensities).all()
+        or not np.all(mz >= 0)
+        or not np.all(intensities >= 0)
+    )
+
 
 def canonicalize(smi):
     mol = Chem.MolFromSmiles(smi)
@@ -70,14 +113,24 @@ def build_pairs(local_mol_indices, global_mol_indices, mces_flat, n):
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ── 1. Read MGF, group spectra by fold ──────────────────────────────────
-    print("Reading MGF...")
+    # ── 1. Read MGF, filter to valid spectra, group by fold ─────────────────
+    print("Reading MGF (filtering to SIMBA-valid spectra)...")
     fold_spectra = defaultdict(list)  # fold -> [(mgf_idx, spectrum)]
+    n_total = 0
+    n_valid = 0
     for mgf_idx, spec in enumerate(matchms.importing.load_from_mgf(MGF_PATH)):
+        n_total += 1
         fold = spec.get("fold")
-        if fold:
-            fold_spectra[fold].append((mgf_idx, spec))
+        if not fold:
+            continue
+        if not is_valid_for_simba(spec):
+            continue
+        n_valid += 1
+        fold_spectra[fold].append((mgf_idx, spec))
 
+    print(
+        f"  Total spectra: {n_total}, valid: {n_valid}, filtered: {n_total - n_valid}"
+    )
     for fold, items in fold_spectra.items():
         print(f"  {fold}: {len(items)} spectra")
 
@@ -95,16 +148,18 @@ def main():
     canon_to_hdf5_idx = {canonicalize(s): i for i, s in enumerate(smiles_order)}
 
     # ── 3. Build df_smiles and spectrum_indexes per fold ────────────────────
+    # df_smiles["indexes"] = local positions in spectrum_indexes (NOT global MGF indices)
+    # spectrum_indexes     = global MGF indices (for loading spectra at training time)
     dfs, spec_idxs = {}, {}
     smiles_to_hdf5 = {}  # per-fold: local_mol_idx -> hdf5_idx
 
     for fold, items in fold_spectra.items():
-        # Group by canonical SMILES
+        # Group by canonical SMILES; local_pos = position in items / spectrum_indexes
         smiles_groups = defaultdict(list)
         smiles_meta = {}
-        for mgf_idx, spec in items:
+        for local_pos, (_mgf_idx, spec) in enumerate(items):
             smi = canonicalize(spec.get("smiles") or "")
-            smiles_groups[smi].append(mgf_idx)
+            smiles_groups[smi].append(local_pos)
             if smi not in smiles_meta:
                 smiles_meta[smi] = {
                     "mz": spec.get("precursor_mz"),
@@ -134,12 +189,6 @@ def main():
 
         df = pd.DataFrame(rows)
         dfs[fold] = df
-        spec_idxs[fold] = [
-            i
-            for _, items_inner in [(0, items)]
-            for mgf_idx, _ in items_inner
-            for i in [mgf_idx]
-        ]
         spec_idxs[fold] = [mgf_idx for mgf_idx, _ in items]
         smiles_to_hdf5[fold] = np.array(hdf5_idxs)
 

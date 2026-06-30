@@ -366,6 +366,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        use_edit_distance=True,
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -427,6 +428,7 @@ class SimilarityModelMultitask(SimilarityModel):
 
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
+        self.use_edit_distance = use_edit_distance
         if USE_LEARNABLE_MULTITASK:
             initial_log_sigma1 = 0.0
             initial_log_sigma2 = -5.3
@@ -678,20 +680,19 @@ class SimilarityModelMultitask(SimilarityModel):
         # sigma2 = torch.nn.functional.softplus(self.sigma2_param)
 
         # Combine the losses using learned weights:
+        use_ed = self.use_edit_distance
         if self.USE_LEARNABLE_MULTITASK:
-            loss = (
-                torch.exp(-self.log_sigma1) * loss1
-                + self.log_sigma1
-                + torch.exp(-self.log_sigma2) * loss2
-                + self.log_sigma2
-            )
-
-            # loss = (loss1 / (2 * sigma1 ** 2) +
-            #    loss2 / (2 * sigma2 ** 2) +
-            #    torch.log(sigma1) +
-            #    torch.log(sigma2))
+            if use_ed:
+                loss = (
+                    torch.exp(-self.log_sigma1) * loss1
+                    + self.log_sigma1
+                    + torch.exp(-self.log_sigma2) * loss2
+                    + self.log_sigma2
+                )
+            else:
+                loss = torch.exp(-self.log_sigma2) * loss2 + self.log_sigma2
         else:
-            loss = loss1 + (weight_loss2 * loss2)
+            loss = (loss1 + (weight_loss2 * loss2)) if use_ed else loss2
         return loss
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
