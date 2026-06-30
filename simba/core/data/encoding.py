@@ -8,21 +8,16 @@ IONIZATION_METHODS = ["NSI", "ESI", "APCI"]
 
 
 def encode_adduct_mass(adduct: str):
-    """Encode adduct as its mass.
+    """Encode adduct as a one-hot vector over the ADDUCT_TO_MASS dictionary.
 
     Args:
         adduct: Adduct string (e.g., '[M+H]+')
 
     Returns:
-        float: Mass of the adduct, or 0 if adduct is not recognized
+        list: One-hot vector of length len(ADDUCT_TO_MASS); all zeros if unrecognized
     """
-    # TODO: how encode adduct if not recognized?
-    # Currently returns 0, but might interfere with spectra without adducts
-    adducts = ADDUCT_TO_MASS.keys()
-    response = [0 for a in adducts]
-    if adduct in adducts:
-        response[0] = ADDUCT_TO_MASS[adduct]
-    return response
+    adducts = list(ADDUCT_TO_MASS.keys())
+    return [1 if adduct == a else 0 for a in adducts]
 
 
 def encode_adduct_one_hot(adduct: str):

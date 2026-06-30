@@ -70,6 +70,11 @@ class Simba:
             use_fingerprints=use_fingerprint,
             USE_LEARNABLE_MULTITASK=use_learnable_multitask,
             strict=False,
+            use_adduct=self.config.model.features.use_adduct,
+            use_ce=self.config.model.features.use_ce,
+            use_ion_activation=self.config.model.features.use_ion_activation,
+            use_ion_method=self.config.model.features.use_ion_method,
+            use_ion_mode=self.config.model.features.use_ion_mode,
         )
         model.eval()
 

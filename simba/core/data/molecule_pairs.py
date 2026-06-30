@@ -5,7 +5,6 @@ from simba.core.data.spectrum import SpectrumExt
 
 
 class MoleculePair:
-
     def __init__(
         self,
         vector_0=None,
@@ -82,7 +81,7 @@ class MolecularPairsSet:
         spectra_hash_0 = [s.spectrum_hash for s in spectra_0]
         spectra_hash_1 = [s.spectrum_hash for s in spectra_1]
         return all(
-            [s0 == s1 for s0, s1 in zip(spectra_hash_0, spectra_hash_1, strict=False)]
+            s0 == s1 for s0, s1 in zip(spectra_hash_0, spectra_hash_1, strict=False)
         )
 
     def __add__(self, other):
@@ -97,9 +96,7 @@ class MolecularPairsSet:
                 spectra=new_spectra, pair_distances=new_pair_distances
             )
         else:
-            print(
-                "ERROR: Attempting to add 2 set of spectra with different content"
-            )
+            print("ERROR: Attempting to add 2 set of spectra with different content")
             return 0
 
     def __getitem__(self, index):
@@ -128,12 +125,8 @@ class MolecularPairsSet:
             smiles_0=self.spectra[i].smiles,
             smiles_1=self.spectra[j].smiles,
             similarity=tani,
-            global_feats_0=MolecularPairsSet.get_global_variables(
-                self.spectra[i]
-            ),
-            global_feats_1=MolecularPairsSet.get_global_variables(
-                self.spectra[j]
-            ),
+            global_feats_0=MolecularPairsSet.get_global_variables(self.spectra[i]),
+            global_feats_1=MolecularPairsSet.get_global_variables(self.spectra[j]),
             index_in_spectrum_0=i,  # index in the spectrum list used as input
             index_in_spectrum_1=j,
             spectrum_object_0=self.spectra[i],
@@ -160,12 +153,8 @@ class MolecularPairsSet:
                 smiles_0=self.spectra[i].smiles,
                 smiles_1=self.spectra[j].smiles,
                 similarity=tani,
-                global_feats_0=MolecularPairsSet.get_global_variables(
-                    self.spectra[i]
-                ),
-                global_feats_1=MolecularPairsSet.get_global_variables(
-                    self.spectra[j]
-                ),
+                global_feats_0=MolecularPairsSet.get_global_variables(self.spectra[i]),
+                global_feats_1=MolecularPairsSet.get_global_variables(self.spectra[j]),
                 index_in_spectrum_0=i,  # index in the spectrum list used as input
                 index_in_spectrum_1=j,
                 spectrum_object_0=self.spectra[i],
@@ -186,7 +175,7 @@ class MolecularPairsSet:
         filter our pairs that are not from janssen
         """
         indexes_tani = []
-        for i, m in enumerate([mol for mol in self]):
+        for i, m in enumerate(self):
             if (m.spectrum_object_0.library == "janssen") and (
                 m.spectrum_object_1.library == "janssen"
             ):
@@ -203,16 +192,15 @@ class MolecularPairsSet:
         filter only pairs that have exclusively gnps data
         """
         indexes_tani = []
-        for i, m in enumerate([mol for mol in self]):
+        for i, m in enumerate(self):
             if (
-                "spectrumid" in m.params_0.keys()
-                and "spectrumid" in m.params_1.keys()
+                "spectrumid" in m.params_0
+                and "spectrumid" in m.params_1
+                and m.params_0["spectrumid"].startswith("CCMSLIB")
+                and m.params_1["spectrumid"].startswith("CCMSLIB")
             ):
-                if m.params_0["spectrumid"].startswith(
-                    "CCMSLIB"
-                ) and m.params_1["spectrumid"].startswith("CCMSLIB"):
-                    # molecule_pairs.append(m)
-                    indexes_tani.append(self.pair_distances[i])
+                # molecule_pairs.append(m)
+                indexes_tani.append(self.pair_distances[i])
 
         molecule_pairs = MolecularPairsSet(
             spectra=self.spectra, pair_distances=np.array(indexes_tani)
@@ -224,13 +212,13 @@ class MolecularPairsSet:
         filter any of the gnps data out
         """
         indexes_tani = []
-        for i, m in enumerate([mol for mol in self]):
-            if "spectrumid" in m.params_0.keys():
+        for i, m in enumerate(self):
+            if "spectrumid" in m.params_0:
                 if m.params_0["spectrumid"].startswith("CCMSLIB"):
                     pass
                 else:
                     indexes_tani.append(self.pair_distances[i])
-            elif "spectrumid" in m.params_1.keys():
+            elif "spectrumid" in m.params_1:
                 if m.params_1["spectrumid"].startswith("CCMSLIB"):
                     pass
                 else:
@@ -255,9 +243,7 @@ class MolecularPairsSet:
                 and (spectrums[int(row[1])].library != library)
             )
         ]
-        return MolecularPairsSet(
-            spectra=spectrums, pair_distances=new_indexes_tani
-        )
+        return MolecularPairsSet(spectra=spectrums, pair_distances=new_indexes_tani)
 
     def filter_by_similarity(self, min_sim, max_sim):
         new_indexes_tani = self.pair_distances[
@@ -380,9 +366,9 @@ class MoleculePairsOpt(MolecularPairsSet):
         if pair=0, return the first index, else return the last index
         """
         if pair == 0:
-            return self.df_smiles.loc[index, "indexes"][0]
+            return self.df_smiles.loc[int(index), "indexes"][0]
         else:
-            return self.df_smiles.loc[index, "indexes"][-1]
+            return self.df_smiles.loc[int(index), "indexes"][-1]
 
     def get_spectrums_from_indexes(self, pair_index):
         # pair index refers if it is 0 or 1 in the pair
