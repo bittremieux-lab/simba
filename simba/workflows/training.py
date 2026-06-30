@@ -295,19 +295,49 @@ def prepare_data(
     logger.info(f"Sanity check ids. Passed? {sanity_check_ids}")
     logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
 
-    # Calculate weights for the training set
-    train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
-        molecule_pairs_train,
-        cfg.model.tasks.edit_distance.n_classes - 1,
-        bin_sim_1=True,
+    # Calculate weights for the training set.
+    # When edit distance is disabled, all ED values are 0 and the ED-based sampler
+    # degenerates to uniform sampling. Use MCES similarity for binning instead so
+    # the model sees equal exposure to similar and dissimilar pairs.
+    n_bins = cfg.model.tasks.edit_distance.n_classes - 1
+    use_mces_sampling = (
+        not cfg.model.tasks.edit_distance.enabled
+        and molecule_pairs_train.extra_distances is not None
     )
-    weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
-    weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
-        molecule_pairs_train, weights_ed
-    )
-    weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
-        molecule_pairs_val, weights_ed
-    )
+    if use_mces_sampling:
+        mces_sim_tr = molecule_pairs_train.extra_distances  # 1 - MCES/40, in [0.5, 1.0]
+        bin_idx_tr = np.clip(np.floor(mces_sim_tr * n_bins).astype(int), 0, n_bins - 1)
+        bin_counts = np.bincount(bin_idx_tr, minlength=n_bins)
+        total = bin_counts.sum()
+        weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
+        weights_ed = weights_ed / weights_ed.sum()
+        bins_ed = np.arange(n_bins) / n_bins
+        weights_tr = weights_ed[bin_idx_tr]
+        weights_tr = weights_tr / weights_tr.sum()
+
+        mces_sim_val = molecule_pairs_val.extra_distances
+        bin_idx_val = np.clip(
+            np.floor(mces_sim_val * n_bins).astype(int), 0, n_bins - 1
+        )
+        weights_val = weights_ed[bin_idx_val]
+        weights_val = weights_val / weights_val.sum()
+
+        logger.info(
+            f"MCES-based sampling: {n_bins} bins, counts per bin: {bin_counts.tolist()}"
+        )
+    else:
+        train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
+            molecule_pairs_train,
+            n_bins,
+            bin_sim_1=True,
+        )
+        weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
+        weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
+            molecule_pairs_train, weights_ed
+        )
+        weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
+            molecule_pairs_val, weights_ed
+        )
 
     # Create datasets from molecule pairs
     dataset_train = MultitaskDataBuilder.from_molecule_pairs_to_dataset(

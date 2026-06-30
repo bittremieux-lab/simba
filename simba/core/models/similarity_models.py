@@ -598,6 +598,10 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = self.step(batch, batch_idx)
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
+        # MCES MAE in raw MCES units: target2 = 1 - MCES/40, logits2 = cosine sim pred
+        mces_mae = (40.0 * (logits2.view(-1) - target2).abs()).mean()
+        self.log("val_mces_mae", mces_mae, on_step=False, on_epoch=True, prog_bar=False)
+
         return {
             "loss": loss,
             "ed_pred": torch.argmax(logits1, dim=1).cpu(),
