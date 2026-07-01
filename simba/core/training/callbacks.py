@@ -233,7 +233,7 @@ class ProgressLogCallback(Callback):
         train_loss = m.get("train_loss_epoch")
         val_ed = m.get("loss_ed_epoch")
         val_mces = m.get("loss_mces_epoch")
-        val_mces_mae = m.get("val_mces_mae_epoch")
+        val_mces_mae = m.get("val_mces_mae")
         msg = f"[VAL]   epoch={trainer.current_epoch} step={trainer.global_step}"
         if val_loss is not None:
             msg += f" val_loss={float(val_loss):.4f}"
