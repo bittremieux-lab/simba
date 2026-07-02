@@ -90,15 +90,28 @@ def load_inference_data(cfg: DictConfig):
                     missing.append(mgf_idx)
 
             if missing:
-                raise RuntimeError(
-                    f"[test] {len(missing)} spectra missing from MGF "
-                    f"(e.g., MGF index {missing[0]}). "
-                    "Re-run preprocessing — all spectrum_indexes must be valid."
+                logger.warning(
+                    f"[test] {len(missing)} spectra missing from loaded set "
+                    f"(e.g., MGF index {missing[0]}). Dropping affected molecules."
                 )
-            for i in df_smiles.index:
-                df_smiles.at[i, "indexes"] = [
-                    idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
-                ]
+                for i in df_smiles.index:
+                    df_smiles.at[i, "indexes"] = [
+                        idx_map[idx]
+                        for idx in df_smiles.loc[i, "indexes"]
+                        if idx in idx_map
+                    ]
+                valid_rows = [i for i in df_smiles.index if df_smiles.loc[i, "indexes"]]
+                if len(valid_rows) < len(df_smiles):
+                    logger.warning(
+                        f"[test] Dropping {len(df_smiles) - len(valid_rows)} molecules"
+                        " with no valid spectra"
+                    )
+                    df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+            else:
+                for i in df_smiles.index:
+                    df_smiles.at[i, "indexes"] = [
+                        idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                    ]
 
             # Build unique_spectra from df_smiles indexes
             unique_spectra = [

@@ -126,16 +126,40 @@ def load_dataset(cfg: DictConfig):
                     else:
                         missing.append(mgf_idx)
 
+                mol_idx_remap = None
                 if missing:
-                    raise RuntimeError(
-                        f"[{split}] {len(missing)} spectra missing from MGF "
-                        f"(e.g., MGF index {missing[0]}). "
-                        "Re-run preprocessing — all spectrum_indexes must be valid."
+                    # Some spectra failed the training loader's validity check
+                    # (filter mismatch between preprocessing and training).
+                    # Drop molecules whose spectra are all missing; keep molecules
+                    # that have at least one valid spectrum.
+                    logger.warning(
+                        f"[{split}] {len(missing)} spectra missing from loaded set "
+                        f"(e.g., MGF index {missing[0]}). Dropping affected molecules."
                     )
-                for i in df_smiles.index:
-                    df_smiles.at[i, "indexes"] = [
-                        idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                    # Graceful remap: skip missing entries
+                    for i in df_smiles.index:
+                        df_smiles.at[i, "indexes"] = [
+                            idx_map[idx]
+                            for idx in df_smiles.loc[i, "indexes"]
+                            if idx in idx_map
+                        ]
+                    # Drop molecules with no valid spectra remaining
+                    valid_rows = [
+                        i for i in df_smiles.index if df_smiles.loc[i, "indexes"]
                     ]
+                    if len(valid_rows) < len(df_smiles):
+                        dropped = len(df_smiles) - len(valid_rows)
+                        logger.warning(
+                            f"[{split}] Dropping {dropped} molecules with no valid spectra"
+                        )
+                        # mol_idx_remap: old 0-based pos → new 0-based pos (for pair_distances)
+                        mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
+                        df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+                else:
+                    for i in df_smiles.index:
+                        df_smiles.at[i, "indexes"] = [
+                            idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                        ]
 
                 # Build unique_spectra from df_smiles indexes (index is now 0..n-1)
                 unique_spectra = [
@@ -150,6 +174,8 @@ def load_dataset(cfg: DictConfig):
                     df_smiles=df_smiles,
                     pair_distances=None,  # Will be loaded separately
                 )
+                if mol_idx_remap is not None:
+                    molecule_pairs._mol_idx_remap = mol_idx_remap
 
                 # Store in mapping dict
                 mapping[f"molecule_pairs_{split}"] = molecule_pairs
@@ -244,6 +270,30 @@ def prepare_data(
 
     ed_col = cfg.model.data_columns.edit_distance
     mces_col = cfg.model.data_columns.mces20
+
+    def _apply_remap(arr, mol_pairs):
+        """Filter and remap molecule indices in pair array using mol_pairs._mol_idx_remap."""
+        remap = getattr(mol_pairs, "_mol_idx_remap", None)
+        if remap is None:
+            return arr
+        col0 = arr[:, 0].astype(int)
+        col1 = arr[:, 1].astype(int)
+        mask = np.array([c in remap and d in remap for c, d in zip(col0, col1)])
+        arr = arr[mask].copy()
+        arr[:, 0] = np.array([remap[int(x)] for x in arr[:, 0]])
+        arr[:, 1] = np.array([remap[int(x)] for x in arr[:, 1]])
+        logger.info(
+            f"mol_idx_remap: kept {mask.sum()} / {len(mask)} pairs after filtering"
+        )
+        return arr
+
+    indexes_tani_multitasking_train = _apply_remap(
+        indexes_tani_multitasking_train, molecule_pairs_train
+    )
+    indexes_tani_multitasking_val = _apply_remap(
+        indexes_tani_multitasking_val, molecule_pairs_val
+    )
+
     molecule_pairs_train.pair_distances = indexes_tani_multitasking_train[
         :, [0, 1, ed_col]
     ]
@@ -265,6 +315,9 @@ def prepare_data(
         )
         indexes_tani_multitasking_val_official = _remove_duplicates_array(
             indexes_tani_multitasking_val_official
+        )
+        indexes_tani_multitasking_val_official = _apply_remap(
+            indexes_tani_multitasking_val_official, molecule_pairs_val_official
         )
         molecule_pairs_val_official.pair_distances = (
             indexes_tani_multitasking_val_official[:, [0, 1, ed_col]]
