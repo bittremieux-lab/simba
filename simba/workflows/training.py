@@ -106,7 +106,7 @@ def load_dataset(cfg: DictConfig):
         spectra_by_idx = {s.mgf_index: s for s in all_spectra}
 
         # Reconstruct molecule pairs with spectra
-        for split in ["train", "val", "test"]:
+        for split in ["train", "val", "val_official", "test"]:
             df_smiles_key = f"df_smiles_{split}"
             spectrum_indexes_key = f"spectrum_indexes_{split}"
 
@@ -157,6 +157,7 @@ def load_dataset(cfg: DictConfig):
         return (
             mapping.get("molecule_pairs_train"),
             mapping.get("molecule_pairs_val"),
+            mapping.get("molecule_pairs_val_official"),
             mapping.get("molecule_pairs_test"),
             None,
         )
@@ -185,6 +186,7 @@ def load_dataset(cfg: DictConfig):
     return (
         mapping["molecule_pairs_train"],
         mapping["molecule_pairs_val"],
+        None,  # val_official not present in full-format mappings
         mapping["molecule_pairs_test"],
         mapping["uniformed_molecule_pairs_test"],
     )
@@ -196,18 +198,22 @@ def prepare_data(
     molecule_pairs_test,
     uniformed_molecule_pairs_test,
     cfg: DictConfig,
+    molecule_pairs_val_official=None,
 ) -> tuple:
     """Prepare training data from molecule pairs.
 
     Args:
         molecule_pairs_train: Training molecule pairs
-        molecule_pairs_val: Validation molecule pairs
+        molecule_pairs_val: Validation molecule pairs (scaffold split)
         molecule_pairs_test: Test molecule pairs
         uniformed_molecule_pairs_test: Uniformed test pairs
         cfg: Hydra configuration
+        molecule_pairs_val_official: Optional second val set (MSG official val fold)
 
     Returns:
-        Tuple of (dataset_train, train_sampler, dataset_val, val_sampler, weights_ed, bins_ed)
+        Tuple of (dataset_train, train_sampler, dataset_val, val_sampler,
+                  dataset_val_official, val_official_sampler, weights_ed, bins_ed).
+        dataset_val_official and val_official_sampler are None when not provided.
     """
     logger.info("Loading pairs data ...")
 
@@ -247,6 +253,28 @@ def prepare_data(
 
     logger.info(f"Number of pairs for train: {len(molecule_pairs_train)}")
     logger.info(f"Number of pairs for val: {len(molecule_pairs_val)}")
+
+    # Load pairs for the official MSG val fold if provided
+    if molecule_pairs_val_official is not None:
+        indexes_tani_multitasking_val_official = LoadMCES.merge_numpy_arrays(
+            cfg.paths.preprocessing_dir_train,
+            prefix="ed_mces_indexes_tani_incremental_val_official",
+            use_edit_distance=cfg.model.tasks.edit_distance.enabled,
+            use_multitask=cfg.model.multitasking.enabled,
+            add_high_similarity_pairs=cfg.sampling.add_high_similarity_pairs,
+        )
+        indexes_tani_multitasking_val_official = _remove_duplicates_array(
+            indexes_tani_multitasking_val_official
+        )
+        molecule_pairs_val_official.pair_distances = (
+            indexes_tani_multitasking_val_official[:, [0, 1, ed_col]]
+        )
+        molecule_pairs_val_official.extra_distances = (
+            indexes_tani_multitasking_val_official[:, mces_col]
+        )
+        logger.info(
+            f"Number of pairs for val_official: {len(molecule_pairs_val_official)}"
+        )
 
     # Sanity checks
     sanity_check_ids = SanityChecks.sanity_checks_ids(
@@ -338,11 +366,43 @@ def prepare_data(
         weights=weights_val, num_samples=len(dataset_val), replacement=True
     )
 
+    # Build optional official val dataset + sampler using the same train weights
+    dataset_val_official = None
+    val_official_sampler = None
+    if molecule_pairs_val_official is not None:
+        dataset_val_official = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
+            molecule_pairs_val_official,
+            max_num_peaks=int(cfg.model.transformer.context_length),
+            use_adduct=cfg.model.features.use_adduct,
+            use_ce=cfg.model.features.use_ce,
+            use_ion_activation=cfg.model.features.use_ion_activation,
+            use_ion_method=cfg.model.features.use_ion_method,
+            use_ion_mode=cfg.model.features.use_ion_mode,
+        )
+        if use_mces_sampling:
+            mces_sim_off = molecule_pairs_val_official.extra_distances
+            bin_idx_off = np.clip(
+                np.floor(mces_sim_off * n_bins).astype(int), 0, n_bins - 1
+            )
+            weights_off = weights_ed[bin_idx_off]
+            weights_off = weights_off / weights_off.sum()
+        else:
+            weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
+                molecule_pairs_val_official, weights_ed
+            )
+        val_official_sampler = CustomWeightedRandomSampler(
+            weights=weights_off,
+            num_samples=len(dataset_val_official),
+            replacement=True,
+        )
+
     return (
         dataset_train,
         train_sampler,
         dataset_val,
         val_sampler,
+        dataset_val_official,
+        val_official_sampler,
         weights_ed,
         bins_ed,
     )
@@ -354,16 +414,22 @@ def create_dataloaders(
     train_sampler,
     dataset_val,
     val_sampler,
-) -> tuple[DataLoader, DataLoader]:
+    dataset_val_official=None,
+    val_official_sampler=None,
+):
     """Create PyTorch DataLoaders for training and validation.
     Args:
         cfg: Hydra configuration
         dataset_train: Training dataset
         train_sampler: Training sampler (or None)
-        dataset_val: Validation dataset
-        val_sampler: Validation sampler (or None)
+        dataset_val: Scaffold-split validation dataset
+        val_sampler: Scaffold val sampler (or None)
+        dataset_val_official: Optional MSG official val dataset
+        val_official_sampler: Optional MSG official val sampler
     Returns:
-        Tuple of (dataloader_train, dataloader_val)
+        (dataloader_train, dataloader_val) where dataloader_val is a single
+        DataLoader when no official val is given, or a list of two DataLoaders
+        [scaffold_loader, official_loader] when dataset_val_official is provided.
     """
     dataloader_train = DataLoader(
         dataset_train,
@@ -374,7 +440,7 @@ def create_dataloaders(
         persistent_workers=cfg.hardware.num_workers > 0,
     )
 
-    dataloader_val = DataLoader(
+    dataloader_val_scaffold = DataLoader(
         dataset_val,
         batch_size=cfg.training.batch_size,
         shuffle=(val_sampler is None),
@@ -384,10 +450,26 @@ def create_dataloaders(
         generator=torch.Generator().manual_seed(42) if val_sampler is None else None,
     )
 
-    return dataloader_train, dataloader_val
+    if dataset_val_official is not None:
+        dataloader_val_official = DataLoader(
+            dataset_val_official,
+            batch_size=cfg.training.batch_size,
+            shuffle=(val_official_sampler is None),
+            sampler=val_official_sampler,
+            num_workers=cfg.hardware.num_workers,
+            persistent_workers=cfg.hardware.num_workers > 0,
+            generator=(
+                torch.Generator().manual_seed(43)
+                if val_official_sampler is None
+                else None
+            ),
+        )
+        return dataloader_train, [dataloader_val_scaffold, dataloader_val_official]
+
+    return dataloader_train, dataloader_val_scaffold
 
 
-def setup_callbacks(cfg: DictConfig) -> tuple:
+def setup_callbacks(cfg: DictConfig, val_names: list | None = None) -> tuple:
     """Setup PyTorch Lightning callbacks.
     Args:
         cfg: Hydra configuration
@@ -398,12 +480,19 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
 
     paths = get_model_paths(cfg)
 
+    # When multiple val loaders are used, Lightning appends /dataloader_idx_N to metric names
+    val_loss_monitor = (
+        "validation_loss/dataloader_idx_0"
+        if val_names and len(val_names) > 1
+        else "validation_loss"
+    )
+
     # Always save best model checkpoint
     checkpoint_callback = ModelCheckpoint(
         dirpath=str(paths["checkpoint_dir"]),
         filename=cfg.checkpoints.best_model_name.replace(".ckpt", ""),
         save_top_k=1,
-        monitor="validation_loss",
+        monitor=val_loss_monitor,
         mode="min",
     )
 
@@ -421,10 +510,11 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    # Validation metrics callback (saves confusion matrix + MCES scatter)
+    # Validation metrics callback (saves confusion matrix + MCES hexbins)
     val_metrics_callback = ValMetricsCallback(
         output_dir=str(paths["checkpoint_dir"]),
         n_classes=cfg.model.tasks.edit_distance.n_classes,
+        val_names=val_names or ["val"],
     )
 
     # Progress logging callback (writes INFO lines to .err log file)

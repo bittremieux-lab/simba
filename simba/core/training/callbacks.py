@@ -26,11 +26,15 @@ class LossCallback(Callback):
         self.train_sigma1: list[float] = []
         self.train_sigma2: list[float] = []
 
-        # per-validation tracking (by global step)
+        # per-validation tracking (by global step) — scaffold val (dataloader 0)
         self.val_steps: list[int] = []
         self.val_loss: list[float] = []
         self.val_loss_ed: list[float] = []
         self.val_loss_mces: list[float] = []
+        # official val (dataloader 1, if present)
+        self.val_steps_official: list[int] = []
+        self.val_loss_official: list[float] = []
+        self.val_loss_mces_official: list[float] = []
 
     def _get(self, metrics, key):
         v = metrics.get(key)
@@ -54,13 +58,28 @@ class LossCallback(Callback):
         if trainer.sanity_checking:
             return
         m = trainer.callback_metrics
-        loss = self._get(m, "validation_loss_epoch")
-        if loss is None:
-            return
-        self.val_steps.append(trainer.global_step)
-        self.val_loss.append(loss)
-        self.val_loss_ed.append(self._get(m, "loss_ed_epoch"))
-        self.val_loss_mces.append(self._get(m, "loss_mces_epoch"))
+        # Support both single-loader (plain key) and multi-loader (/dataloader_idx_N) cases
+        loss_0 = self._get(m, "validation_loss_epoch/dataloader_idx_0")
+        if loss_0 is not None:
+            self.val_steps.append(trainer.global_step)
+            self.val_loss.append(loss_0)
+            self.val_loss_ed.append(self._get(m, "loss_ed_epoch/dataloader_idx_0"))
+            self.val_loss_mces.append(self._get(m, "loss_mces_epoch/dataloader_idx_0"))
+            loss_1 = self._get(m, "validation_loss_epoch/dataloader_idx_1")
+            if loss_1 is not None:
+                self.val_steps_official.append(trainer.global_step)
+                self.val_loss_official.append(loss_1)
+                self.val_loss_mces_official.append(
+                    self._get(m, "loss_mces_epoch/dataloader_idx_1")
+                )
+        else:
+            loss = self._get(m, "validation_loss_epoch")
+            if loss is None:
+                return
+            self.val_steps.append(trainer.global_step)
+            self.val_loss.append(loss)
+            self.val_loss_ed.append(self._get(m, "loss_ed_epoch"))
+            self.val_loss_mces.append(self._get(m, "loss_mces_epoch"))
         self.plot_loss()
 
     def plot_loss(self):
@@ -100,7 +119,18 @@ class LossCallback(Callback):
                 ms=6,
                 lw=1.5,
                 color="darkorange",
-                label="val",
+                label="val scaffold",
+            )
+        if self.val_steps_official:
+            _plot_series(
+                ax,
+                self.val_steps_official,
+                self.val_loss_official,
+                marker="s",
+                ms=5,
+                lw=1.5,
+                color="forestgreen",
+                label="val official",
             )
         ax.set_title("Total loss")
         ax.set_xlabel("step")
@@ -153,8 +183,19 @@ class LossCallback(Callback):
                 ms=6,
                 lw=1.5,
                 color="darkorange",
-                label="val",
+                label="val scaffold",
             )
+            if self.val_steps_official:
+                _plot_series(
+                    ax,
+                    self.val_steps_official,
+                    self.val_loss_mces_official,
+                    marker="s",
+                    ms=5,
+                    lw=1.5,
+                    color="forestgreen",
+                    label="val official",
+                )
             ax.set_title("MCES similarity loss (MSE)")
             ax.set_xlabel("step")
             ax.legend(fontsize=8)
@@ -250,19 +291,23 @@ class ProgressLogCallback(Callback):
 
 class ValMetricsCallback(Callback):
     """
-    After each validation epoch, saves:
-      - confusion_matrix.png  (ED predicted vs true class)
-      - mces_scatter.png      (MCES predicted vs true similarity)
-    to the checkpoint directory.
+    After each validation epoch, saves per-val-set hexbin plots and logs Spearman.
+    Supports multiple val dataloaders; val_names labels each one.
     """
 
-    def __init__(self, output_dir: str, n_classes: int = 6):
+    def __init__(
+        self, output_dir: str, n_classes: int = 6, val_names: list | None = None
+    ):
         self.output_dir = output_dir
         self.n_classes = n_classes
-        self._ed_preds = []
-        self._ed_targets = []
-        self._mces_preds = []
-        self._mces_targets = []
+        self.val_names = val_names or ["val"]
+        # Accumulate per dataloader_idx
+        self._preds: dict = {}
+
+    def _buf(self, idx: int) -> dict:
+        if idx not in self._preds:
+            self._preds[idx] = {"ed": [], "ed_t": [], "mces": [], "mces_t": []}
+        return self._preds[idx]
 
     def on_validation_batch_end(
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
@@ -271,44 +316,50 @@ class ValMetricsCallback(Callback):
             return
         if not isinstance(outputs, dict):
             return
-        self._ed_preds.append(outputs["ed_pred"].numpy())
-        self._ed_targets.append(outputs["ed_target"].numpy())
-        self._mces_preds.append(outputs["mces_pred"].float().numpy())
-        self._mces_targets.append(outputs["mces_target"].float().numpy())
+        buf = self._buf(dataloader_idx)
+        buf["ed"].append(outputs["ed_pred"].numpy())
+        buf["ed_t"].append(outputs["ed_target"].numpy())
+        buf["mces"].append(outputs["mces_pred"].float().numpy())
+        buf["mces_t"].append(outputs["mces_target"].float().numpy())
 
     def on_validation_epoch_end(self, trainer, pl_module):
-        if trainer.sanity_checking or not self._ed_preds:
+        if trainer.sanity_checking or not self._preds:
             return
-
-        ed_pred = np.concatenate(self._ed_preds)
-        ed_target = np.concatenate(self._ed_targets)
-        mces_pred = np.concatenate(self._mces_preds)
-        mces_target = np.concatenate(self._mces_targets)
-
-        self._ed_preds.clear()
-        self._ed_targets.clear()
-        self._mces_preds.clear()
-        self._mces_targets.clear()
 
         step = trainer.global_step
 
-        # Log Spearman correlation
-        if len(mces_pred) > 1:
-            from scipy.stats import spearmanr
+        for idx in sorted(self._preds.keys()):
+            buf = self._preds[idx]
+            if not buf["ed"]:
+                continue
+            ed_pred = np.concatenate(buf["ed"])
+            ed_target = np.concatenate(buf["ed_t"])
+            mces_pred = np.concatenate(buf["mces"])
+            mces_target = np.concatenate(buf["mces_t"])
+            buf["ed"].clear()
+            buf["ed_t"].clear()
+            buf["mces"].clear()
+            buf["mces_t"].clear()
 
-            r, _ = spearmanr(mces_target, mces_pred)
-            pl_module.log(
-                "val_mces_spearman",
-                float(r),
-                on_step=False,
-                on_epoch=True,
-                prog_bar=False,
-            )
+            val_name = self.val_names[idx] if idx < len(self.val_names) else f"val{idx}"
 
-        self._plot_confusion(ed_pred, ed_target, step)
-        self._plot_mces_hexbin(mces_pred, mces_target, step)
+            if len(mces_pred) > 1:
+                from scipy.stats import spearmanr
 
-    def _plot_confusion(self, pred, target, step):
+                r, _ = spearmanr(mces_target, mces_pred)
+                pl_module.log(
+                    f"val_mces_spearman/{val_name}",
+                    float(r),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                    add_dataloader_idx=False,
+                )
+
+            self._plot_confusion(ed_pred, ed_target, step, val_name)
+            self._plot_mces_hexbin(mces_pred, mces_target, step, val_name)
+
+    def _plot_confusion(self, pred, target, step, val_name="val"):
         n = self.n_classes
         cm = np.zeros((n, n), dtype=int)
         for t, p in zip(target, pred):
@@ -365,11 +416,11 @@ class ValMetricsCallback(Callback):
                 )
 
         plt.tight_layout()
-        path = os.path.join(self.output_dir, "confusion_matrix.png")
+        path = os.path.join(self.output_dir, f"confusion_matrix_{val_name}.png")
         plt.savefig(path, dpi=130)
         plt.close(fig)
 
-    def _plot_mces_hexbin(self, pred, target, step):
+    def _plot_mces_hexbin(self, pred, target, step, val_name="val"):
         from scipy.stats import spearmanr
 
         r, _ = spearmanr(target, pred) if len(pred) > 1 else (float("nan"), None)
@@ -382,12 +433,14 @@ class ValMetricsCallback(Callback):
         ax.plot([lo, hi], [lo, hi], "r--", lw=1, label="y = x")
         ax.set_xlabel("True MCES similarity")
         ax.set_ylabel("Predicted MCES similarity")
-        ax.set_title(f"Val MCES — step {step:,}   Spearman ρ = {r:.3f}")
+        ax.set_title(f"Val MCES [{val_name}] — step {step:,}   Spearman ρ = {r:.3f}")
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.2)
 
         plt.tight_layout()
         # Never overwrite — each validation step gets its own file
-        path = os.path.join(self.output_dir, f"mces_hexbin_step{step:06d}.png")
+        path = os.path.join(
+            self.output_dir, f"mces_hexbin_{val_name}_step{step:06d}.png"
+        )
         plt.savefig(path, dpi=130)
         plt.close(fig)

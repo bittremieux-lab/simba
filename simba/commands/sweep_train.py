@@ -97,10 +97,17 @@ def _run_trial(
     click.echo(f"  checkpoint → {trial_dir}")
     click.echo(f"{'=' * 60}")
 
-    (mol_train, mol_val, mol_test, mol_test_uni) = load_dataset(cfg)
-    (dataset_train, train_sampler, dataset_val, val_sampler, _, _) = prepare_data(
-        mol_train, mol_val, mol_test, mol_test_uni, cfg
-    )
+    (mol_train, mol_val, _mol_val_official, mol_test, mol_test_uni) = load_dataset(cfg)
+    (
+        dataset_train,
+        train_sampler,
+        dataset_val,
+        val_sampler,
+        _,
+        _,
+        _,
+        _,
+    ) = prepare_data(mol_train, mol_val, mol_test, mol_test_uni, cfg)
     dataloader_train, dataloader_val = create_dataloaders(
         cfg, dataset_train, train_sampler, dataset_val, val_sampler
     )

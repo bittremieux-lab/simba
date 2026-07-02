@@ -2,7 +2,7 @@
 Prepare SIMBA preprocessing files using Murcko scaffold split.
 
 Uses MSG official test fold as test (unchanged).
-Discards MSG official val entirely.
+Keeps MSG official val fold as val_official (second validation set).
 Splits MSG official train into new_train / new_val using Murcko scaffold split
 (90% of scaffold groups -> train, 10% -> val, seed=42).
 
@@ -225,13 +225,13 @@ def main():
 
     canon_to_hdf5_idx = {canonicalize(s): i for i, s in enumerate(smiles_order)}
 
-    # ── 3. Build df_smiles and spectrum_indexes for MSG train and test ────────
-    # "val" fold is discarded entirely.
+    # ── 3. Build df_smiles and spectrum_indexes for MSG train, val, and test ──
+    # "val" is kept as val_official (second validation set alongside scaffold val).
     dfs_orig = {}
     spec_idxs_orig = {}
     hdf5_idxs_orig = {}
 
-    for fold in ("train", "test"):
+    for fold in ("train", "val", "test"):
         items = fold_spectra.get(fold, [])
         if not items:
             print(f"  WARNING: fold '{fold}' is empty!")
@@ -318,6 +318,11 @@ def main():
     splits = {
         "train": (df_new_train, spec_idxs_new_train, hdf5_new_train),
         "val": (df_new_val, spec_idxs_new_val, hdf5_new_val),
+        "val_official": (
+            dfs_orig.get("val", pd.DataFrame()),
+            spec_idxs_orig.get("val", []),
+            hdf5_idxs_orig.get("val", np.array([])),
+        ),
         "test": (
             dfs_orig.get("test", pd.DataFrame()),
             spec_idxs_orig.get("test", []),
@@ -355,9 +360,11 @@ def main():
     mapping = {
         "df_smiles_train": df_new_train,
         "df_smiles_val": df_new_val,
+        "df_smiles_val_official": dfs_orig.get("val", pd.DataFrame()),
         "df_smiles_test": dfs_orig.get("test", pd.DataFrame()),
         "spectrum_indexes_train": spec_idxs_new_train,
         "spectrum_indexes_val": spec_idxs_new_val,
+        "spectrum_indexes_val_official": spec_idxs_orig.get("val", []),
         "spectrum_indexes_test": spec_idxs_orig.get("test", []),
         "mgf_path": MGF_PATH,
         "format_version": "lightweight",
@@ -368,12 +375,12 @@ def main():
     # ── 7. Summary ───────────────────────────────────────────────────────────
     print(f"\nDone. Output: {OUT_DIR}")
     print(
-        f"{'Split':<8} {'Molecules':>10} {'Spectra':>10} {'Pairs':>10} {'MCES<10':>10}"
+        f"{'Split':<14} {'Molecules':>10} {'Spectra':>10} {'Pairs':>10} {'MCES<10':>10}"
     )
-    print("-" * 52)
+    print("-" * 58)
     for fold, (df_fold, spec_fold, _) in splits.items():
         print(
-            f"{fold:<8} {len(df_fold):>10} {len(spec_fold):>10} "
+            f"{fold:<14} {len(df_fold):>10} {len(spec_fold):>10} "
             f"{pair_counts[fold]:>10} {mces_lt10_counts[fold]:>10}"
         )
 
