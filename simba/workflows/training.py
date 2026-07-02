@@ -355,8 +355,9 @@ def prepare_data(
         and molecule_pairs_train.extra_distances is not None
     )
     if use_mces_sampling:
-        mces_sim_tr = molecule_pairs_train.extra_distances  # 1 - MCES/40, in [0.5, 1.0]
-        bin_idx_tr = np.clip(np.floor(mces_sim_tr * n_bins).astype(int), 0, n_bins - 1)
+        mces_sim_tr = molecule_pairs_train.extra_distances  # similarity = 1 - MCES/40
+        mces_raw_tr = (1.0 - mces_sim_tr) * 40.0  # raw MCES in [0, 20]
+        bin_idx_tr = np.clip(np.floor(mces_raw_tr / 4.0).astype(int), 0, n_bins - 1)
         bin_counts = np.bincount(bin_idx_tr, minlength=n_bins)
         total = bin_counts.sum()
         weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
@@ -366,9 +367,8 @@ def prepare_data(
         weights_tr = weights_tr / weights_tr.sum()
 
         mces_sim_val = molecule_pairs_val.extra_distances
-        bin_idx_val = np.clip(
-            np.floor(mces_sim_val * n_bins).astype(int), 0, n_bins - 1
-        )
+        mces_raw_val = (1.0 - mces_sim_val) * 40.0
+        bin_idx_val = np.clip(np.floor(mces_raw_val / 4.0).astype(int), 0, n_bins - 1)
         weights_val = weights_ed[bin_idx_val]
         weights_val = weights_val / weights_val.sum()
 
@@ -434,8 +434,9 @@ def prepare_data(
         )
         if use_mces_sampling:
             mces_sim_off = molecule_pairs_val_official.extra_distances
+            mces_raw_off = (1.0 - mces_sim_off) * 40.0
             bin_idx_off = np.clip(
-                np.floor(mces_sim_off * n_bins).astype(int), 0, n_bins - 1
+                np.floor(mces_raw_off / 4.0).astype(int), 0, n_bins - 1
             )
             weights_off = weights_ed[bin_idx_off]
             weights_off = weights_off / weights_off.sum()

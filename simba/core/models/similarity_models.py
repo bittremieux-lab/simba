@@ -586,7 +586,7 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = F.binary_cross_entropy(prob, target_matrix, reduction="mean")
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
