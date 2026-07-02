@@ -291,8 +291,22 @@ class ValMetricsCallback(Callback):
         self._mces_targets.clear()
 
         step = trainer.global_step
+
+        # Log Spearman correlation
+        if len(mces_pred) > 1:
+            from scipy.stats import spearmanr
+
+            r, _ = spearmanr(mces_target, mces_pred)
+            pl_module.log(
+                "val_mces_spearman",
+                float(r),
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
+
         self._plot_confusion(ed_pred, ed_target, step)
-        self._plot_mces_scatter(mces_pred, mces_target, step)
+        self._plot_mces_hexbin(mces_pred, mces_target, step)
 
     def _plot_confusion(self, pred, target, step):
         n = self.n_classes
@@ -355,35 +369,25 @@ class ValMetricsCallback(Callback):
         plt.savefig(path, dpi=130)
         plt.close(fig)
 
-    def _plot_mces_scatter(self, pred, target, step):
-        # subsample to at most 10k points for speed
-        if len(pred) > 10_000:
-            idx = np.random.choice(len(pred), 10_000, replace=False)
-            pred, target = pred[idx], target[idx]
+    def _plot_mces_hexbin(self, pred, target, step):
+        from scipy.stats import spearmanr
 
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+        r, _ = spearmanr(target, pred) if len(pred) > 1 else (float("nan"), None)
 
-        ax = axes[0]
-        ax.scatter(target, pred, alpha=0.15, s=4, rasterized=True)
-        lo, hi = min(target.min(), pred.min()), max(target.max(), pred.max())
-        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
+        fig, ax = plt.subplots(figsize=(6, 5))
+        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1, bins="log")
+        plt.colorbar(hb, ax=ax, label="log10(count)")
+        lo = min(float(target.min()), float(pred.min()))
+        hi = max(float(target.max()), float(pred.max()))
+        ax.plot([lo, hi], [lo, hi], "r--", lw=1, label="y = x")
         ax.set_xlabel("True MCES similarity")
         ax.set_ylabel("Predicted MCES similarity")
-        corr = np.corrcoef(target, pred)[0, 1] if len(target) > 1 else float("nan")
-        ax.set_title(f"MCES scatter — step {step}\nr={corr:.3f}")
-        ax.grid(True, alpha=0.3)
-
-        ax2 = axes[1]
-        residuals = pred - target
-        ax2.hist(residuals, bins=50, color="steelblue", edgecolor="none")
-        ax2.axvline(0, color="red", lw=1, ls="--")
-        ax2.set_xlabel("Residual (pred − true)")
-        ax2.set_title(
-            f"MCES residuals  mean={residuals.mean():.3f}  std={residuals.std():.3f}"
-        )
-        ax2.grid(True, alpha=0.3)
+        ax.set_title(f"Val MCES — step {step:,}   Spearman ρ = {r:.3f}")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.2)
 
         plt.tight_layout()
-        path = os.path.join(self.output_dir, "mces_scatter.png")
+        # Never overwrite — each validation step gets its own file
+        path = os.path.join(self.output_dir, f"mces_hexbin_step{step:06d}.png")
         plt.savefig(path, dpi=130)
         plt.close(fig)

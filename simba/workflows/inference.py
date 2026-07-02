@@ -89,25 +89,16 @@ def load_inference_data(cfg: DictConfig):
                 else:
                     missing.append(mgf_idx)
 
-            mol_idx_remap = None
             if missing:
-                logger.warning(
-                    f"[test] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                raise RuntimeError(
+                    f"[test] {len(missing)} spectra missing from MGF "
+                    f"(e.g., MGF index {missing[0]}). "
+                    "Re-run preprocessing — all spectrum_indexes must be valid."
                 )
-                # Filter df_smiles to keep only rows with valid spectra
-                valid_rows = []
-                for i in df_smiles.index:
-                    old_idxs = df_smiles.loc[i, "indexes"]
-                    if all(idx in idx_map for idx in old_idxs):
-                        df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
-                        valid_rows.append(i)
-                mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
-                df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
-            else:
-                for i in df_smiles.index:
-                    df_smiles.at[i, "indexes"] = [
-                        idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
-                    ]
+            for i in df_smiles.index:
+                df_smiles.at[i, "indexes"] = [
+                    idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                ]
 
             # Build unique_spectra from df_smiles indexes
             unique_spectra = [
@@ -122,7 +113,6 @@ def load_inference_data(cfg: DictConfig):
                 df_smiles=df_smiles,
                 pair_distances=None,  # Will be loaded separately
             )
-            molecule_pairs.mol_idx_remap = mol_idx_remap
         else:
             raise ValueError("Test split not found in lightweight format dataset")
     else:
@@ -141,17 +131,6 @@ def load_inference_data(cfg: DictConfig):
         use_multitask=cfg.data.use_multitask,
     )
     pair_distances = _remove_duplicate_pairs(pair_distances)
-
-    # Apply mol_idx_remap if molecules were dropped due to missing spectra
-    remap = getattr(molecule_pairs, "mol_idx_remap", None)
-    if remap is not None:
-        col0 = pair_distances[:, 0].astype(int)
-        col1 = pair_distances[:, 1].astype(int)
-        mask = np.array([c in remap and d in remap for c, d in zip(col0, col1)])
-        pair_distances = pair_distances[mask]
-        pair_distances[:, 0] = np.array([remap[int(x)] for x in pair_distances[:, 0]])
-        pair_distances[:, 1] = np.array([remap[int(x)] for x in pair_distances[:, 1]])
-        logger.info(f"After mol_idx_remap: {len(pair_distances)} pairs remain")
 
     molecule_pairs_ed.pair_distances = pair_distances[:, 0:3]
     molecule_pairs_ed.extra_distances = pair_distances[:, 3]
