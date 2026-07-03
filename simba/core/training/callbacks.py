@@ -554,28 +554,34 @@ class ValMetricsCallback(Callback):
         from scipy.stats import spearmanr
 
         r, _ = spearmanr(target, pred) if len(pred) > 1 else (float("nan"), None)
-        lo = min(float(target.min()), float(pred.min()))
-        hi = max(float(target.max()), float(pred.max()))
+
+        # Convert similarity (1 - MCES/40) back to raw MCES [0, 20]
+        target_mces = (1.0 - target) * 40.0
+        pred_mces = (1.0 - pred) * 40.0
+        lo = min(float(target_mces.min()), float(pred_mces.min()))
+        hi = max(float(target_mces.max()), float(pred_mces.max()))
 
         fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
         # Left: linear scale
         ax = axes[0]
-        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1)
+        hb = ax.hexbin(target_mces, pred_mces, gridsize=60, cmap="Blues", mincnt=1)
         plt.colorbar(hb, ax=ax, label="count")
         ax.plot([lo, hi], [lo, hi], "r--", lw=1)
-        ax.set_xlabel("True MCES similarity")
-        ax.set_ylabel("Predicted MCES similarity")
+        ax.set_xlabel("True MCES")
+        ax.set_ylabel("Predicted MCES")
         ax.set_title("Linear scale")
         ax.grid(True, alpha=0.2)
 
         # Right: log scale
         ax = axes[1]
-        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1, bins="log")
+        hb = ax.hexbin(
+            target_mces, pred_mces, gridsize=60, cmap="Blues", mincnt=1, bins="log"
+        )
         plt.colorbar(hb, ax=ax, label="log10(count)")
         ax.plot([lo, hi], [lo, hi], "r--", lw=1)
-        ax.set_xlabel("True MCES similarity")
-        ax.set_ylabel("Predicted MCES similarity")
+        ax.set_xlabel("True MCES")
+        ax.set_ylabel("Predicted MCES")
         ax.set_title("Log scale")
         ax.grid(True, alpha=0.2)
 
