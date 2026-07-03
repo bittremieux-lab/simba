@@ -610,7 +610,9 @@ class SimilarityModelMultitask(SimilarityModel):
             "mces_target": target2.cpu(),
         }
 
-    def step(self, batch, batch_idx, threshold=0.5, weight_loss2=None):
+    def step(
+        self, batch, batch_idx, threshold=0.5, weight_loss2=None, return_preds=False
+    ):
         logits_list = self(batch)
         logits1 = logits_list[0]
         logits2 = logits_list[1]
@@ -697,7 +699,15 @@ class SimilarityModelMultitask(SimilarityModel):
                 loss = torch.exp(-self.log_sigma2) * loss2 + self.log_sigma2
         else:
             loss = (loss1 + (weight_loss2 * loss2)) if use_ed else loss2
+        if return_preds:
+            return loss, logits2.detach().cpu(), target2.detach().cpu()
         return loss
+
+    def training_step(self, batch, batch_idx):
+        """Training step — returns loss + MCES predictions for train Spearman/MSE tracking."""
+        loss, mces_pred, mces_target = self.step(batch, batch_idx, return_preds=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return {"loss": loss, "mces_pred": mces_pred, "mces_target": mces_target}
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
         logits = self(batch)

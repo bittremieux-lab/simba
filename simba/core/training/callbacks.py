@@ -291,9 +291,12 @@ class ProgressLogCallback(Callback):
 
 class ValMetricsCallback(Callback):
     """
-    After each validation epoch, saves per-val-set hexbin plots and logs Spearman.
+    After each validation epoch, saves per-val-set hexbin plots and logs Spearman + MSE.
+    Also tracks train Spearman/MSE from training_step outputs.
     Supports multiple val dataloaders; val_names labels each one.
     """
+
+    _MAX_TRAIN_PAIRS = 300_000  # cap on pairs accumulated between two val runs
 
     def __init__(
         self, output_dir: str, n_classes: int = 6, val_names: list | None = None
@@ -301,13 +304,29 @@ class ValMetricsCallback(Callback):
         self.output_dir = output_dir
         self.n_classes = n_classes
         self.val_names = val_names or ["val"]
-        # Accumulate per dataloader_idx
         self._preds: dict = {}
+        self._train_buf: dict = {"mces": [], "mces_t": []}
+
+        # History for metrics curves (one entry per validation run)
+        self._curve_steps: list[int] = []
+        self._curve_train_spearman: list[float] = []
+        self._curve_train_mse: list[float] = []
+        self._curve_val_spearman: dict[str, list[float]] = {}
+        self._curve_val_mse: dict[str, list[float]] = {}
 
     def _buf(self, idx: int) -> dict:
         if idx not in self._preds:
             self._preds[idx] = {"ed": [], "ed_t": [], "mces": [], "mces_t": []}
         return self._preds[idx]
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if not isinstance(outputs, dict) or "mces_pred" not in outputs:
+            return
+        n_pairs = sum(len(x) for x in self._train_buf["mces"])
+        if n_pairs >= self._MAX_TRAIN_PAIRS:
+            return
+        self._train_buf["mces"].append(outputs["mces_pred"].float().numpy())
+        self._train_buf["mces_t"].append(outputs["mces_target"].float().numpy())
 
     def on_validation_batch_end(
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
@@ -326,8 +345,30 @@ class ValMetricsCallback(Callback):
         if trainer.sanity_checking or not self._preds:
             return
 
-        step = trainer.global_step
+        from scipy.stats import spearmanr
 
+        step = trainer.global_step
+        self._curve_steps.append(step)
+
+        # --- Train metrics from accumulated buffer ---
+        if self._train_buf["mces"]:
+            tr_pred = np.concatenate(self._train_buf["mces"])
+            tr_target = np.concatenate(self._train_buf["mces_t"])
+            self._train_buf = {"mces": [], "mces_t": []}
+            if len(tr_pred) > 1:
+                r_tr, _ = spearmanr(tr_target, tr_pred)
+                mse_tr = float(np.mean((tr_pred - tr_target) ** 2))
+                self._curve_train_spearman.append(float(r_tr))
+                self._curve_train_mse.append(mse_tr)
+                pl_module.log(
+                    "train_mces_spearman",
+                    float(r_tr),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+
+        # --- Val metrics per dataloader ---
         for idx in sorted(self._preds.keys()):
             buf = self._preds[idx]
             if not buf["ed"]:
@@ -344,9 +385,8 @@ class ValMetricsCallback(Callback):
             val_name = self.val_names[idx] if idx < len(self.val_names) else f"val{idx}"
 
             if len(mces_pred) > 1:
-                from scipy.stats import spearmanr
-
                 r, _ = spearmanr(mces_target, mces_pred)
+                mse = float(np.mean((mces_pred - mces_target) ** 2))
                 pl_module.log(
                     f"val_mces_spearman/{val_name}",
                     float(r),
@@ -355,9 +395,99 @@ class ValMetricsCallback(Callback):
                     prog_bar=False,
                     add_dataloader_idx=False,
                 )
+                self._curve_val_spearman.setdefault(val_name, []).append(float(r))
+                self._curve_val_mse.setdefault(val_name, []).append(mse)
 
             self._plot_confusion(ed_pred, ed_target, step, val_name)
             self._plot_mces_hexbin(mces_pred, mces_target, step, val_name)
+
+        self._plot_metrics_curves()
+
+    def _plot_metrics_curves(self):
+        """Plot Spearman ρ and MSE curves for train + all val sets over training steps."""
+        steps = self._curve_steps
+        if not steps:
+            return
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        colors = {
+            "train": "steelblue",
+            "scaffold": "darkorange",
+            "official": "forestgreen",
+        }
+        markers = {"scaffold": "o", "official": "s"}
+
+        def _color(name):
+            for k, c in colors.items():
+                if k in name:
+                    return c
+            return "gray"
+
+        def _marker(name):
+            for k, m in markers.items():
+                if k in name:
+                    return m
+            return "^"
+
+        # Spearman
+        ax = axes[0]
+        if self._curve_train_spearman:
+            n = len(self._curve_train_spearman)
+            ax.plot(
+                steps[-n:],
+                self._curve_train_spearman,
+                lw=1.0,
+                color=colors["train"],
+                label="train",
+            )
+        for name, vals in self._curve_val_spearman.items():
+            n = len(vals)
+            ax.plot(
+                steps[-n:],
+                vals,
+                marker=_marker(name),
+                ms=6,
+                lw=1.5,
+                color=_color(name),
+                label=f"val {name}",
+            )
+        ax.set_title("MCES Spearman ρ")
+        ax.set_xlabel("step")
+        ax.set_ylabel("ρ")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+        # MSE
+        ax = axes[1]
+        if self._curve_train_mse:
+            n = len(self._curve_train_mse)
+            ax.plot(
+                steps[-n:],
+                self._curve_train_mse,
+                lw=1.0,
+                color=colors["train"],
+                label="train",
+            )
+        for name, vals in self._curve_val_mse.items():
+            n = len(vals)
+            ax.plot(
+                steps[-n:],
+                vals,
+                marker=_marker(name),
+                ms=6,
+                lw=1.5,
+                color=_color(name),
+                label=f"val {name}",
+            )
+        ax.set_title("MCES MSE (pred vs GT similarity)")
+        ax.set_xlabel("step")
+        ax.set_ylabel("MSE")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.output_dir, "metrics_curves.png"), dpi=130)
+        plt.close(fig)
 
     def _plot_confusion(self, pred, target, step, val_name="val"):
         n = self.n_classes
@@ -424,21 +554,36 @@ class ValMetricsCallback(Callback):
         from scipy.stats import spearmanr
 
         r, _ = spearmanr(target, pred) if len(pred) > 1 else (float("nan"), None)
-
-        fig, ax = plt.subplots(figsize=(6, 5))
-        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1, bins="log")
-        plt.colorbar(hb, ax=ax, label="log10(count)")
         lo = min(float(target.min()), float(pred.min()))
         hi = max(float(target.max()), float(pred.max()))
-        ax.plot([lo, hi], [lo, hi], "r--", lw=1, label="y = x")
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+        # Left: linear scale
+        ax = axes[0]
+        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1)
+        plt.colorbar(hb, ax=ax, label="count")
+        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
         ax.set_xlabel("True MCES similarity")
         ax.set_ylabel("Predicted MCES similarity")
-        ax.set_title(f"Val MCES [{val_name}] — step {step:,}   Spearman ρ = {r:.3f}")
-        ax.legend(fontsize=8)
+        ax.set_title("Linear scale")
         ax.grid(True, alpha=0.2)
 
+        # Right: log scale
+        ax = axes[1]
+        hb = ax.hexbin(target, pred, gridsize=60, cmap="Blues", mincnt=1, bins="log")
+        plt.colorbar(hb, ax=ax, label="log10(count)")
+        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
+        ax.set_xlabel("True MCES similarity")
+        ax.set_ylabel("Predicted MCES similarity")
+        ax.set_title("Log scale")
+        ax.grid(True, alpha=0.2)
+
+        fig.suptitle(
+            f"MCES hexbin [{val_name}] — step {step:,}   Spearman ρ = {r:.3f}",
+            fontsize=11,
+        )
         plt.tight_layout()
-        # Never overwrite — each validation step gets its own file
         path = os.path.join(
             self.output_dir, f"mces_hexbin_{val_name}_step{step:06d}.png"
         )

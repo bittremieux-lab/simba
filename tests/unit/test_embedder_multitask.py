@@ -291,10 +291,13 @@ class TestEmbedderMultitask:
         sample_batch["ed"] = torch.tensor([2, 3])  # Edit distance targets
         sample_batch["mces"] = torch.tensor([0.7, 0.5])  # MCES targets
 
-        loss = embedder.training_step(sample_batch, batch_idx=0)
+        out = embedder.training_step(sample_batch, batch_idx=0)
 
-        assert isinstance(loss, torch.Tensor)
-        assert not torch.isnan(loss)
+        assert isinstance(out, dict)
+        assert isinstance(out["loss"], torch.Tensor)
+        assert not torch.isnan(out["loss"])
+        assert "mces_pred" in out
+        assert "mces_target" in out
 
     def test_training_step_with_gumbel(self, embedder_config, sample_batch):
         embedder_config["use_gumbel"] = True
@@ -304,11 +307,12 @@ class TestEmbedderMultitask:
         sample_batch["ed"] = torch.tensor([2, 3])
         sample_batch["mces"] = torch.tensor([0.7, 0.5])
 
-        loss = embedder.training_step(sample_batch, batch_idx=0)
+        out = embedder.training_step(sample_batch, batch_idx=0)
 
-        assert isinstance(loss, torch.Tensor)
+        assert isinstance(out, dict)
+        assert isinstance(out["loss"], torch.Tensor)
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
-        assert not torch.isnan(loss)
+        assert not torch.isnan(out["loss"])
 
     def test_training_step_with_edit_distance_regression(
         self, embedder_config, sample_batch
@@ -320,11 +324,12 @@ class TestEmbedderMultitask:
         sample_batch["ed"] = torch.tensor([2, 3])
         sample_batch["mces"] = torch.tensor([0.7, 0.5])
 
-        loss = embedder.training_step(sample_batch, batch_idx=0)
+        out = embedder.training_step(sample_batch, batch_idx=0)
 
-        assert isinstance(loss, torch.Tensor)
+        assert isinstance(out, dict)
+        assert isinstance(out["loss"], torch.Tensor)
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
-        assert not torch.isnan(loss)
+        assert not torch.isnan(out["loss"])
 
     def test_validation_step(self, embedder, sample_batch):
         # Add required fields
