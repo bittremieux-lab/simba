@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -J simba_train_scaffold
 #SBATCH -p one_day
-#SBATCH --nodelist=asimov2
-#SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
+#SBATCH --nodelist=asimov
+#SBATCH --gpus=l40s:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=180G
