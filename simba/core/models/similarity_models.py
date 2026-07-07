@@ -300,7 +300,6 @@ class CustomizedCrossEntropyLoss(nn.Module):
         # Construct the penalty matrix using absolute differences.
         # With this design, a correct prediction (i == j) gets a penalty of 0,
         # and misclassifications incur a penalty proportional to their distance |i - j|.
-        n_classes = 6
         penalty_matrix = np.array(
             [[abs(i - j) for j in range(n_classes)] for i in range(n_classes)]
         )
