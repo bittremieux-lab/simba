@@ -1,17 +1,17 @@
 #!/bin/bash
-#SBATCH -J simba_train_scaffold_v2
+#SBATCH -J simba_train_scaffold
 #SBATCH -p one_day
 #SBATCH --nodelist=asimov2
 #SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=180G
-#SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.out
-#SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_v2_%j.err
+#SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_%j.out
+#SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_%j.err
 
 set -uo pipefail
 
-echo "===== SIMBA Training: MSG scaffold split v2 (dual val — scaffold + official) ====="
+echo "===== SIMBA Training: MSG scaffold split (dual val — scaffold + official) ====="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node:   $SLURM_NODELIST"
 echo "Date:   $(date)"

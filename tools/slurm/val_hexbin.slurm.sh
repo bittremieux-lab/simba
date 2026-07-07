@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J simba_val_hexbin_v3
+#SBATCH -J simba_val_hexbin
 #SBATCH -p one_day
 #SBATCH --nodelist=asimov
 #SBATCH --gpus=l40s:1
