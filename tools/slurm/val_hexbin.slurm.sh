@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -J simba_val_hexbin
-#SBATCH -p one_day
-#SBATCH --nodelist=asimov2
-#SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
+#SBATCH -p one_hour
+#SBATCH --nodelist=asimov
+#SBATCH --gpus=l40s:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=80G
@@ -19,10 +19,10 @@ echo "Branch: $(git -C /home/nkubrakov/simba rev-parse --abbrev-ref HEAD)"
 echo "Commit: $(git -C /home/nkubrakov/simba rev-parse --short HEAD)"
 nvidia-smi
 
-PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
-EXP_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
+PREPRO_DIR=/mnt/data/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
+EXP_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
 CHECKPOINT="${EXP_DIR}/checkpoint-epoch=02-step=29000.ckpt"
-OUTPUT_DIR="${EXP_DIR}/val_hexbin_step29k"
+OUTPUT_DIR="/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40/val_hexbin_step29k"
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p /home/nkubrakov/simba/logs
