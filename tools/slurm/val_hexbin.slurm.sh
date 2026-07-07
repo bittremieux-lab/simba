@@ -6,12 +6,12 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=80G
-#SBATCH -o /home/nkubrakov/simba/logs/simba_val_hexbin_v3_%j.out
-#SBATCH -e /home/nkubrakov/simba/logs/simba_val_hexbin_v3_%j.err
+#SBATCH -o /home/nkubrakov/simba/logs/simba_val_hexbin_%j.out
+#SBATCH -e /home/nkubrakov/simba/logs/simba_val_hexbin_%j.err
 
 set -uo pipefail
 
-echo "===== SIMBA Val Hexbin v3 ====="
+echo "===== SIMBA Val Hexbin ====="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node:   $SLURM_NODELIST"
 echo "Date:   $(date)"
@@ -19,8 +19,8 @@ echo "Branch: $(git -C /home/nkubrakov/simba rev-parse --abbrev-ref HEAD)"
 echo "Commit: $(git -C /home/nkubrakov/simba rev-parse --short HEAD)"
 nvidia-smi
 
-PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split
-EXP_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_v3
+PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
+EXP_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
 CHECKPOINT="${EXP_DIR}/checkpoint-epoch=06-step=61000.ckpt"
 OUTPUT_DIR="${EXP_DIR}/val_hexbin"
 

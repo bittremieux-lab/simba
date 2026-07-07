@@ -27,7 +27,7 @@ sbatch tools/slurm/preprocess_msg_scaffold_split.slurm.sh
 
 Produces `mapping.pkl` with scaffold-grouped train / val / val_official / test splits at:
 ```
-/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split/
+/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40/
 ```
 
 ### 2. Training
@@ -38,7 +38,7 @@ sbatch tools/slurm/train_msg_scaffold_split.slurm.sh
 
 Checkpoints and per-step hexbin plots saved to:
 ```
-/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split/
+/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40/
 ```
 
 ### 3. Inference + evaluation plots
@@ -57,7 +57,7 @@ To rebuild plots from existing CSVs without rerunning inference:
 
 ```bash
 uv run python tools/plot_val_hexbin_balanced.py \
-  --val_dir /mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split/val_hexbin
+  --val_dir /mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40/val_hexbin
 ```
 
 ### 4. Official splits inference

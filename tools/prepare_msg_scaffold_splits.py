@@ -24,8 +24,10 @@ from tqdm import tqdm
 
 MGF_PATH = "/mnt/data2/nkubrakov/massspecgym/data/auxiliary/MassSpecGym.mgf"
 HDF5_PATH = "/mnt/data2/nkubrakov/massspecgym/data/auxiliary/all_smiles_mces.hdf5"
-OUT_DIR = Path("/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split")
-MCES_THRESHOLD = 20.0
+OUT_DIR = Path(
+    "/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40"
+)
+MCES_CAP = 40.0
 
 MIN_N_PEAKS = 6  # mirrors cfg.data.preprocessing.min_n_peaks default
 PROTONIZED_ADDUCTS = {"M+", "[M+H]+", "M+H"}
@@ -98,19 +100,17 @@ def build_pairs(local_mol_indices, global_mol_indices, mces_flat, n):
         gi_arr = np.where(gi < gjs, gi, gjs)
         gj_arr = np.where(gi < gjs, gjs, gi)
         fidx = gi_arr * n - gi_arr * (gi_arr + 1) // 2 + gj_arr - gi_arr - 1
-        mces_vals = mces_flat[fidx]
-        mask = mces_vals <= MCES_THRESHOLD
-        if mask.any():
-            rows.append(
-                np.column_stack(
-                    [
-                        np.full(mask.sum(), li, dtype=np.float64),
-                        ljs[mask].astype(np.float64),
-                        np.zeros(mask.sum(), dtype=np.float64),
-                        mces_vals[mask].astype(np.float64),
-                    ]
-                )
+        mces_vals = np.clip(mces_flat[fidx], 0.0, MCES_CAP)
+        rows.append(
+            np.column_stack(
+                [
+                    np.full(len(ljs), li, dtype=np.float64),
+                    ljs.astype(np.float64),
+                    np.zeros(len(ljs), dtype=np.float64),
+                    mces_vals.astype(np.float64),
+                ]
             )
+        )
     return np.concatenate(rows) if rows else np.empty((0, 4), dtype=np.float64)
 
 
@@ -353,7 +353,7 @@ def main():
         pairs = build_pairs(local_indices, global_indices_valid, mces_flat, n)
         pair_counts[fold] = len(pairs)
         mces_lt10_counts[fold] = int((pairs[:, 3] < 10).sum()) if len(pairs) > 0 else 0
-        print(f"  -> {len(pairs)} pairs with MCES <= {MCES_THRESHOLD}")
+        print(f"  -> {len(pairs)} pairs (MCES clipped at {MCES_CAP})")
 
         out_path = OUT_DIR / f"ed_mces_indexes_tani_incremental_{fold}_node0_chunk0.npy"
         np.save(out_path, pairs)
