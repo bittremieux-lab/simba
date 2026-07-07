@@ -389,7 +389,7 @@ class SimilarityModelMultitask(SimilarityModel):
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.regression_loss = nn.MSELoss()
-        self.customised_ce = CustomizedCrossEntropyLoss()
+        self.customised_ce = CustomizedCrossEntropyLoss(n_classes=n_classes)
 
         self.dropout = nn.Dropout(p=dropout)
         self.use_gumbel = use_gumbel
