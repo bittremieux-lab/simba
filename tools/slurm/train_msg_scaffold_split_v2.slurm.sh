@@ -20,7 +20,7 @@ echo "Commit: $(git -C /home/nkubrakov/simba rev-parse --short HEAD)"
 nvidia-smi
 
 PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split
-OUTPUT_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_v2
+OUTPUT_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_v3
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p /home/nkubrakov/simba/logs

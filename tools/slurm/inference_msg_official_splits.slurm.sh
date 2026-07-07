@@ -32,6 +32,7 @@ uv run simba inference \
   paths.preprocessing_pickle_file=mapping.pkl \
   paths.checkpoint_dir="${CHECKPOINT_DIR}" \
   inference.use_last_model=false \
+  checkpoints.best_model_name="best_model-v1.ckpt" \
   inference.preprocessing_pickle=mapping.pkl \
   inference.batch_size=512 \
   inference.uniformize_testing=false \

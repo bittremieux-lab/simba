@@ -32,9 +32,11 @@ PROTONIZED_ADDUCTS = {"M+", "[M+H]+", "M+H"}
 
 
 def is_valid_for_simba(spec: matchms.Spectrum) -> bool:
-    """Replicate SIMBA's is_valid_spectrum_janssen filter (use_only_protonized_adducts=True).
+    """Mirror is_valid_spectrum_janssen from the SIMBA training loader exactly.
 
-    Mirrors: LoadData.is_valid_spectrum_janssen + NaN check in loaders.py.
+    Checks: protonized adduct, precursor_mz, min peaks, no NaN, centroid
+    (all intensities > 0), charge == 1 if present, ionmode == positive if
+    present, smiles field present and not "N/A".
     """
     mz = spec.peaks.mz
     intensities = spec.peaks.intensities
