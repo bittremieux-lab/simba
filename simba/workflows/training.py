@@ -355,9 +355,16 @@ def prepare_data(
         and molecule_pairs_train.extra_distances is not None
     )
     if use_mces_sampling:
+        # Non-uniform bins: fine resolution in [0,10], width-5 above.
+        # Edges: [0,2.5), [2.5,5), [5,7.5), [7.5,10), [10,15), [15,20),
+        #        [20,25), [25,30), [30,35), [35,40]  → 10 bins (n_classes=11)
+        _mces_edges = np.array([2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0])
+
         mces_sim_tr = molecule_pairs_train.extra_distances  # similarity = 1 - MCES/40
-        mces_raw_tr = (1.0 - mces_sim_tr) * 40.0  # raw MCES in [0, 20]
-        bin_idx_tr = np.clip(np.floor(mces_raw_tr / 4.0).astype(int), 0, n_bins - 1)
+        mces_raw_tr = (1.0 - mces_sim_tr) * 40.0
+        bin_idx_tr = np.clip(
+            np.searchsorted(_mces_edges, mces_raw_tr).astype(int), 0, n_bins - 1
+        )
         bin_counts = np.bincount(bin_idx_tr, minlength=n_bins)
         total = bin_counts.sum()
         weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
@@ -368,7 +375,9 @@ def prepare_data(
 
         mces_sim_val = molecule_pairs_val.extra_distances
         mces_raw_val = (1.0 - mces_sim_val) * 40.0
-        bin_idx_val = np.clip(np.floor(mces_raw_val / 4.0).astype(int), 0, n_bins - 1)
+        bin_idx_val = np.clip(
+            np.searchsorted(_mces_edges, mces_raw_val).astype(int), 0, n_bins - 1
+        )
         weights_val = weights_ed[bin_idx_val]
         weights_val = weights_val / weights_val.sum()
 
@@ -436,7 +445,7 @@ def prepare_data(
             mces_sim_off = molecule_pairs_val_official.extra_distances
             mces_raw_off = (1.0 - mces_sim_off) * 40.0
             bin_idx_off = np.clip(
-                np.floor(mces_raw_off / 4.0).astype(int), 0, n_bins - 1
+                np.searchsorted(_mces_edges, mces_raw_off).astype(int), 0, n_bins - 1
             )
             weights_off = weights_ed[bin_idx_off]
             weights_off = weights_off / weights_off.sum()

@@ -50,6 +50,7 @@ uv run simba train \
   model.features.use_ce=false \
   model.features.use_ion_mode=false \
   model.multitasking.learnable=false \
-  model.tasks.edit_distance.enabled=false
+  model.tasks.edit_distance.enabled=false \
+  model.tasks.edit_distance.n_classes=11
 
 echo "===== Training complete: $(date) ====="
