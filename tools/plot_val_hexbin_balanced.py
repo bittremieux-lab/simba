@@ -93,11 +93,18 @@ def main():
     parser.add_argument("--val_dir", required=True)
     parser.add_argument("--output", default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--mces_max",
+        type=float,
+        default=None,
+        help="If set, keep only pairs with GT MCES <= this value before balancing.",
+    )
     args = parser.parse_args()
 
     rng = np.random.default_rng(args.seed)
+    suffix = f"_mces_max{int(args.mces_max)}" if args.mces_max is not None else ""
     out_path = args.output or os.path.join(
-        args.val_dir, "mces_hexbin_balanced_4panel.png"
+        args.val_dir, f"mces_hexbin_balanced{suffix}.png"
     )
 
     available = []
@@ -110,6 +117,10 @@ def main():
         df = pd.read_csv(path)
         gt = df["mces_target_raw"].values.astype(np.float32)
         pred = df["mces_pred_raw"].values.astype(np.float32)
+        if args.mces_max is not None:
+            mask = gt <= args.mces_max
+            gt, pred = gt[mask], pred[mask]
+            print(f"  {name}: filtered to MCES ≤ {args.mces_max}: {mask.sum():,} pairs")
         gt_b, pred_b, n = balance_by_gt(gt, pred, rng)
         print(
             f"{name}: {len(gt):,} total → {n:,} balanced ({len(BINS) - 1} bins × {n // (len(BINS) - 1):,} each)"
@@ -146,9 +157,8 @@ def main():
                 ax_main, ax_top, ax_right, gt, pred, title=f"{name} val", scale=scale
             )
 
-    fig.suptitle(
-        "MCES hexbins — step-61k checkpoint (GT-balanced, 2.5-unit bins)", fontsize=11
-    )
+    filter_note = f"  |  GT MCES ≤ {args.mces_max}" if args.mces_max is not None else ""
+    fig.suptitle(f"MCES hexbins (GT-balanced, 2.5-unit bins){filter_note}", fontsize=11)
     plt.savefig(out_path, dpi=140, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out_path}")

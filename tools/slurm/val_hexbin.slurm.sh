@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -J simba_val_hexbin
 #SBATCH -p one_day
-#SBATCH --nodelist=asimov
-#SBATCH --gpus=l40s:1
+#SBATCH --nodelist=asimov2
+#SBATCH --gpus=nvidia_h200_nvl_4g.71gb:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=80G
@@ -21,8 +21,8 @@ nvidia-smi
 
 PREPRO_DIR=/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
 EXP_DIR=/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
-CHECKPOINT="${EXP_DIR}/checkpoint-epoch=06-step=61000.ckpt"
-OUTPUT_DIR="${EXP_DIR}/val_hexbin"
+CHECKPOINT="${EXP_DIR}/checkpoint-epoch=02-step=29000.ckpt"
+OUTPUT_DIR="${EXP_DIR}/val_hexbin_step29k"
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p /home/nkubrakov/simba/logs
@@ -39,7 +39,19 @@ uv run python tools/run_val_hexbin.py \
   model.features.use_ce=false \
   model.features.use_ion_mode=false \
   model.multitasking.learnable=false \
-  model.tasks.edit_distance.enabled=false
+  model.tasks.edit_distance.enabled=false \
+  model.tasks.edit_distance.n_classes=11
+
+echo "===== Inference done: $(date) ====="
+
+# 6 plots: all pairs
+uv run python tools/plot_val_hexbin_balanced.py \
+  --val_dir "${OUTPUT_DIR}"
+
+# 6 plots: only pairs with GT MCES <= 20 (comparable to previous run)
+uv run python tools/plot_val_hexbin_balanced.py \
+  --val_dir "${OUTPUT_DIR}" \
+  --mces_max 20
 
 echo "===== Done: $(date) ====="
 echo "Outputs in: ${OUTPUT_DIR}"
