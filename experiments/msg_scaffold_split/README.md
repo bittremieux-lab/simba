@@ -9,7 +9,7 @@
 | clip-40-metadata | Same + adduct / CE / ion mode | `14c530f` | 7636 | `preprocessing_msg_scaffold_split_mces40` | `msg_scaffold_split_mces40_metadata` |
 | sv2-mces-only | scaffold_v2 data, MCES head only, ED-based sampling, lr=3.33e-5 | — | — | `preprocessing_scaffold_v2` | `scaffold_v2_mces_only` |
 | sv2-both | scaffold_v2 data, ED+MCES both objectives, lr=3.33e-5 | — | — | `preprocessing_scaffold_v2` | `scaffold_v2_both` |
-| gaetan-official-clip-40 | Official MSG splits, Gaetan lb_matrix distances, scaffold 10% val, clip at 40, n_classes=11 | `5042428` | — | `preprocessing_msg_gaetan_official` | `msg_gaetan_official_mces40` |
+| gaetan-official-clip-40 | Official MSG splits, Gaetan lb_matrix distances, scaffold 10% val, clip at 40, n_classes=11 | `21a311b` | 7655 | `preprocessing_msg_gaetan_official` | `msg_gaetan_official_mces40` |
 
 All paths under `/mnt/data2/nkubrakov/` (prepro) and `/mnt/data/nkubrakov/experiments_3_dataset/training/` (results).
 
