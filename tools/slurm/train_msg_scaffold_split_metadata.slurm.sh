@@ -1,17 +1,17 @@
 #!/bin/bash
-#SBATCH -J simba_train_scaffold
+#SBATCH -J simba_train_scaffold_meta
 #SBATCH -p one_day
 #SBATCH --nodelist=asimov
 #SBATCH --gpus=l40s:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=180G
-#SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_%j.out
-#SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_%j.err
+#SBATCH -o /home/nkubrakov/simba/logs/simba_train_scaffold_meta_%j.out
+#SBATCH -e /home/nkubrakov/simba/logs/simba_train_scaffold_meta_%j.err
 
 set -uo pipefail
 
-echo "===== SIMBA Training: MSG scaffold split (dual val — scaffold + official) ====="
+echo "===== SIMBA Training: MSG scaffold split — with metadata (adduct/CE/ion mode) ====="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node:   $SLURM_NODELIST"
 echo "Date:   $(date)"
@@ -20,7 +20,7 @@ echo "Commit: $(git -C /home/nkubrakov/simba rev-parse --short HEAD)"
 nvidia-smi
 
 PREPRO_DIR=/mnt/data/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
-OUTPUT_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
+OUTPUT_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40_metadata
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p /home/nkubrakov/simba/logs
@@ -46,9 +46,9 @@ uv run simba train \
   hardware.num_workers=14 \
   logging.enable_progress_bar=false \
   logging.log_every_n_steps=10 \
-  model.features.use_adduct=false \
-  model.features.use_ce=false \
-  model.features.use_ion_mode=false \
+  model.features.use_adduct=true \
+  model.features.use_ce=true \
+  model.features.use_ion_mode=true \
   model.multitasking.learnable=false \
   model.tasks.edit_distance.enabled=false \
   model.tasks.edit_distance.n_classes=11

@@ -88,7 +88,7 @@ def load_dataset(cfg: DictConfig):
             "Detected lightweight format - loading spectra dynamically from MGF"
         )
 
-        mgf_path = mapping["mgf_path"]
+        mgf_path = mapping["mgf_path"].replace("/mnt/data2/", "/mnt/data/")
 
         # Use preprocessing config values (if available) to ensure consistent filtering
         use_only_protonized = getattr(

@@ -65,3 +65,18 @@ uv run python tools/plot_val_hexbin_balanced.py \
 ```bash
 sbatch tools/slurm/inference_msg_official_splits.slurm.sh
 ```
+
+## Ablation: metadata (adduct / CE / ion mode)
+
+**Question**: does giving the model adduct, collision energy and ion mode improve similarity predictions?
+
+Same setup as above (mces40 preprocessing, MCES-only objective, scaffold split) with `use_adduct`, `use_ce`, `use_ion_mode` all set to `true`.
+
+```bash
+sbatch tools/slurm/train_msg_scaffold_split_metadata.slurm.sh
+```
+
+Checkpoints saved to:
+```
+/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40_metadata/
+```

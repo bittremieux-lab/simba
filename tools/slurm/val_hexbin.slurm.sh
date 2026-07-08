@@ -21,8 +21,8 @@ nvidia-smi
 
 PREPRO_DIR=/mnt/data/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
 EXP_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40
-CHECKPOINT="${EXP_DIR}/checkpoint-epoch=02-step=29000.ckpt"
-OUTPUT_DIR="/mnt/data2/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40/val_hexbin_step29k"
+CHECKPOINT="${EXP_DIR}/checkpoint-epoch=02-step=22000.ckpt"
+OUTPUT_DIR="/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40/val_hexbin_step22k"
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p /home/nkubrakov/simba/logs
