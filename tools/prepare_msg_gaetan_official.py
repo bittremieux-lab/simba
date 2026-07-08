@@ -4,8 +4,8 @@ Prepare SIMBA preprocessing files using Gaetan's lb_matrix as the distance sourc
 Splits:
   - Official MSG val  → df_smiles_val_official
   - Official MSG test → df_smiles_test
-  - Official MSG train, 90% random → df_smiles_train
-  - Official MSG train, 10% random → df_smiles_val  (our internal val)
+  - Official MSG train, 90% scaffold → df_smiles_train
+  - Official MSG train, 10% scaffold → df_smiles_val  (our internal val)
 
 Distance source: /mnt/data2/gdewaele/lb_matrix.npy
   Lower-triangle condensed format: flat[i,j] = i*(i-1)//2 + j  (i > j)
@@ -30,7 +30,7 @@ LB_MATRIX = "/mnt/data2/gdewaele/lb_matrix.npy"
 LB_SMILES = "/mnt/data2/gdewaele/lb_matrix.smiles.txt"
 OUT_DIR = Path("/mnt/data2/nkubrakov/massspecgym/preprocessing_msg_gaetan_official")
 
-MCES_THRESHOLD = 40.0
+MCES_CAP = 40.0
 VAL_FRAC = 0.10
 SEED = 42
 
@@ -80,8 +80,8 @@ def lb_flat(i, j):
 
 def build_pairs(local_mol_indices, lb_indices, lb):
     """
-    Return (N,4) float64 array [local_i, local_j, ed=0, mces]
-    for all pairs with mces <= MCES_THRESHOLD.
+    Return (N,4) float64 array [local_i, local_j, ed=0, mces] for ALL pairs,
+    with lb values clipped to MCES_CAP (mirrors reference clip-40 behaviour).
 
     lb_indices: lb_matrix indices for each local molecule (aligned with local_mol_indices).
     lb: mmap array for lb_matrix.npy.
@@ -102,21 +102,19 @@ def build_pairs(local_mol_indices, lb_indices, lb):
 
         # sorted read for mmap locality
         order = np.argsort(fidx)
-        vals = lb[fidx[order]][np.argsort(order)]
+        vals = np.clip(lb[fidx[order]][np.argsort(order)], 0.0, MCES_CAP)
 
-        mask = vals <= MCES_THRESHOLD
-        if mask.any():
-            ljs = local_mol_indices[bs[mask]]
-            rows.append(
-                np.column_stack(
-                    [
-                        np.full(mask.sum(), li, dtype=np.float64),
-                        ljs.astype(np.float64),
-                        np.zeros(mask.sum(), dtype=np.float64),
-                        vals[mask].astype(np.float64),
-                    ]
-                )
+        ljs = local_mol_indices[bs]
+        rows.append(
+            np.column_stack(
+                [
+                    np.full(len(ljs), li, dtype=np.float64),
+                    ljs.astype(np.float64),
+                    np.zeros(len(ljs), dtype=np.float64),
+                    vals.astype(np.float64),
+                ]
             )
+        )
 
     return np.concatenate(rows) if rows else np.empty((0, 4), dtype=np.float64)
 
@@ -306,7 +304,7 @@ def main():
             f"\nBuilding pairs for {fold} ({len(local_indices)}/{len(df_fold)} molecules matched in lb_matrix)..."
         )
         pairs = build_pairs(local_indices, global_lb_idxs, lb)
-        print(f"  -> {len(pairs):,} pairs with MCES <= {MCES_THRESHOLD}")
+        print(f"  -> {len(pairs):,} pairs (MCES clipped at {MCES_CAP})")
 
         out = OUT_DIR / f"ed_mces_indexes_tani_incremental_{fold}_node0_chunk0.npy"
         np.save(out, pairs)
