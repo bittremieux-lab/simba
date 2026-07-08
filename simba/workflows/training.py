@@ -346,12 +346,15 @@ def prepare_data(
     logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
 
     # Calculate weights for the training set.
-    # When edit distance is disabled, all ED values are 0 and the ED-based sampler
-    # degenerates to uniform sampling. Use MCES similarity for binning instead so
-    # the model sees equal exposure to similar and dissimilar pairs.
+    # Use MCES-based sampling only when ED is disabled AND the ED column is all zeros
+    # (i.e. the preprocessing didn't compute real edit distances). When real ED values
+    # are present, use them for sampling even if the ED head is disabled — this gives
+    # meaningful pair balancing without requiring the ED objective.
     n_bins = cfg.model.tasks.edit_distance.n_classes - 1
+    has_real_ed = bool((molecule_pairs_train.pair_distances[:, 2] != 0).any())
     use_mces_sampling = (
         not cfg.model.tasks.edit_distance.enabled
+        and not has_real_ed
         and molecule_pairs_train.extra_distances is not None
     )
     if use_mces_sampling:

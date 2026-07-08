@@ -1,5 +1,17 @@
 # MSG Scaffold Split Experiment
 
+## Experiments
+
+| Name | Key change | Commit | Job | Prepro | Results |
+|------|-----------|--------|-----|--------|---------|
+| discard-20 | Discard pairs with MCES > 20 | `ad31243` | — | `preprocessing_msg_scaffold_split` | `msg_scaffold_split_v3` |
+| clip-40 | Keep all pairs, clip at 40, n_classes=11 | `c4f2e0b` | 7614 | `preprocessing_msg_scaffold_split_mces40` | `msg_scaffold_split_mces40` |
+| clip-40-metadata | Same + adduct / CE / ion mode | `14c530f` | 7636 | `preprocessing_msg_scaffold_split_mces40` | `msg_scaffold_split_mces40_metadata` |
+| sv2-mces-only | scaffold_v2 data, MCES head only, ED-based sampling, lr=3.33e-5 | — | — | `preprocessing_scaffold_v2` | `scaffold_v2_mces_only` |
+| sv2-both | scaffold_v2 data, ED+MCES both objectives, lr=3.33e-5 | — | — | `preprocessing_scaffold_v2` | `scaffold_v2_both` |
+
+All paths under `/mnt/data2/nkubrakov/` (prepro) and `/mnt/data/nkubrakov/experiments_3_dataset/training/` (results).
+
 ## Motivation
 
 The standard random train/val split allows molecules with the same Murcko scaffold to appear in both sets, which inflates validation performance. This experiment uses a scaffold-based split to give a more honest OOD evaluation: molecules sharing a scaffold stay in the same partition.
