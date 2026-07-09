@@ -11,14 +11,14 @@
 
 set -uo pipefail
 
-echo "===== Inference: SV2 MCES-only @ step 44k ====="
+echo "===== Inference: SV2 MCES-only @ step 67k ====="
 echo "Job ID: $SLURM_JOB_ID  Node: $SLURM_NODELIST  Date: $(date)"
 nvidia-smi
 
 PREPRO_DIR=/mnt/data/nkubrakov/massspecgym/preprocessing_scaffold_v2
 EXP_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/scaffold_v2_mces_only
-CHECKPOINT="${EXP_DIR}/checkpoint-epoch=04-step=44000.ckpt"
-OUTPUT_DIR="${EXP_DIR}/val_hexbin_step44k"
+CHECKPOINT="${EXP_DIR}/checkpoint-epoch=06-step=67000.ckpt"
+OUTPUT_DIR="${EXP_DIR}/val_hexbin_step67k"
 
 mkdir -p "$OUTPUT_DIR"
 

@@ -25,15 +25,19 @@ EXPERIMENTS = [
         "inference_dir": DATA / "msg_scaffold_split_mces40/val_hexbin_step22k",
         "job": "7614",
         "status": "done",
-        "note": "MSG · MCES only · scaffold split · clip at 40 · n_classes=11",
+        "data": "MSG HDF5",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · MCES only · clip at 40 · n_classes=11 · best scaffold ρ=0.660 @ step 23k",
     },
     {
         "label": "clip-40 + metadata",
         "dir": DATA / "msg_scaffold_split_mces40_metadata",
-        "inference_dir": DATA / "msg_scaffold_split_mces40_metadata/val_hexbin_step56k",
+        "inference_dir": DATA / "msg_scaffold_split_mces40_metadata/val_hexbin_step22k",
         "job": "7636",
         "status": "done",
-        "note": "Same as clip-40, adduct + CE + ion mode enabled",
+        "data": "MSG HDF5",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · MCES only · clip at 40 · adduct + CE + ion mode · best scaffold ρ=0.653 @ step 22k",
     },
     {
         "label": "Gaetan lb_matrix · clip-40",
@@ -41,23 +45,29 @@ EXPERIMENTS = [
         "inference_dir": DATA / "msg_gaetan_official_mces40/val_hexbin_step35k",
         "job": "7656",
         "status": "done",
-        "note": "Gaetan tighter lower bounds · official splits · scaffold 10% val · clip at 40",
+        "data": "Gaetan lb_matrix",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · Gaetan tighter lower bounds · clip at 40 · best scaffold ρ=0.383 @ step 35k",
     },
     {
-        "label": "SV2 · MCES only",
+        "label": "MSG scaffold-v2 · MCES only",
         "dir": DATA / "scaffold_v2_mces_only",
-        "inference_dir": DATA / "scaffold_v2_mces_only/val_hexbin_step44k",
+        "inference_dir": DATA / "scaffold_v2_mces_only/val_hexbin_step67k",
         "job": "7637",
         "status": "done",
-        "note": "scaffold_v2 dataset · MCES head only · ED-based sampling · lr=3.33e-5",
+        "data": "MSG HDF5 (scaffold v2 split)",
+        "val_sets": "val only",
+        "note": "MSG · Murcko scaffold split v2 · MCES only · ED-based sampling · lr=3.33e-5 · val ρ @ step 67k",
     },
     {
-        "label": "SV2 · ED + MCES",
+        "label": "MSG scaffold-v2 · ED + MCES",
         "dir": DATA / "scaffold_v2_both",
         "inference_dir": DATA / "scaffold_v2_both/val_hexbin_step67k",
         "job": "7638",
         "status": "done",
-        "note": "scaffold_v2 dataset · ED + MCES objectives · lr=3.33e-5",
+        "data": "MSG HDF5 (scaffold v2 split)",
+        "val_sets": "val only",
+        "note": "MSG · Murcko scaffold split v2 · ED + MCES objectives · lr=3.33e-5 · best val ρ=0.804 @ step 67k",
     },
 ]
 
@@ -194,6 +204,7 @@ st.header("Experiments")
 for exp in EXPERIMENTS:
     icon = STATUS_COLOR.get(exp["status"], "⚪")
     with st.expander(f"{icon} {exp['label']}  ·  job {exp['job']}", expanded=True):
+        st.caption(f"**Data:** {exp['data']}  ·  **Eval:** {exp['val_sets']}")
         st.caption(exp["note"])
         d = exp["dir"]
 

@@ -11,14 +11,14 @@
 
 set -uo pipefail
 
-echo "===== Inference: clip-40 + metadata @ step 56k ====="
+echo "===== Inference: clip-40 + metadata @ step 22k ====="
 echo "Job ID: $SLURM_JOB_ID  Node: $SLURM_NODELIST  Date: $(date)"
 nvidia-smi
 
 PREPRO_DIR=/mnt/data/nkubrakov/massspecgym/preprocessing_msg_scaffold_split_mces40
 EXP_DIR=/mnt/data/nkubrakov/experiments_3_dataset/training/msg_scaffold_split_mces40_metadata
-CHECKPOINT="${EXP_DIR}/checkpoint-epoch=05-step=56000.ckpt"
-OUTPUT_DIR="${EXP_DIR}/val_hexbin_step56k"
+CHECKPOINT="${EXP_DIR}/checkpoint-epoch=02-step=22000.ckpt"
+OUTPUT_DIR="${EXP_DIR}/val_hexbin_step22k"
 
 mkdir -p "$OUTPUT_DIR"
 
