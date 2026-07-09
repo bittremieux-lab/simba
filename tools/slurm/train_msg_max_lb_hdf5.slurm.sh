@@ -34,12 +34,11 @@ uv run simba train \
   paths.preprocessing_dir_train="${PREPRO_DIR}" \
   paths.preprocessing_pickle_file=mapping.pkl \
   paths.checkpoint_dir="${OUTPUT_DIR}" \
-  training.epochs=1000 \
+  training.epochs=7 \
   training.batch_size=1024 \
   training.val_check_interval=1000 \
   training.limit_train_batches=10000 \
   training.limit_val_batches=500 \
-  training.max_steps=70000 \
   training.early_stopping_patience=0 \
   optimizer.lr=0.0001 \
   hardware.accelerator=gpu \
