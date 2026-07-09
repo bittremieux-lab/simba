@@ -55,7 +55,7 @@ def load_inference_data(cfg: DictConfig):
     if dataset.get("format_version") == "lightweight":
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
-        mgf_path = dataset["mgf_path"]
+        mgf_path = dataset["mgf_path"].replace("/mnt/data2/", "/mnt/data/")
 
         # Use preprocessing config values (if available) to ensure consistent filtering
         use_only_protonized = getattr(
