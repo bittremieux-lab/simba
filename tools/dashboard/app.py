@@ -7,6 +7,7 @@ Run: uv run streamlit run tools/dashboard/app.py --server.port 8505
 import io
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from PIL import Image
 
@@ -22,37 +23,129 @@ EXPERIMENTS = [
     {
         "label": "clip-40 (reference)",
         "dir": DATA2 / "msg_scaffold_split_mces40",
-        "inference_dir": DATA / "msg_scaffold_split_mces40/val_hexbin_step22k",
+        "inference_dirs": [DATA / "msg_scaffold_split_mces40/val_hexbin_step22k"],
         "job": "7614",
         "status": "done",
         "data": "MSG HDF5",
         "val_sets": "official val + scaffold val + test",
         "note": "MSG · MCES only · clip at 40 · n_classes=11 · best scaffold ρ=0.660 @ step 23k",
+        "retrieval_tsv": Path(
+            "/home/nkubrakov/simba/results/simba_retrieval_clip40_step22k.tsv"
+        ),
     },
     {
         "label": "clip-40 + metadata",
         "dir": DATA / "msg_scaffold_split_mces40_metadata",
-        "inference_dir": DATA / "msg_scaffold_split_mces40_metadata/val_hexbin_step22k",
+        "inference_dirs": [
+            DATA / "msg_scaffold_split_mces40_metadata/val_hexbin_step22k"
+        ],
         "job": "7636",
         "status": "done",
         "data": "MSG HDF5",
         "val_sets": "official val + scaffold val + test",
         "note": "MSG · MCES only · clip at 40 · adduct + CE + ion mode · best scaffold ρ=0.653 @ step 22k",
+        "retrieval_tsv": Path(
+            "/home/nkubrakov/simba/results/simba_retrieval_clip40_metadata_step22k.tsv"
+        ),
     },
     {
         "label": "Gaetan lb_matrix · clip-40",
         "dir": DATA / "msg_gaetan_official_mces40",
-        "inference_dir": DATA / "msg_gaetan_official_mces40/val_hexbin_step35k",
+        "inference_dirs": [DATA / "msg_gaetan_official_mces40/val_hexbin_step35k"],
         "job": "7656",
         "status": "done",
         "data": "Gaetan lb_matrix",
         "val_sets": "official val + scaffold val + test",
         "note": "MSG · Gaetan tighter lower bounds · clip at 40 · best scaffold ρ=0.383 @ step 35k",
+        "retrieval_tsv": Path(
+            "/home/nkubrakov/simba/results/simba_retrieval_gaetan_official_step35k.tsv"
+        ),
+    },
+    {
+        "label": "max(Gaetan lb, HDF5) · MCES only",
+        "dir": DATA / "msg_max_lb_hdf5_mces40",
+        "inference_dirs": [
+            DATA / "msg_max_lb_hdf5_mces40/val_hexbin_step22k",
+            DATA / "msg_max_lb_hdf5_mces40/val_hexbin_step70k",
+        ],
+        "job": "7759",
+        "status": "done",
+        "data": "max(Gaetan lb, HDF5)",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · max(lb_matrix, HDF5) distances · MCES only · clip at 40 · n_classes=11 · scaffold ρ≈0.388 @ step 70k",
+        "retrieval_tsvs": [
+            {
+                "label": "step 22k",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_msg_max_lb_hdf5_step22k.tsv"
+                ),
+            },
+            {
+                "label": "step 70k",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_msg_max_lb_hdf5_step70k.tsv"
+                ),
+            },
+        ],
+    },
+    {
+        "label": "max(Gaetan lb, HDF5) · Tani≥0.2",
+        "dir": DATA / "msg_max_lb_hdf5_tani02_mces40",
+        "inference_dirs": [
+            DATA / "msg_max_lb_hdf5_tani02_mces40/val_hexbin_step45k",
+            DATA / "msg_max_lb_hdf5_tani02_mces40/val_hexbin_step100k",
+        ],
+        "job": "7772",
+        "status": "done",
+        "data": "max(Gaetan lb, HDF5) · Tani≥0.2 filter",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · max(lb_matrix, HDF5) distances · Tanimoto≥0.2 + ≤40 atoms filter · MCES only · clip at 40 · n_classes=11 · 14 epochs (~130k steps)",
+        "retrieval_tsv": Path(
+            "/home/nkubrakov/simba/results/simba_retrieval_tani02_step100k.tsv"
+        ),
+    },
+    {
+        "label": "clip-40 + metadata (CE fix + norm/100)",
+        "dir": DATA / "msg_scaffold_split_mces40_metadata_ce_v2",
+        "inference_dirs": [
+            DATA / "msg_scaffold_split_mces40_metadata_ce_v2/val_hexbin_step15k"
+        ],
+        "job": "7955",
+        "status": "running",
+        "data": "MSG HDF5",
+        "val_sets": "official val + scaffold val + test",
+        "note": "MSG · MCES only · clip at 40 · adduct + CE + ion mode · CE fix (reads collision_energy, float-safe) · CE/100 normalization in encoder · MCES sampling bug fixed · 8 epochs ≈ 80k steps",
+        "retrieval_tsvs": [
+            {
+                "label": "step 15k",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_ce_v2_step15k.tsv"
+                ),
+            },
+            {
+                "label": "step 60k",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_ce_v2_step60k.tsv"
+                ),
+            },
+            {
+                "label": "step 15k · CE=0 🧪",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_ce_v2_step15k_cezero.tsv"
+                ),
+            },
+            {
+                "label": "step 60k · CE=0 🧪",
+                "path": Path(
+                    "/home/nkubrakov/simba/results/simba_retrieval_ce_v2_step60k_cezero.tsv"
+                ),
+            },
+        ],
     },
     {
         "label": "MSG scaffold-v2 · MCES only",
         "dir": DATA / "scaffold_v2_mces_only",
-        "inference_dir": DATA / "scaffold_v2_mces_only/val_hexbin_step67k",
+        "inference_dirs": [DATA / "scaffold_v2_mces_only/val_hexbin_step67k"],
         "job": "7637",
         "status": "done",
         "data": "MSG HDF5 (scaffold v2 split)",
@@ -62,7 +155,7 @@ EXPERIMENTS = [
     {
         "label": "MSG scaffold-v2 · ED + MCES",
         "dir": DATA / "scaffold_v2_both",
-        "inference_dir": DATA / "scaffold_v2_both/val_hexbin_step67k",
+        "inference_dirs": [DATA / "scaffold_v2_both/val_hexbin_step67k"],
         "job": "7638",
         "status": "done",
         "data": "MSG HDF5 (scaffold v2 split)",
@@ -196,6 +289,16 @@ The next round of experiments uses Gaetan's bounds as the distance source.
     """)
     show(ASSETS / "hdf5_vs_gaetan_scatter.png", w=550)
 
+    st.markdown("---")
+    st.markdown("""
+### Training pair MCES distribution · max(Gaetan lb, HDF5) · job 7759
+
+238,372,695 training pairs. The distribution peaks around MCES 22–23 (~9.75M pairs per unit).
+The [10, 20] range contains **62,647,072 pairs (26.28%)**. The spike at 40 (33.5M, 14.05%)
+is the clip artifact — all pairs with true MCES ≥ 40 are collapsed to exactly 40.
+    """)
+    show(ASSETS / "mces_pair_distribution_7759.png", w=900)
+
 st.markdown("---")
 
 # ── Experiments ──────────────────────────────────────────────────────────────
@@ -203,7 +306,7 @@ st.header("Experiments")
 
 for exp in EXPERIMENTS:
     icon = STATUS_COLOR.get(exp["status"], "⚪")
-    with st.expander(f"{icon} {exp['label']}  ·  job {exp['job']}", expanded=True):
+    with st.expander(f"{icon} {exp['label']}  ·  job {exp['job']}", expanded=False):
         st.caption(f"**Data:** {exp['data']}  ·  **Eval:** {exp['val_sets']}")
         st.caption(exp["note"])
         d = exp["dir"]
@@ -217,10 +320,13 @@ for exp in EXPERIMENTS:
             st.markdown("**Metrics**")
             show(d / "metrics_curves.png")
 
-        # Inference results
-        inf_dir = exp.get("inference_dir")
-        inf_dir = Path(inf_dir) if inf_dir else None
-        if inf_dir and inf_dir.exists():
+        # Inference results (supports multiple checkpoints)
+        inf_dirs = [Path(d) for d in exp.get("inference_dirs", [])]
+        any_inf = False
+        for inf_dir in inf_dirs:
+            if not inf_dir.exists():
+                continue
+            any_inf = True
             step_label = inf_dir.name.replace("val_hexbin_", "")
             st.markdown(f"**Inference · {step_label}**")
             balanced = inf_dir / "mces_hexbin_balanced.png"
@@ -235,5 +341,27 @@ for exp in EXPERIMENTS:
                             show(p, p.stem)
                 else:
                     placeholder("no plots yet")
-        else:
+        if not any_inf:
             st.info("No inference results yet.")
+
+        # Retrieval benchmark (official splits only)
+        # Supports both legacy `retrieval_tsv` (single path) and `retrieval_tsvs` (list of dicts).
+        retrieval_entries = []
+        if exp.get("retrieval_tsvs"):
+            retrieval_entries = [(e["label"], e["path"]) for e in exp["retrieval_tsvs"]]
+        elif exp.get("retrieval_tsv"):
+            retrieval_entries = [("", Path(exp["retrieval_tsv"]))]
+
+        for step_label, tsv_path in retrieval_entries:
+            if Path(tsv_path).exists():
+                header = f"**Retrieval benchmark · SIMBA NN transfer (test set){' · ' + step_label if step_label else ''}**"
+                st.markdown(header)
+                df = pd.read_csv(tsv_path, sep="\t")
+                row = df.iloc[0]
+                c1, c2, c3 = st.columns(3)
+                c1.metric("hit@1", f"{row['hit@1'] * 100:.2f}%")
+                c2.metric("hit@5", f"{row['hit@5'] * 100:.2f}%")
+                c3.metric("hit@20", f"{row['hit@20'] * 100:.2f}%")
+                st.caption(
+                    f"n={int(row['n'])} · SIMBA embedding NN → Morgan FP transfer → Tanimoto candidate ranking"
+                )

@@ -350,8 +350,10 @@ def prepare_data(
     # (i.e. the preprocessing didn't compute real edit distances). When real ED values
     # are present, use them for sampling even if the ED head is disabled — this gives
     # meaningful pair balancing without requiring the ED objective.
+    # NOTE: pair_distances[:, 2] is NORMALIZED ED (normalize_ed maps raw=0 → 1.0,
+    # raw>0 → <1.0). Check != 1.0 to detect real non-zero ED, not != 0.
     n_bins = cfg.model.tasks.edit_distance.n_classes - 1
-    has_real_ed = bool((molecule_pairs_train.pair_distances[:, 2] != 0).any())
+    has_real_ed = bool((molecule_pairs_train.pair_distances[:, 2] != 1.0).any())
     use_mces_sampling = (
         not cfg.model.tasks.edit_distance.enabled
         and not has_real_ed

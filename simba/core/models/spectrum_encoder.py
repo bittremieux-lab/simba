@@ -194,7 +194,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             adduct_emb = torch.nan_to_num(adduct_emb, nan=0.0, posinf=0.0, neginf=0.0)
             features.append(adduct_emb)
         if self.use_ce:
-            ce = kwargs["ce"].float().to(device).view(batch_size, 1)
+            ce = kwargs["ce"].float().to(device).view(batch_size, 1) / 100.0
             ce = torch.nan_to_num(ce, nan=0.0, posinf=0.0, neginf=0.0)
             features.append(ce)
 
