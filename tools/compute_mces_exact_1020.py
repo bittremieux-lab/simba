@@ -37,8 +37,8 @@ Typical workflow:
 
 import argparse
 import json
+import multiprocessing
 import os
-import signal
 from pathlib import Path
 
 import numpy as np
@@ -123,65 +123,80 @@ def prepare(output_dir: Path, n_blocks: int) -> None:
 
 
 _original_mces_worker = None
-_worker_timeout_seconds: float | None = None
-
-
-class _WorkerTimeout(Exception):
-    pass
-
-
-def _alarm_handler(signum, frame):
-    raise _WorkerTimeout()
 
 
 def _safe_mces_worker(args):
-    """Top-level (picklable) stand-in for ``_mces_worker`` — must live at
-    module scope so multiprocessing.Pool can pickle it by reference; a
-    closure defined inside another function cannot be pickled at all.
+    """Top-level (picklable) stand-in for the library's ``_mces_worker`` —
+    must live at module scope so multiprocessing.Pool can pickle it by
+    reference; a closure defined inside another function cannot be pickled
+    at all.
 
-    Guards against two failure modes seen in practice:
-      - a quick exception (e.g. "unknown ILP status: Not Solved")
-      - a pair that just hangs — some are pathologically slow and never
-        raise at all. A per-pair SIGALRM inside this same worker process
-        bounds that, without spawning a new process per pair (which is
-        what MCESDistance's own --timeout path does, at a large throughput
-        cost from its chunk-boundary barriers).
+    Catches a pair that fails *fast* (e.g. "unknown ILP status: Not
+    Solved") and returns -1 instead of raising. Does NOT protect against a
+    hang — a pair stuck deep in the ILP solver's native code never returns
+    control to the Python interpreter, so no Python-level exception
+    (including a signal-handler-raised one) can interrupt it. See
+    ``_dispatch_with_watchdog`` for how hangs are actually handled: by
+    killing the whole worker process, which works regardless of what
+    native code it's running.
     """
-    if _worker_timeout_seconds is not None:
-        signal.signal(signal.SIGALRM, _alarm_handler)
-        signal.alarm(int(_worker_timeout_seconds))
     try:
         return _original_mces_worker(args)
     except Exception:
         return -1.0
-    finally:
-        if _worker_timeout_seconds is not None:
-            signal.alarm(0)
 
 
-def _patch_mces_worker_for_safety(timeout_seconds: float | None) -> None:
-    """Make a single unsolvable OR hanging pair return -1 instead of killing
-    the block or the whole run.
+def _dispatch_with_watchdog(worker_args, n_jobs, per_pair_timeout, show_progress):
+    """Compute one result per entry in ``worker_args``, with a hard per-pair
+    wall-clock deadline.
 
-    ``_dispatch`` (used when ``timeout=None`` is passed to ``MCESDistance``)
-    resolves ``_mces_worker`` as a plain global at call time via
-    ``pool.imap(_mces_worker, worker_args)``. Overwriting the module
-    attribute here — before any ``MCESDistance`` call — makes every
-    subsequent dispatch pick up the wrapped version, with no change to the
-    fast Pool.imap dynamic dispatch (no chunking, no barriers).
+    Uses the same fast ``Pool.imap`` dynamic dispatch as MCESDistance's own
+    no-timeout path for the overwhelming majority of pairs. If a single
+    result doesn't arrive within ``per_pair_timeout`` seconds (checked via
+    the iterator's own ``.next(timeout=...)``, not a signal), the whole
+    pool is ``terminate()``d — a hard kill of every worker process,
+    including whichever one is stuck in native code — the stalled pair is
+    recorded as -1, and the remaining pairs resume in a fresh pool.
+
+    A signal-based per-pair timeout was tried first and does not work: the
+    ILP solver spends its time inside a C extension that never yields back
+    to the Python interpreter, so a SIGALRM just queues until that call
+    finishes on its own. Terminating the OS process is the only thing that
+    reliably stops it.
     """
-    import metabo_depthcharge.chem.similarities as sim
+    from tqdm.auto import tqdm
 
-    global _original_mces_worker, _worker_timeout_seconds
+    n = len(worker_args)
+    results = [None] * n
+    todo = list(range(n))
+    bar = tqdm(total=n, disable=not show_progress, unit="pair")
 
-    _worker_timeout_seconds = timeout_seconds
+    while todo:
+        pool = multiprocessing.Pool(n_jobs)
+        it = pool.imap(_safe_mces_worker, (worker_args[i] for i in todo))
+        stuck_at = None
+        try:
+            for pos, idx in enumerate(todo):
+                try:
+                    results[idx] = it.next(timeout=per_pair_timeout)
+                except multiprocessing.TimeoutError:
+                    stuck_at = pos
+                    break
+                bar.update(1)
+        finally:
+            if stuck_at is not None:
+                pool.terminate()
+                pool.join()
+                results[todo[stuck_at]] = -1.0
+                bar.update(1)
+                todo = todo[stuck_at + 1 :]
+            else:
+                pool.close()
+                pool.join()
+                todo = []
 
-    if getattr(sim, "_patched_for_safety", False):
-        return
-
-    _original_mces_worker = sim._mces_worker
-    sim._mces_worker = _safe_mces_worker
-    sim._patched_for_safety = True
+    bar.close()
+    return results
 
 
 def compute_block(
@@ -191,9 +206,11 @@ def compute_block(
     timeout: float | None,
 ) -> None:
     """Compute exact MCES for one block of pairs and write the result."""
-    from metabo_depthcharge.chem.similarities import MCESDistance
+    global _original_mces_worker
+    if _original_mces_worker is None:
+        from metabo_depthcharge.chem.similarities import _mces_worker
 
-    _patch_mces_worker_for_safety(timeout)
+        _original_mces_worker = _mces_worker
 
     meta = json.loads((output_dir / "meta.json").read_text())
     n_blocks = meta["n_blocks"]
@@ -216,38 +233,32 @@ def compute_block(
 
     smiles = Path(meta["smiles_path"]).read_text().splitlines()
     pairs = np.load(meta["pairs_path"], mmap_mode="r")[i0:i1]
-    smiles_a = np.array([smiles[i] for i in pairs[:, 0]])
-    smiles_b = np.array([smiles[j] for j in pairs[:, 1]])
+    smiles_a = [smiles[i] for i in pairs[:, 0]]
+    smiles_b = [smiles[j] for j in pairs[:, 1]]
 
     if n_jobs <= 0:
         n_jobs = os.cpu_count() or 1
+    per_pair_timeout = timeout if timeout else 300.0
     print(
-        f"  MCESDistance(threshold={THRESHOLD}, always_stronger_bound=True,"
-        f" n_jobs={n_jobs}, per-pair timeout={timeout}s via SIGALRM)"
+        f"  MCES(threshold={THRESHOLD}, always_stronger_bound=True,"
+        f" n_jobs={n_jobs}, per-pair timeout={per_pair_timeout}s, pool-restart watchdog)"
     )
 
-    # timeout=None here always — MCESDistance's own --timeout path spawns a
-    # fresh Process per pair in chunks of n_jobs with a barrier between
-    # chunks, which we measured at ~6-7x slower than Pool.imap. The per-pair
-    # deadline is instead enforced inside _safe_mces_worker via SIGALRM,
-    # preserving Pool.imap's dynamic work-stealing dispatch.
-    mces = MCESDistance(
-        threshold=THRESHOLD,
-        always_stronger_bound=True,
-        n_jobs=n_jobs,
-        solver_options={"msg": 0},
-        timeout=None,
-        progress=True,
+    worker_args = [
+        (a, b, THRESHOLD, True, {"msg": 0}, "HiGHS") for a, b in zip(smiles_a, smiles_b)
+    ]
+    result = np.asarray(
+        _dispatch_with_watchdog(worker_args, n_jobs, per_pair_timeout, show_progress=True),
+        dtype=np.float32,
     )
-    result = np.asarray(mces(smiles_a, smiles_b), dtype=np.float32)
 
-    # A pair fails to solve (e.g. "unknown ILP status: Not Solved") or hangs
-    # past the per-pair timeout; _safe_mces_worker converts either into -1
-    # directly so one bad pair never loses an entire block. np.isnan check
-    # kept as a defensive fallback in case any NaN ever surfaces regardless.
+    # A pair either fails to solve (e.g. "unknown ILP status: Not Solved")
+    # or hangs past the per-pair timeout; both come back as -1 so one bad
+    # pair never loses an entire block. np.isnan check kept as a defensive
+    # fallback in case any NaN ever surfaces regardless.
     n_failed = int((result == -1.0).sum() + np.isnan(result).sum())
     if n_failed:
-        print(f"  {n_failed:,} / {n_pair:,} pairs failed to solve — recorded as -1.")
+        print(f"  {n_failed:,} / {n_pair:,} pairs failed to solve or timed out — recorded as -1.")
     result = np.where(np.isnan(result), -1.0, result).astype(np.float32)
 
     np.save(out_npy, result)
