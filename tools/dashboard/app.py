@@ -143,6 +143,16 @@ EXPERIMENTS = [
         ],
     },
     {
+        "label": "exact MCES [10-20] · MCES only · no metadata",
+        "dir": DATA / "msg_exact_mces_1020_no_meta",
+        "inference_dirs": [],
+        "job": "8011",
+        "status": "running",
+        "data": "exact MCES in [10,20] + max(Gaetan lb, HDF5) elsewhere",
+        "val_sets": "official val + scaffold val",
+        "note": "MSG · exact MCES in [10,20] (threshold=20, always_stronger_bound=True) · clip at 40 · no metadata · early stopping on scaffold val Spearman (patience=15)",
+    },
+    {
         "label": "MSG scaffold-v2 · MCES only",
         "dir": DATA / "scaffold_v2_mces_only",
         "inference_dirs": [DATA / "scaffold_v2_mces_only/val_hexbin_step67k"],
@@ -298,6 +308,55 @@ The [10, 20] range contains **62,647,072 pairs (26.28%)**. The spike at 40 (33.5
 is the clip artifact — all pairs with true MCES ≥ 40 are collapsed to exactly 40.
     """)
     show(ASSETS / "mces_pair_distribution_7759.png", w=900)
+
+    st.markdown("---")
+    st.markdown("""
+### Resolving the [10, 20] range: exact MCES computation
+
+The 26.28 % of training pairs with `max(Gaetan lb, HDF5) ∈ [10, 20]` were only
+lower-bounded — the ILP solver stopped before finding the exact value. For these
+62,647,072 pairs (plus 323k val-scaffold, 602k val-official, 555k test) we ran a full
+exact computation with `threshold=20, always_stronger_bound=True` on asimov2,
+parallelised as 1,000 SLURM array tasks of ~62k pairs each (16 CPUs per task, ~4.5 h
+for block 0 of 313k pairs as the benchmark).
+
+**Results across all four splits:**
+
+| Split | Pairs in [10, 20] | Mean lb → Mean exact | % increased | % capped at 20 | Spearman ρ (lb vs exact) |
+|---|---|---|---|---|---|
+| Train | 62,647,072 | 16.24 → 18.97 (+2.73) | 87.1 % | 66.9 % | 0.636 |
+| Val (scaffold) | 323,253 | 16.35 → 19.34 (+3.00) | 89.0 % | 76.1 % | 0.567 |
+| Val (official) | 602,786 | 17.10 → 19.93 (+2.82) | 88.4 % | **96.4 %** | 0.263 |
+| Test | 555,937 | 17.15 → 19.93 (+2.78) | 88.3 % | **96.4 %** | 0.263 |
+
+The low Spearman ρ for val-official and test (0.26) and the 96 % cap rate reveals that
+most of these pairs actually have true MCES > 20 — the lower bounds were in [10, 20]
+but the molecules are dissimilar enough that the exact edit distance exceeds the
+threshold. Only 3,843 train pairs (0.006 %) were unresolvable (watchdog timeout) and
+retain their original lower bound.
+
+All [< 10] and [> 20] pairs are unchanged — below 10 the HDF5 values are already exact,
+above 20 the clip-at-40 mechanism handles them.
+    """)
+    show(ASSETS / "mces_exact_vs_lb_scatter.png", w=950)
+
+    st.markdown("---")
+    st.markdown("""
+### Next training run: exact MCES distances · no metadata · job 8011
+
+With the resolved [10, 20] distances in place, we launched a new training run on the
+updated dataset (`preprocessing_msg_exact_mces_1020`). Configuration identical to
+previous runs except:
+
+- **No metadata** — CE, adduct, and ion mode conditioning all disabled. Previous
+  experiments showed that metadata conditioning consistently hurts retrieval; the
+  reference model without metadata achieved the best hit@1 (4.61 %). This run
+  isolates the effect of better ground-truth distances.
+- **Early stopping on scaffold val Spearman** — patience 15 validation checks (~15k steps);
+  stops when the MCES prediction quality on the held-out scaffold split stops improving.
+
+Results appear in the experiment panel below as they arrive.
+    """)
 
 st.markdown("---")
 

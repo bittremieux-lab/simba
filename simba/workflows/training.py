@@ -590,14 +590,19 @@ def setup_callbacks(cfg: DictConfig, val_names: list | None = None) -> tuple:
         log_every_n_steps=cfg.logging.get("progress_log_every_n_steps", 100)
     )
 
-    # Optional early stopping: patience=0 means disabled
+    # Optional early stopping: patience=0 means disabled.
+    # When scaffold val is available, monitor its Spearman (higher=better).
+    # Falls back to validation_loss (lower=better) when scaffold is absent.
     early_stopping_callback = None
     patience = cfg.training.get("early_stopping_patience", 0)
     if patience and patience > 0:
+        use_scaffold = val_names and "scaffold" in val_names
+        es_monitor = "val_mces_spearman/scaffold" if use_scaffold else "validation_loss"
+        es_mode = "max" if use_scaffold else "min"
         early_stopping_callback = EarlyStopping(
-            monitor="validation_loss",
+            monitor=es_monitor,
             patience=patience,
-            mode="min",
+            mode=es_mode,
             verbose=True,
         )
 

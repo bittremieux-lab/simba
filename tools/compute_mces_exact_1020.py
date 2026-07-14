@@ -46,9 +46,16 @@ import numpy as np
 
 # ── Default paths ──────────────────────────────────────────────────────────
 PREPRO_DIR = Path("/mnt/data/nkubrakov/massspecgym/preprocessing_msg_max_lb_hdf5")
-TRAIN_PAIRS_NPY = PREPRO_DIR / "ed_mces_indexes_tani_incremental_train_node0_chunk0.npy"
 MAPPING_PKL = PREPRO_DIR / "mapping.pkl"
 DEFAULT_OUTPUT_DIR = Path("/mnt/data2/nkubrakov/mces_exact_1020")
+
+SPLIT_PAIRS_NPY = {
+    "train": PREPRO_DIR / "ed_mces_indexes_tani_incremental_train_node0_chunk0.npy",
+    "val": PREPRO_DIR / "ed_mces_indexes_tani_incremental_val_node0_chunk0.npy",
+    "val_official": PREPRO_DIR
+    / "ed_mces_indexes_tani_incremental_val_official_node0_chunk0.npy",
+    "test": PREPRO_DIR / "ed_mces_indexes_tani_incremental_test_node0_chunk0.npy",
+}
 
 LB_MIN, LB_MAX = 10.0, 20.0
 THRESHOLD = 20
@@ -57,9 +64,11 @@ THRESHOLD = 20
 # ── prepare ────────────────────────────────────────────────────────────────
 
 
-def prepare(output_dir: Path, n_blocks: int) -> None:
+def prepare(output_dir: Path, n_blocks: int, split: str = "train") -> None:
     """Extract pairs in [LB_MIN, LB_MAX], write smiles + pairs + meta."""
     import pickle
+
+    pairs_npy = SPLIT_PAIRS_NPY[split]
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "blocks").mkdir(exist_ok=True)
@@ -67,16 +76,16 @@ def prepare(output_dir: Path, n_blocks: int) -> None:
     print("Loading mapping.pkl ...")
     with open(MAPPING_PKL, "rb") as f:
         mapping = pickle.load(f)
-    smiles_list: list[str] = mapping["df_smiles_train"]["canon_smiles"].tolist()
+    smiles_list: list[str] = mapping[f"df_smiles_{split}"]["canon_smiles"].tolist()
     n_mols = len(smiles_list)
-    print(f"  {n_mols:,} unique train molecules")
+    print(f"  {n_mols:,} unique {split} molecules")
 
     smiles_path = output_dir / "smiles.txt"
     smiles_path.write_text("\n".join(smiles_list) + "\n")
     print(f"Wrote {smiles_path}")
 
-    print("Loading training pairs ...")
-    d = np.load(TRAIN_PAIRS_NPY)
+    print(f"Loading {split} pairs from {pairs_npy.name} ...")
+    d = np.load(pairs_npy)
     mask = (d[:, 3] >= LB_MIN) & (d[:, 3] <= LB_MAX)
     pairs = d[mask, :2].astype(np.int32)
     n_pairs = len(pairs)
@@ -248,7 +257,9 @@ def compute_block(
         (a, b, THRESHOLD, True, {"msg": 0}, "HiGHS") for a, b in zip(smiles_a, smiles_b)
     ]
     result = np.asarray(
-        _dispatch_with_watchdog(worker_args, n_jobs, per_pair_timeout, show_progress=True),
+        _dispatch_with_watchdog(
+            worker_args, n_jobs, per_pair_timeout, show_progress=True
+        ),
         dtype=np.float32,
     )
 
@@ -258,7 +269,9 @@ def compute_block(
     # fallback in case any NaN ever surfaces regardless.
     n_failed = int((result == -1.0).sum() + np.isnan(result).sum())
     if n_failed:
-        print(f"  {n_failed:,} / {n_pair:,} pairs failed to solve or timed out — recorded as -1.")
+        print(
+            f"  {n_failed:,} / {n_pair:,} pairs failed to solve or timed out — recorded as -1."
+        )
     result = np.where(np.isnan(result), -1.0, result).astype(np.float32)
 
     np.save(out_npy, result)
@@ -352,7 +365,9 @@ def combine(output_dir: Path) -> None:
     valid = ~np.isnan(mces_values) & (mces_values != -1.0)
     print(f"Valid  : {valid.sum():,} / {len(mces_values):,}")
     if n_solver_failed:
-        print(f"Failed : {n_solver_failed:,} pairs recorded as -1 (solver could not solve)")
+        print(
+            f"Failed : {n_solver_failed:,} pairs recorded as -1 (solver could not solve)"
+        )
     if valid.any():
         v = mces_values[valid]
         print(f"Mean   : {v.mean():.2f}")
@@ -379,6 +394,12 @@ def main() -> None:
     pp.add_argument(
         "--n_blocks", type=int, default=200, help="Number of SLURM array tasks."
     )
+    pp.add_argument(
+        "--split",
+        choices=list(SPLIT_PAIRS_NPY),
+        default="train",
+        help="Which split's pairs file to use.",
+    )
 
     pb = sub.add_parser(
         "compute_block", help="Compute one block (one SLURM array task)."
@@ -404,7 +425,7 @@ def main() -> None:
 
     a = p.parse_args()
     if a.cmd == "prepare":
-        prepare(a.output_dir, a.n_blocks)
+        prepare(a.output_dir, a.n_blocks, a.split)
     elif a.cmd == "compute_block":
         compute_block(a.output_dir, a.task_id, a.n_jobs, a.timeout)
     elif a.cmd == "status":
