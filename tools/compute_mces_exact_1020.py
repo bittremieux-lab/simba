@@ -38,6 +38,7 @@ Typical workflow:
 import argparse
 import json
 import os
+import signal
 from pathlib import Path
 
 import numpy as np
@@ -121,6 +122,68 @@ def prepare(output_dir: Path, n_blocks: int) -> None:
 # ── compute_block ──────────────────────────────────────────────────────────
 
 
+_original_mces_worker = None
+_worker_timeout_seconds: float | None = None
+
+
+class _WorkerTimeout(Exception):
+    pass
+
+
+def _alarm_handler(signum, frame):
+    raise _WorkerTimeout()
+
+
+def _safe_mces_worker(args):
+    """Top-level (picklable) stand-in for ``_mces_worker`` — must live at
+    module scope so multiprocessing.Pool can pickle it by reference; a
+    closure defined inside another function cannot be pickled at all.
+
+    Guards against two failure modes seen in practice:
+      - a quick exception (e.g. "unknown ILP status: Not Solved")
+      - a pair that just hangs — some are pathologically slow and never
+        raise at all. A per-pair SIGALRM inside this same worker process
+        bounds that, without spawning a new process per pair (which is
+        what MCESDistance's own --timeout path does, at a large throughput
+        cost from its chunk-boundary barriers).
+    """
+    if _worker_timeout_seconds is not None:
+        signal.signal(signal.SIGALRM, _alarm_handler)
+        signal.alarm(int(_worker_timeout_seconds))
+    try:
+        return _original_mces_worker(args)
+    except Exception:
+        return -1.0
+    finally:
+        if _worker_timeout_seconds is not None:
+            signal.alarm(0)
+
+
+def _patch_mces_worker_for_safety(timeout_seconds: float | None) -> None:
+    """Make a single unsolvable OR hanging pair return -1 instead of killing
+    the block or the whole run.
+
+    ``_dispatch`` (used when ``timeout=None`` is passed to ``MCESDistance``)
+    resolves ``_mces_worker`` as a plain global at call time via
+    ``pool.imap(_mces_worker, worker_args)``. Overwriting the module
+    attribute here — before any ``MCESDistance`` call — makes every
+    subsequent dispatch pick up the wrapped version, with no change to the
+    fast Pool.imap dynamic dispatch (no chunking, no barriers).
+    """
+    import metabo_depthcharge.chem.similarities as sim
+
+    global _original_mces_worker, _worker_timeout_seconds
+
+    _worker_timeout_seconds = timeout_seconds
+
+    if getattr(sim, "_patched_for_safety", False):
+        return
+
+    _original_mces_worker = sim._mces_worker
+    sim._mces_worker = _safe_mces_worker
+    sim._patched_for_safety = True
+
+
 def compute_block(
     output_dir: Path,
     task_id: int,
@@ -129,6 +192,8 @@ def compute_block(
 ) -> None:
     """Compute exact MCES for one block of pairs and write the result."""
     from metabo_depthcharge.chem.similarities import MCESDistance
+
+    _patch_mces_worker_for_safety(timeout)
 
     meta = json.loads((output_dir / "meta.json").read_text())
     n_blocks = meta["n_blocks"]
@@ -158,21 +223,35 @@ def compute_block(
         n_jobs = os.cpu_count() or 1
     print(
         f"  MCESDistance(threshold={THRESHOLD}, always_stronger_bound=True,"
-        f" n_jobs={n_jobs}, timeout={timeout})"
+        f" n_jobs={n_jobs}, per-pair timeout={timeout}s via SIGALRM)"
     )
 
+    # timeout=None here always — MCESDistance's own --timeout path spawns a
+    # fresh Process per pair in chunks of n_jobs with a barrier between
+    # chunks, which we measured at ~6-7x slower than Pool.imap. The per-pair
+    # deadline is instead enforced inside _safe_mces_worker via SIGALRM,
+    # preserving Pool.imap's dynamic work-stealing dispatch.
     mces = MCESDistance(
         threshold=THRESHOLD,
         always_stronger_bound=True,
         n_jobs=n_jobs,
         solver_options={"msg": 0},
-        timeout=timeout,
+        timeout=None,
         progress=True,
     )
     result = np.asarray(mces(smiles_a, smiles_b), dtype=np.float32)
 
+    # A pair fails to solve (e.g. "unknown ILP status: Not Solved") or hangs
+    # past the per-pair timeout; _safe_mces_worker converts either into -1
+    # directly so one bad pair never loses an entire block. np.isnan check
+    # kept as a defensive fallback in case any NaN ever surfaces regardless.
+    n_failed = int((result == -1.0).sum() + np.isnan(result).sum())
+    if n_failed:
+        print(f"  {n_failed:,} / {n_pair:,} pairs failed to solve — recorded as -1.")
+    result = np.where(np.isnan(result), -1.0, result).astype(np.float32)
+
     np.save(out_npy, result)
-    done_file.write_text(f"block={task_id} n_pairs={n_pair}\n")
+    done_file.write_text(f"block={task_id} n_pairs={n_pair} n_failed={n_failed}\n")
     print(f"Block {task_id}: wrote {out_npy.name}. Done.")
 
 
@@ -256,8 +335,13 @@ def combine(output_dir: Path) -> None:
     size_gb = out_path.stat().st_size / 1e9
     print(f"Wrote {out_path}  shape={result.shape}  size={size_gb:.2f} GB")
 
-    valid = ~np.isnan(mces_values)
+    # -1 marks a pair whose solver failed (see compute_block); NaN marks an
+    # entire block that was never computed. Both are excluded from stats.
+    n_solver_failed = int((mces_values == -1.0).sum())
+    valid = ~np.isnan(mces_values) & (mces_values != -1.0)
     print(f"Valid  : {valid.sum():,} / {len(mces_values):,}")
+    if n_solver_failed:
+        print(f"Failed : {n_solver_failed:,} pairs recorded as -1 (solver could not solve)")
     if valid.any():
         v = mces_values[valid]
         print(f"Mean   : {v.mean():.2f}")
