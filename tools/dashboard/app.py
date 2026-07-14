@@ -143,16 +143,6 @@ EXPERIMENTS = [
         ],
     },
     {
-        "label": "exact MCES [10-20] · MCES only · no metadata",
-        "dir": DATA / "msg_exact_mces_1020_no_meta",
-        "inference_dirs": [],
-        "job": "8011",
-        "status": "running",
-        "data": "exact MCES in [10,20] + max(Gaetan lb, HDF5) elsewhere",
-        "val_sets": "official val + scaffold val",
-        "note": "MSG · exact MCES in [10,20] (threshold=20, always_stronger_bound=True) · clip at 40 · no metadata · early stopping on scaffold val Spearman (patience=15)",
-    },
-    {
         "label": "MSG scaffold-v2 · MCES only",
         "dir": DATA / "scaffold_v2_mces_only",
         "inference_dirs": [DATA / "scaffold_v2_mces_only/val_hexbin_step67k"],
@@ -220,7 +210,7 @@ with st.sidebar:
 st.title("SIMBA · MSG Scaffold Split Experiments")
 
 # ── Background ───────────────────────────────────────────────────────────────
-with st.expander("📜 Background", expanded=False):
+with st.expander("📖 Research log", expanded=False):
     st.markdown("""
 ### The goal
 
@@ -355,8 +345,16 @@ previous runs except:
 - **Early stopping on scaffold val Spearman** — patience 15 validation checks (~15k steps);
   stops when the MCES prediction quality on the held-out scaffold split stops improving.
 
-Results appear in the experiment panel below as they arrive.
+Results appear below as they arrive.
     """)
+    _d8011 = DATA / "msg_exact_mces_1020_no_meta"
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Loss · job 8011**")
+        show(_d8011 / "loss_plot.png")
+    with c2:
+        st.markdown("**Metrics · job 8011**")
+        show(_d8011 / "metrics_curves.png")
 
 st.markdown("---")
 
