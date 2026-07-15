@@ -332,6 +332,27 @@ above 20 the clip-at-40 mechanism handles them.
 
     st.markdown("---")
     st.markdown("""
+### MCES distance distribution across splits
+
+Distribution of ground-truth MCES values across all four splits in
+`preprocessing_msg_exact_mces_1020`. The dominant [20, 25) bin (red) is largely
+composed of pairs where the ILP solver hit `threshold=20` — the exact MCES is ≥ 20
+but stored as 20.0. The orange line on the train panel shows the inverse-frequency
+**sampler weight** each bin receives: rare bins like [0, 2.5) are upweighted ~500×
+relative to the crowded [20, 25) bin so the model sees a balanced distribution of
+similarities during training.
+
+Note: there is **no mechanism to exclude pairs at MCES = 20** — they are included
+in training with the weight of the [15, 20) sampler bin (because `searchsorted` with
+`side='left'` maps the value 20.0 exactly onto edge index 5, i.e. the [15, 20) bin).
+This means the ~42M threshold-capped pairs at exactly 20.0 get the same weight as
+the 17.5M pairs with true MCES in [15, 20), inflating that bin and slightly
+reducing its per-pair sampling probability.
+    """)
+    show(ASSETS / "mces_distribution_splits.png", w=1000)
+
+    st.markdown("---")
+    st.markdown("""
 ### Next training run: exact MCES distances · no metadata · job 8011
 
 With the resolved [10, 20] distances in place, we launched a new training run on the
@@ -355,6 +376,111 @@ Results appear below as they arrive.
     with c2:
         st.markdown("**Metrics · job 8011**")
         show(_d8011 / "metrics_curves.png")
+
+    # Inference hexbin — val_hexbin_step36k created by val_hexbin_exact_mces_1020_no_meta_step36k.slurm.sh
+    _inf_dir = _d8011 / "val_hexbin_step36k"
+    if _inf_dir.exists():
+        st.markdown("**Inference hexbin · step 36k**")
+        _balanced = _inf_dir / "mces_hexbin_balanced.png"
+        if _balanced.exists():
+            show_hexbin(_balanced)
+        else:
+            _panels = sorted(_inf_dir.glob("*_linear.png"))
+            if _panels:
+                _cols = st.columns(len(_panels))
+                for _col, _p in zip(_cols, _panels):
+                    with _col:
+                        show(_p, _p.stem)
+
+    # Retrieval benchmark
+    _ret_tsv = Path(
+        "/home/nkubrakov/simba/results/simba_retrieval_exact_mces_1020_no_meta_step36k.tsv"
+    )
+    if _ret_tsv.exists():
+        st.markdown(
+            "**Retrieval benchmark · SIMBA NN transfer (test set) · best checkpoint**"
+        )
+        _df = pd.read_csv(_ret_tsv, sep="\t")
+        _row = _df.iloc[0]
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("hit@1", f"{_row['hit@1'] * 100:.2f}%")
+        _c2.metric("hit@5", f"{_row['hit@5'] * 100:.2f}%")
+        _c3.metric("hit@20", f"{_row['hit@20'] * 100:.2f}%")
+        st.caption(
+            f"n={int(_row['n'])} · SIMBA embedding NN → Morgan FP transfer → Tanimoto candidate ranking"
+        )
+
+    st.markdown("---")
+    st.markdown("""
+### Job 8041 · own val weights · no early stopping
+
+Job 8011 used the **train** split's inverse-frequency bin weights for the val and
+val_official samplers too. This is wrong: val_official has a very different MCES
+distribution (96 % of its pairs in [20,25) due to the threshold-cap effect), so
+applying train weights to it produces a heavily biased sample that doesn't reflect
+what the model sees at validation. This run fixes that — each split's sampler now
+computes its own inverse-frequency weights from its own pair distribution.
+Early stopping disabled for manual inspection across all 8 epochs.
+    """)
+    _d8041 = DATA / "msg_exact_mces_1020_no_meta_own_val_weights"
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Loss · job 8041**")
+        show(_d8041 / "loss_plot.png")
+    with c2:
+        st.markdown("**Metrics · job 8041**")
+        show(_d8041 / "metrics_curves.png")
+
+    st.markdown("---")
+    st.markdown("""
+### Job 8042 · lr=3.33e-5 · bs=2048 · own val weights · no early stopping
+
+Same as job 8041 but with the learning rate and batch size matched to the
+scaffold-v2 reference (job 7637) where train and val losses tracked together
+early on. Testing whether the faster divergence in job 8041 was caused by
+lr=0.0001 being too high.
+    """)
+    _d8042 = DATA / "msg_exact_mces_1020_no_meta_lr3e5_bs2048"
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Loss · job 8042**")
+        show(_d8042 / "loss_plot.png")
+    with c2:
+        st.markdown("**Metrics · job 8042**")
+        show(_d8042 / "metrics_curves.png")
+
+st.markdown("---")
+
+# ── Oracle retrieval upper bound ──────────────────────────────────────────────
+st.header("Oracle retrieval upper bound")
+st.markdown("""
+This section establishes a **theoretical ceiling** for SIMBA's retrieval performance.
+The oracle answers the question: *if the model had access to the true ground-truth MCES
+distances at inference time, what is the best hit@k it could achieve using the same
+Morgan FP transfer + Tanimoto ranking pipeline?*
+
+**Method.**  For every test molecule (n = 17,556) the oracle:
+1. Computes the true MCES distance to every training molecule, using the best available
+   ground truth: `max(Gaetan lb_matrix, MSG HDF5)`.
+2. Selects the nearest training molecule by that distance (nearest-neighbor transfer).
+3. Uses that training molecule's Morgan fingerprint as the predicted fingerprint.
+4. Ranks the retrieval candidates by Tanimoto similarity to the predicted fingerprint —
+   exactly as SIMBA does at inference.
+
+Any learned model that predicts molecular similarity from spectra is bounded by these
+numbers: even perfect MCES prediction cannot exceed them, because the ceiling is set by
+the retrieval candidates available in the training set and the Tanimoto ranking of
+Morgan FPs.
+""")
+
+_c1, _c2, _c3 = st.columns(3)
+_c1.metric("Oracle hit@1", "23.46 %")
+_c2.metric("Oracle hit@5", "45.48 %")
+_c3.metric("Oracle hit@20", "68.21 %")
+
+st.markdown("""
+*Script: `tools/oracle_retrieval_max_lb_hdf5.py` · Result: `results/oracle_retrieval_max_lb_hdf5.tsv`*
+""")
 
 st.markdown("---")
 

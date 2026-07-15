@@ -383,11 +383,19 @@ def prepare_data(
         bin_idx_val = np.clip(
             np.searchsorted(_mces_edges, mces_raw_val).astype(int), 0, n_bins - 1
         )
-        weights_val = weights_ed[bin_idx_val]
+        bin_counts_val = np.bincount(bin_idx_val, minlength=n_bins)
+        total_val = bin_counts_val.sum()
+        weights_ed_val = np.where(
+            bin_counts_val > 0, total_val / bin_counts_val.astype(float), 0.0
+        )
+        weights_ed_val = weights_ed_val / weights_ed_val.sum()
+        weights_val = weights_ed_val[bin_idx_val]
         weights_val = weights_val / weights_val.sum()
 
         logger.info(
-            f"MCES-based sampling: {n_bins} bins, counts per bin: {bin_counts.tolist()}"
+            f"MCES-based sampling: {n_bins} bins, "
+            f"train counts: {bin_counts.tolist()}, "
+            f"val_scaffold counts: {bin_counts_val.tolist()}"
         )
     else:
         train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
@@ -452,8 +460,17 @@ def prepare_data(
             bin_idx_off = np.clip(
                 np.searchsorted(_mces_edges, mces_raw_off).astype(int), 0, n_bins - 1
             )
-            weights_off = weights_ed[bin_idx_off]
+            bin_counts_off = np.bincount(bin_idx_off, minlength=n_bins)
+            total_off = bin_counts_off.sum()
+            weights_ed_off = np.where(
+                bin_counts_off > 0, total_off / bin_counts_off.astype(float), 0.0
+            )
+            weights_ed_off = weights_ed_off / weights_ed_off.sum()
+            weights_off = weights_ed_off[bin_idx_off]
             weights_off = weights_off / weights_off.sum()
+            logger.info(
+                f"MCES-based sampling val_official counts: {bin_counts_off.tolist()}"
+            )
         else:
             weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
                 molecule_pairs_val_official, weights_ed
