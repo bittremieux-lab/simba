@@ -44,6 +44,49 @@ sys.modules["simba.spectrum"] = simba.core.data.spectrum
 sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
 
+_MCES_DIAG_EDGES = np.array([0, 2.5, 5, 7.5, 10, 15, 20, 25, 30, 35, 40], dtype=float)
+
+
+def _log_mces_dist(name: str, mces_sim: np.ndarray) -> None:
+    """Log raw MCES distribution (0-40) for a split as a pretty histogram."""
+    raw = (1.0 - mces_sim) * 40.0
+    counts, _ = np.histogram(raw, bins=_MCES_DIAG_EDGES)
+    total = counts.sum()
+    lines = [f"MCES distribution — {name} ({total:,} pairs):"]
+    for i, (lo, hi) in enumerate(zip(_MCES_DIAG_EDGES[:-1], _MCES_DIAG_EDGES[1:])):
+        pct = 100 * counts[i] / total if total else 0
+        bar = "#" * int(pct / 2)
+        lines.append(f"  [{lo:5.1f},{hi:5.1f}) {counts[i]:>10,}  {pct:5.1f}%  {bar}")
+    logger.info("\n".join(lines))
+
+
+def _log_sample_pairs(name: str, molecule_pairs, n: int = 10) -> None:
+    """Print n random pairs with SMILES and raw MCES to verify index→molecule mapping."""
+    pd = molecule_pairs.pair_distances
+    ed = molecule_pairs.extra_distances
+    total = len(pd)
+    idxs = np.random.choice(total, size=min(n, total), replace=False)
+    lines = [f"[pair sanity] {name} — {n} random pairs:"]
+    lines.append(f"  {'idx0':>6}  {'idx1':>6}  {'MCES':>6}  smiles_0  |  smiles_1")
+    for i in idxs:
+        idx0, idx1 = int(pd[i, 0]), int(pd[i, 1])
+        mces_raw = round((1.0 - float(ed[i])) * 40.0, 2)
+        s0 = (
+            molecule_pairs.spectra[idx0].smiles
+            if idx0 < len(molecule_pairs.spectra)
+            else "OOB"
+        )
+        s1 = (
+            molecule_pairs.spectra[idx1].smiles
+            if idx1 < len(molecule_pairs.spectra)
+            else "OOB"
+        )
+        lines.append(
+            f"  {idx0:>6}  {idx1:>6}  {mces_raw:>6.2f}  {s0[:60]}  |  {s1[:60]}"
+        )
+    print("\n".join(lines), flush=True)
+
+
 def load_dataset(cfg: DictConfig):
     """Load training dataset from pickle file.
 
@@ -303,6 +346,10 @@ def prepare_data(
 
     logger.info(f"Number of pairs for train: {len(molecule_pairs_train)}")
     logger.info(f"Number of pairs for val: {len(molecule_pairs_val)}")
+    _log_mces_dist("train", molecule_pairs_train.extra_distances)
+    _log_mces_dist("val_scaffold", molecule_pairs_val.extra_distances)
+    _log_sample_pairs("train", molecule_pairs_train)
+    _log_sample_pairs("val_scaffold", molecule_pairs_val)
 
     # Load pairs for the official MSG val fold if provided
     if molecule_pairs_val_official is not None:
@@ -328,6 +375,8 @@ def prepare_data(
         logger.info(
             f"Number of pairs for val_official: {len(molecule_pairs_val_official)}"
         )
+        _log_mces_dist("val_official", molecule_pairs_val_official.extra_distances)
+        _log_sample_pairs("val_official", molecule_pairs_val_official)
 
     # Sanity checks
     sanity_check_ids = SanityChecks.sanity_checks_ids(

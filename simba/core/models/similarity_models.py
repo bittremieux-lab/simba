@@ -434,6 +434,28 @@ class SimilarityModelMultitask(SimilarityModel):
             self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
             self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
 
+        # diagnostic: accumulate raw MCES per epoch to verify batch balance
+        self._diag_train_mces: list = []
+        self._diag_val_mces: dict = {}  # dataloader_idx -> list
+
+    def _diag_log_mces(self, tag: str, values: list) -> None:
+        if not values:
+            return
+        import numpy as np
+
+        raw = np.concatenate(values)
+        edges = np.array([0, 2.5, 5, 7.5, 10, 15, 20, 25, 30, 35, 40], dtype=float)
+        counts, _ = np.histogram(raw, bins=edges)
+        total = counts.sum()
+        lines = [f"[MCES batch diag] {tag} — {total:,} pairs seen this epoch:"]
+        for i, (lo, hi) in enumerate(zip(edges[:-1], edges[1:])):
+            pct = 100 * counts[i] / total if total else 0
+            bar = "#" * int(pct / 2)
+            lines.append(
+                f"  [{lo:5.1f},{hi:5.1f})  {counts[i]:>10,}  {pct:5.1f}%  {bar}"
+            )
+        print("\n".join(lines), flush=True)
+
     def forward(self, batch, return_spectrum_output=False):
         # … compute raw emb0, emb1, apply relu, fingerprints, etc. …
 
@@ -601,6 +623,9 @@ class SimilarityModelMultitask(SimilarityModel):
         mces_mae = (40.0 * (logits2.view(-1) - target2).abs()).mean()
         self.log("val_mces_mae", mces_mae, on_step=False, on_epoch=True, prog_bar=False)
 
+        raw = (1.0 - target2.float().cpu().numpy()) * 40.0
+        self._diag_val_mces.setdefault(dataloader_idx, []).append(raw)
+
         return {
             "loss": loss,
             "ed_pred": torch.argmax(logits1, dim=1).cpu(),
@@ -608,6 +633,12 @@ class SimilarityModelMultitask(SimilarityModel):
             "mces_pred": logits2.view(-1).cpu(),
             "mces_target": target2.cpu(),
         }
+
+    def on_validation_epoch_end(self):
+        tags = {0: "val_scaffold", 1: "val_official"}
+        for idx, values in self._diag_val_mces.items():
+            self._diag_log_mces(tags.get(idx, f"val_{idx}"), values)
+        self._diag_val_mces = {}
 
     def step(
         self, batch, batch_idx, threshold=0.5, weight_loss2=None, return_preds=False
@@ -706,7 +737,13 @@ class SimilarityModelMultitask(SimilarityModel):
         """Training step — returns loss + MCES predictions for train Spearman/MSE tracking."""
         loss, mces_pred, mces_target = self.step(batch, batch_idx, return_preds=True)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        raw = (1.0 - batch["mces"].float().cpu().numpy()) * 40.0
+        self._diag_train_mces.append(raw)
         return {"loss": loss, "mces_pred": mces_pred, "mces_target": mces_target}
+
+    def on_train_epoch_end(self):
+        self._diag_log_mces("train", self._diag_train_mces)
+        self._diag_train_mces = []
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
         logits = self(batch)
