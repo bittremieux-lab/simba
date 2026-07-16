@@ -561,28 +561,13 @@ class ValMetricsCallback(Callback):
         lo = min(float(target_mces.min()), float(pred_mces.min()))
         hi = max(float(target_mces.max()), float(pred_mces.max()))
 
-        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+        fig, ax = plt.subplots(figsize=(6, 5))
 
-        # Left: linear scale
-        ax = axes[0]
-        hb = ax.hexbin(target_mces, pred_mces, gridsize=60, cmap="Blues", mincnt=1)
+        hb = ax.hexbin(target_mces, pred_mces, gridsize=16, cmap="Blues", mincnt=1)
         plt.colorbar(hb, ax=ax, label="count")
         ax.plot([lo, hi], [lo, hi], "r--", lw=1)
         ax.set_xlabel("True MCES")
         ax.set_ylabel("Predicted MCES")
-        ax.set_title("Linear scale")
-        ax.grid(True, alpha=0.2)
-
-        # Right: log scale
-        ax = axes[1]
-        hb = ax.hexbin(
-            target_mces, pred_mces, gridsize=60, cmap="Blues", mincnt=1, bins="log"
-        )
-        plt.colorbar(hb, ax=ax, label="log10(count)")
-        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
-        ax.set_xlabel("True MCES")
-        ax.set_ylabel("Predicted MCES")
-        ax.set_title("Log scale")
         ax.grid(True, alpha=0.2)
 
         fig.suptitle(

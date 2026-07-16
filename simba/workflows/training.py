@@ -441,11 +441,6 @@ def prepare_data(
         weights_val = weights_ed_val[bin_idx_val]
         weights_val = weights_val / weights_val.sum()
 
-        logger.info(
-            f"MCES-based sampling: {n_bins} bins, "
-            f"train counts: {bin_counts.tolist()}, "
-            f"val_scaffold counts: {bin_counts_val.tolist()}"
-        )
     else:
         train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
             molecule_pairs_train,
@@ -487,7 +482,7 @@ def prepare_data(
         weights=weights_tr, num_samples=len(dataset_train), replacement=True
     )
     val_sampler = CustomWeightedRandomSampler(
-        weights=weights_val, num_samples=len(dataset_val), replacement=True
+        weights=weights_val, num_samples=len(dataset_val), replacement=True, seed=0
     )
 
     # Build optional official val dataset + sampler using the same train weights
@@ -517,9 +512,6 @@ def prepare_data(
             weights_ed_off = weights_ed_off / weights_ed_off.sum()
             weights_off = weights_ed_off[bin_idx_off]
             weights_off = weights_off / weights_off.sum()
-            logger.info(
-                f"MCES-based sampling val_official counts: {bin_counts_off.tolist()}"
-            )
         else:
             weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
                 molecule_pairs_val_official, weights_ed
@@ -528,6 +520,7 @@ def prepare_data(
             weights=weights_off,
             num_samples=len(dataset_val_official),
             replacement=True,
+            seed=0,
         )
 
     return (

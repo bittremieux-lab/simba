@@ -444,11 +444,14 @@ class SimilarityModelMultitask(SimilarityModel):
         import numpy as np
 
         raw = np.concatenate(values)
-        edges = np.array([0, 2.5, 5, 7.5, 10, 15, 20, 25, 30, 35, 40], dtype=float)
-        counts, _ = np.histogram(raw, bins=edges)
+        # Use same bin assignment as the weight computation (searchsorted side='left')
+        _search_edges = np.array([2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0])
+        bin_idx = np.clip(np.searchsorted(_search_edges, raw, side="left"), 0, 9)
+        counts = np.bincount(bin_idx, minlength=10)
+        _disp_edges = [0, 2.5, 5, 7.5, 10, 15, 20, 25, 30, 35, 40]
         total = counts.sum()
         lines = [f"[MCES batch diag] {tag} — {total:,} pairs seen this epoch:"]
-        for i, (lo, hi) in enumerate(zip(edges[:-1], edges[1:])):
+        for i, (lo, hi) in enumerate(zip(_disp_edges[:-1], _disp_edges[1:])):
             pct = 100 * counts[i] / total if total else 0
             bar = "#" * int(pct / 2)
             lines.append(

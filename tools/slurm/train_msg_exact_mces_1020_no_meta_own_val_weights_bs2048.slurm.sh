@@ -41,7 +41,7 @@ uv run simba train \
   training.batch_size=2048 \
   training.val_check_interval=1000 \
   training.limit_train_batches=10000 \
-  training.limit_val_batches=500 \
+  training.limit_val_batches=100 \
   training.early_stopping_patience=0 \
   optimizer.lr=0.0001 \
   hardware.accelerator=gpu \
