@@ -47,7 +47,7 @@ def load_model(checkpoint_path: str, device: torch.device) -> SimilarityModelMul
         checkpoint_path,
         map_location=device,
         d_model=256,
-        n_layers=8,
+        n_layers=5,
         n_classes=11,
         use_gumbel=False,
         lr=1e-4,
@@ -116,10 +116,21 @@ def spectra_to_tensors(specs: list, device: torch.device):
     ce_t = torch.zeros(B, dtype=torch.float32)
 
     for i, spec in enumerate(specs):
-        mz = np.asarray(spec.peaks.mz[:MAX_PEAKS], dtype=np.float32)
-        intensity = np.asarray(spec.peaks.intensities[:MAX_PEAKS], dtype=np.float32)
-        if intensity.max() > 0:
-            intensity = intensity / intensity.max()
+        mz_raw = np.asarray(spec.peaks.mz, dtype=np.float32)
+        int_raw = np.asarray(spec.peaks.intensities, dtype=np.float32)
+
+        # Match training filter_intensity(min_intensity=0.01, max_num_peaks=MAX_PEAKS):
+        # keep peaks above 1% of max intensity, then keep top MAX_PEAKS by intensity.
+        if int_raw.max() > 0:
+            keep = int_raw >= 0.01 * int_raw.max()
+            mz_raw, int_raw = mz_raw[keep], int_raw[keep]
+        if len(int_raw) > MAX_PEAKS:
+            top_idx = np.argpartition(int_raw, -MAX_PEAKS)[-MAX_PEAKS:]
+            top_idx = np.sort(top_idx)  # restore m/z ascending order
+            mz_raw, int_raw = mz_raw[top_idx], int_raw[top_idx]
+
+        mz = mz_raw
+        intensity = int_raw
         n = len(mz)
         mz_t[i, :n] = torch.from_numpy(mz)
         int_t[i, :n] = torch.from_numpy(intensity)
@@ -146,6 +157,12 @@ def spectra_to_tensors(specs: list, device: torch.device):
         if ce_val is not None:
             with contextlib.suppress(ValueError, TypeError):
                 ce_t[i] = float(ce_val)
+
+    # Apply the same normalization as multitask_dataset.__getitem__'s
+    # Augmentation.normalize_intensities: sqrt then L2-normalize per spectrum.
+    int_t = torch.sqrt(int_t.clamp(min=0.0))
+    norms = int_t.pow(2).sum(dim=1, keepdim=True).sqrt().clamp(min=1e-8)
+    int_t = int_t / norms
 
     meta = {
         "ionmode": ionmode_t.to(device),
@@ -341,6 +358,21 @@ def run(
     train_smiles, train_spectra = load_spectra(mgf, "train")
     test_smiles, test_spectra = load_spectra(mgf, split)
     print(f"  train: {len(train_smiles)}  {split}: {len(test_smiles)}")
+
+    # Deduplicate training: keep first spectrum per unique canonical SMILES.
+    # This ensures each training molecule is represented exactly once,
+    # so argmax cosine-sim maps unambiguously to a unique molecule.
+    print("Deduplicating training spectra (first per unique molecule) ...")
+    _seen: set[str] = set()
+    _dedup_smi, _dedup_spec = [], []
+    for _smi, _spec in zip(train_smiles, train_spectra):
+        _c = canonicalize(_smi)
+        if _c not in _seen:
+            _seen.add(_c)
+            _dedup_smi.append(_smi)
+            _dedup_spec.append(_spec)
+    train_smiles, train_spectra = _dedup_smi, _dedup_spec
+    print(f"  After dedup: {len(train_smiles)} unique training molecules")
 
     # Build candidate lists aligned to test spectra, canonicalize keys
     print("\nBuilding candidate lists ...")
