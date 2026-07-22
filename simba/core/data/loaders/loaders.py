@@ -458,7 +458,14 @@ class LoadData:
         else:
             adduct = None
 
-        ce = params["ce"] if "ce" in params else None
+        ce_raw = params.get("ce") or params.get("collision_energy")
+        if ce_raw is not None:
+            try:
+                ce = int(float(ce_raw))
+            except (ValueError, TypeError):
+                ce = None
+        else:
+            ce = None
         ia = params["ion_activation"] if "ion_activation" in params else None
         im = params["ionization_method"] if "ionization_method" in params else None
 

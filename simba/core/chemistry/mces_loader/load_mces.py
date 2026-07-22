@@ -25,7 +25,12 @@ class LoadMCES:
         pickle_files = []
         for root, _, files in os.walk(directory_path):
             for file in files:
-                if file.startswith(prefix):
+                remainder = file[len(prefix) :]
+                if (
+                    remainder.startswith("_node")
+                    or remainder.startswith("_chunk")
+                    or remainder == ".npy"
+                ):
                     pickle_files.append(os.path.join(root, file))
         return pickle_files
 

@@ -126,6 +126,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
         (
             molecule_pairs_train,
             molecule_pairs_val,
+            molecule_pairs_val_official,
             molecule_pairs_test,
             uniformed_molecule_pairs_test,
         ) = load_dataset(cfg)
@@ -138,6 +139,8 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             train_sampler,
             dataset_val,
             val_sampler,
+            dataset_val_official,
+            val_official_sampler,
             weights_ed,
             bins_ed,
         ) = prepare_data(
@@ -146,11 +149,23 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             molecule_pairs_test,
             uniformed_molecule_pairs_test,
             cfg,
+            molecule_pairs_val_official=molecule_pairs_val_official,
+        )
+
+        # Determine val loader names for callbacks and checkpoint monitor
+        val_names = (
+            ["scaffold", "official"] if dataset_val_official is not None else ["val"]
         )
 
         # Create dataloaders
         dataloader_train, dataloader_val = create_dataloaders(
-            cfg, dataset_train, train_sampler, dataset_val, val_sampler
+            cfg,
+            dataset_train,
+            train_sampler,
+            dataset_val,
+            val_sampler,
+            dataset_val_official,
+            val_official_sampler,
         )
 
         # Check training dataset size and adjust val_check_interval if needed
@@ -183,7 +198,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             early_stopping_callback,
             progress_log_callback,
             val_metrics_callback,
-        ) = setup_callbacks(cfg)
+        ) = setup_callbacks(cfg, val_names=val_names)
 
         # Get weights for MCES from first 100 batches (same as original script)
         click.echo("Computing MCES weights from training data...")

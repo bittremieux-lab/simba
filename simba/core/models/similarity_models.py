@@ -300,7 +300,6 @@ class CustomizedCrossEntropyLoss(nn.Module):
         # Construct the penalty matrix using absolute differences.
         # With this design, a correct prediction (i == j) gets a penalty of 0,
         # and misclassifications incur a penalty proportional to their distance |i - j|.
-        n_classes = 6
         penalty_matrix = np.array(
             [[abs(i - j) for j in range(n_classes)] for i in range(n_classes)]
         )
@@ -366,6 +365,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_ion_activation=False,
         use_ion_method=False,
         use_ion_mode=False,
+        use_edit_distance=True,
     ):
         """Initialize the CCSPredictor"""
         super().__init__(
@@ -389,7 +389,7 @@ class SimilarityModelMultitask(SimilarityModel):
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.regression_loss = nn.MSELoss()
-        self.customised_ce = CustomizedCrossEntropyLoss()
+        self.customised_ce = CustomizedCrossEntropyLoss(n_classes=n_classes)
 
         self.dropout = nn.Dropout(p=dropout)
         self.use_gumbel = use_gumbel
@@ -427,6 +427,7 @@ class SimilarityModelMultitask(SimilarityModel):
 
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
+        self.use_edit_distance = use_edit_distance
         if USE_LEARNABLE_MULTITASK:
             initial_log_sigma1 = 0.0
             initial_log_sigma2 = -5.3
@@ -584,7 +585,7 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = F.binary_cross_entropy(prob, target_matrix, reduction="mean")
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
@@ -595,6 +596,10 @@ class SimilarityModelMultitask(SimilarityModel):
 
         loss = self.step(batch, batch_idx)
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        # MCES MAE in raw MCES units: target2 = 1 - MCES/40, logits2 = cosine sim pred
+        mces_mae = (40.0 * (logits2.view(-1) - target2).abs()).mean()
+        self.log("val_mces_mae", mces_mae, on_step=False, on_epoch=True, prog_bar=False)
 
         return {
             "loss": loss,
@@ -678,20 +683,24 @@ class SimilarityModelMultitask(SimilarityModel):
         # sigma2 = torch.nn.functional.softplus(self.sigma2_param)
 
         # Combine the losses using learned weights:
+        use_ed = self.use_edit_distance
         if self.USE_LEARNABLE_MULTITASK:
-            loss = (
-                torch.exp(-self.log_sigma1) * loss1
-                + self.log_sigma1
-                + torch.exp(-self.log_sigma2) * loss2
-                + self.log_sigma2
-            )
-
-            # loss = (loss1 / (2 * sigma1 ** 2) +
-            #    loss2 / (2 * sigma2 ** 2) +
-            #    torch.log(sigma1) +
-            #    torch.log(sigma2))
+            if use_ed:
+                loss = (
+                    torch.exp(-self.log_sigma1) * loss1
+                    + self.log_sigma1
+                    + torch.exp(-self.log_sigma2) * loss2
+                    + self.log_sigma2
+                )
+            else:
+                loss = torch.exp(-self.log_sigma2) * loss2 + self.log_sigma2
         else:
-            loss = loss1 + (weight_loss2 * loss2)
+            loss = (loss1 + (weight_loss2 * loss2)) if use_ed else loss2
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        loss = self.step(batch, batch_idx)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def step_mse(self, batch, batch_idx, threshold=0.5):

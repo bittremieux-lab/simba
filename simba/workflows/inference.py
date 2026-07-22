@@ -8,6 +8,7 @@ from pathlib import Path
 import dill
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error
@@ -54,7 +55,7 @@ def load_inference_data(cfg: DictConfig):
     if dataset.get("format_version") == "lightweight":
         logger.info("Detected lightweight format - reconstructing molecule_pairs_test")
 
-        mgf_path = dataset["mgf_path"]
+        mgf_path = getattr(cfg.paths, "mgf_path", None) or dataset["mgf_path"]
 
         # Use preprocessing config values (if available) to ensure consistent filtering
         use_only_protonized = getattr(
@@ -90,21 +91,29 @@ def load_inference_data(cfg: DictConfig):
 
             if missing:
                 logger.warning(
-                    f"[test] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                    f"[test] {len(missing)} spectra missing from loaded set "
+                    f"(e.g., MGF index {missing[0]}). Dropping affected molecules."
                 )
-                # Filter df_smiles to keep only rows with valid spectra
-                valid_rows = []
                 for i in df_smiles.index:
-                    old_idxs = df_smiles.loc[i, "indexes"]
-                    if all(idx in idx_map for idx in old_idxs):
-                        # Remap to new positions
-                        df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
-                        valid_rows.append(i)
-                df_smiles = df_smiles.loc[valid_rows]
+                    df_smiles.at[i, "indexes"] = [
+                        idx_map[idx]
+                        for idx in df_smiles.loc[i, "indexes"]
+                        if idx in idx_map
+                    ]
+                valid_rows = [i for i in df_smiles.index if df_smiles.loc[i, "indexes"]]
+                if len(valid_rows) < len(df_smiles):
+                    logger.warning(
+                        f"[test] Dropping {len(df_smiles) - len(valid_rows)} molecules"
+                        " with no valid spectra"
+                    )
+                    df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+            else:
+                for i in df_smiles.index:
+                    df_smiles.at[i, "indexes"] = [
+                        idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                    ]
 
             # Build unique_spectra from df_smiles indexes
-            # df_smiles['indexes'] contains lists of indexes into original_spectra
-            # We take the first spectrum for each unique SMILES
             unique_spectra = [
                 original_spectra[df_smiles.loc[i, "indexes"][0]]
                 for i in df_smiles.index
@@ -294,6 +303,7 @@ def evaluate_predictions(
     dataloader_ed,
     dataloader_mces,
     output_dir: str,
+    molecule_pairs_mces=None,
 ):
     """Evaluate predictions and generate visualizations.
 
@@ -369,8 +379,40 @@ def evaluate_predictions(
     logger.info(f"MCES min value: {min(mces_true):.4f}")
     logger.info(f"MCES samples per bin: {counts}")
 
-    # Remove threshold values
+    # Save full CSV (all test pairs, before threshold filtering) when mol pairs available
     mces_true_original = mces_true.copy()
+    if molecule_pairs_mces is not None:
+        pair_dist = molecule_pairs_mces.pair_distances
+        df_smi = molecule_pairs_mces.df_smiles
+        smi_col = "canon_smiles" if "canon_smiles" in df_smi.columns else "smiles"
+        idx0 = pair_dist[:, 0].astype(int)
+        idx1 = pair_dist[:, 1].astype(int)
+        max_val = cfg.data.mces20_max_value if not cfg.data.use_tanimoto else 1.0
+        mces_true_raw = (
+            max_val * (1 - mces_true_original)
+            if not cfg.data.use_tanimoto
+            else mces_true_original
+        )
+        mces_pred_raw = (
+            max_val * (1 - pred_mces_mces_flat)
+            if not cfg.data.use_tanimoto
+            else pred_mces_mces_flat
+        )
+        df_csv = pd.DataFrame(
+            {
+                "mol_idx_0": idx0,
+                "mol_idx_1": idx1,
+                "smiles_0": df_smi.iloc[idx0][smi_col].values,
+                "smiles_1": df_smi.iloc[idx1][smi_col].values,
+                "mces_true": mces_true_raw,
+                "mces_pred": mces_pred_raw,
+            }
+        )
+        csv_path = os.path.join(output_dir, "test_predictions.csv")
+        df_csv.to_csv(csv_path, index=False)
+        logger.info(f"Saved {len(df_csv)} test pair predictions to {csv_path}")
+
+    # Remove threshold values
     mces_true = mces_true[mces_true_original != 0.5]
     pred_mces_mces_flat = pred_mces_mces_flat[mces_true_original != 0.5]
 
@@ -445,7 +487,13 @@ def inference(cfg: DictConfig) -> dict:
 
     # Evaluate
     metrics = evaluate_predictions(
-        cfg, pred_ed, pred_mces, dataloader_ed, dataloader_mces, output_dir
+        cfg,
+        pred_ed,
+        pred_mces,
+        dataloader_ed,
+        dataloader_mces,
+        output_dir,
+        molecule_pairs_mces=molecule_pairs_mces,
     )
 
     logger.info(f"Results saved to: {output_dir}")

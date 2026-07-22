@@ -90,17 +90,22 @@ class SimilarityWeightSampler:
 
 
 class CustomWeightedRandomSampler(WeightedRandomSampler):
-    """WeightedRandomSampler except allows for more than 2^24 samples to be sampled"""
+    """WeightedRandomSampler except allows for more than 2^24 samples to be sampled.
 
-    def __init__(self, *args, **kwargs):
+    Pass seed to fix the draw order (useful for reproducible validation sets).
+    """
+
+    def __init__(self, *args, seed: int | None = None, **kwargs):
         super().__init__(*args, **kwargs)
+        self._seed = seed
 
     def __iter__(self):
-        rand_tensor = np.random.choice(
-            range(0, len(self.weights)),
+        rng = np.random.default_rng(self._seed)
+        p = self.weights.numpy() / torch.sum(self.weights).numpy()
+        rand_tensor = rng.choice(
+            len(self.weights),
             size=self.num_samples,
-            p=self.weights.numpy() / torch.sum(self.weights).numpy(),
+            p=p,
             replace=self.replacement,
         )
-        rand_tensor = torch.from_numpy(rand_tensor)
         return iter(rand_tensor.tolist())
