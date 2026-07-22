@@ -163,7 +163,12 @@ def main():
             s.decode() if isinstance(s, bytes) else s
             for s in hf["mces_smiles_order"][:]
         ]
-        hdf5_smiles_to_idx = {s: i for i, s in enumerate(hdf5_smiles_list)}
+        # HDF5 stores non-canonical SMILES; canonicalize keys to match train/test canonical lookups.
+        hdf5_smiles_to_idx = {}
+        for _i, _s in enumerate(hdf5_smiles_list):
+            _mol = Chem.MolFromSmiles(_s)
+            if _mol:
+                hdf5_smiles_to_idx[Chem.MolToSmiles(_mol)] = _i
         hdf5_mces = hf["mces"][:].astype(np.float64)
     print(f"  {len(hdf5_smiles_to_idx):,} molecules, mces shape={hdf5_mces.shape}")
 

@@ -101,10 +101,32 @@ def plot_hexbin(gt_mces, pred_mces, val_name, step, output_dir, scale="linear"):
     print(f"  Saved {fname}")
 
 
+def spectral_cosine_batch(
+    mz0, mz1, int0, int1, bin_size: float = 1.0, n_bins: int = 2000
+) -> np.ndarray:
+    """
+    Peak-based spectral cosine similarity for a batch of spectrum pairs.
+    mz0/mz1/int0/int1: (B, max_peaks) float32 tensors (intensities already sqrt+L2-norm by augmentation).
+    Returns cosine similarity per pair (B,) as float32 numpy array.
+    """
+    B = mz0.shape[0]
+    # Bin peaks by m/z; padding peaks have mz=0 and int=0 so they're harmless
+    bins0 = (mz0 / bin_size).long().clamp(0, n_bins - 1)
+    bins1 = (mz1 / bin_size).long().clamp(0, n_bins - 1)
+    v0 = torch.zeros(B, n_bins, dtype=torch.float32)
+    v1 = torch.zeros(B, n_bins, dtype=torch.float32)
+    v0.scatter_add_(1, bins0, int0)
+    v1.scatter_add_(1, bins1, int1)
+    # Re-L2-normalize after binning (multiple peaks may land in same bin)
+    v0 = torch.nn.functional.normalize(v0, p=2, dim=1)
+    v1 = torch.nn.functional.normalize(v1, p=2, dim=1)
+    return (v0 * v1).sum(dim=1).numpy()
+
+
 def run_inference_on_loader(model, dataloader, device):
-    """Iterate dataloader, return (pred_similarity, gt_similarity) arrays."""
+    """Iterate dataloader, return (pred_similarity, gt_similarity, spectral_cosine) arrays."""
     model.eval()
-    all_pred, all_gt = [], []
+    all_pred, all_gt, all_spec_cos = [], [], []
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="  batches", leave=False):
             batch = {
@@ -116,7 +138,17 @@ def run_inference_on_loader(model, dataloader, device):
             target2 = batch["mces"].float().view(-1)  # MCES similarity GT
             all_pred.append(logits2.cpu().numpy())
             all_gt.append(target2.cpu().numpy())
-    return np.concatenate(all_pred), np.concatenate(all_gt)
+            # Spectral cosine on CPU (batch tensors already on device; move peaks to CPU)
+            mz0 = batch["mz_0"].cpu()
+            mz1 = batch["mz_1"].cpu()
+            int0 = batch["intensity_0"].cpu()
+            int1 = batch["intensity_1"].cpu()
+            all_spec_cos.append(spectral_cosine_batch(mz0, mz1, int0, int1))
+    return (
+        np.concatenate(all_pred),
+        np.concatenate(all_gt),
+        np.concatenate(all_spec_cos),
+    )
 
 
 def main():
@@ -279,7 +311,7 @@ def main():
     # ── Run inference + save ───────────────────────────────────────────────────
     for val_name, loader in loaders.items():
         print(f"\nRunning inference: {val_name} ({len(loader.dataset):,} pairs)...")
-        pred_sim, gt_sim = run_inference_on_loader(model, loader, args.device)
+        pred_sim, gt_sim, spec_cos = run_inference_on_loader(model, loader, args.device)
 
         # Convert similarity → raw MCES
         pred_mces = (1.0 - pred_sim) * 40.0
@@ -292,6 +324,7 @@ def main():
                 "mces_target": gt_sim,
                 "mces_pred_raw": pred_mces,
                 "mces_target_raw": gt_mces,
+                "cosine_spectral": spec_cos,
             }
         )
         csv_path = os.path.join(args.output_dir, f"val_predictions_{val_name}.csv")

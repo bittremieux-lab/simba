@@ -443,7 +443,7 @@ class SimilarityModelMultitask(SimilarityModel):
             return
         import numpy as np
 
-        raw = np.concatenate(values)
+        raw = np.concatenate(values).ravel()
         # Use same bin assignment as the weight computation (searchsorted side='left')
         _search_edges = np.array([2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0])
         bin_idx = np.clip(np.searchsorted(_search_edges, raw, side="left"), 0, 9)

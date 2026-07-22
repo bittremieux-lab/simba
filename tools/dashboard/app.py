@@ -353,101 +353,134 @@ reducing its per-pair sampling probability.
 
     st.markdown("---")
     st.markdown("""
-### Next training run: exact MCES distances · no metadata · job 8011
+### Job 8104 · own val weights · fixed val seed · bs=2048 · lr=0.0001
 
-With the resolved [10, 20] distances in place, we launched a new training run on the
-updated dataset (`preprocessing_msg_exact_mces_1020`). Configuration identical to
-previous runs except:
+Same dataset as job 8041 (`preprocessing_msg_exact_mces_1020`, own per-split inverse-frequency
+weights, no metadata, no early stopping, 8 epochs). Changes vs. job 8041:
 
-- **No metadata** — CE, adduct, and ion mode conditioning all disabled. Previous
-  experiments showed that metadata conditioning consistently hurts retrieval; the
-  reference model without metadata achieved the best hit@1 (4.61 %). This run
-  isolates the effect of better ground-truth distances.
-- **Early stopping on scaffold val Spearman** — patience 15 validation checks (~15k steps);
-  stops when the MCES prediction quality on the held-out scaffold split stops improving.
+- **batch_size=2048** — matches scaffold-v2 reference throughput.
+- **Fixed val sampler seed=0** — val/val_official samplers now draw the same batches every
+  epoch, so Spearman ρ traces are comparable across checkpoints without sampling noise.
+- **limit_val_batches=100** — keeps each validation pass fast.
+- **Histogram binning fix** — MCES display bins now use `searchsorted(side='left')` matching
+  the weight computation; boundary integers (5, 10, …, 35) were previously assigned to the
+  wrong bin in the log output.
 
 Results appear below as they arrive.
     """)
-    _d8011 = DATA / "msg_exact_mces_1020_no_meta"
+    _d8104 = DATA / "msg_exact_mces_1020_no_meta_own_val_weights_bs2048_v2"
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**Loss · job 8011**")
-        show(_d8011 / "loss_plot.png")
+        st.markdown("**Loss · job 8104**")
+        show(_d8104 / "loss_plot.png")
     with c2:
-        st.markdown("**Metrics · job 8011**")
-        show(_d8011 / "metrics_curves.png")
+        st.markdown("**Metrics · job 8104**")
+        show(_d8104 / "metrics_curves.png")
 
-    # Inference hexbin — val_hexbin_step36k created by val_hexbin_exact_mces_1020_no_meta_step36k.slurm.sh
-    _inf_dir = _d8011 / "val_hexbin_step36k"
-    if _inf_dir.exists():
-        st.markdown("**Inference hexbin · step 36k**")
-        _balanced = _inf_dir / "mces_hexbin_balanced.png"
+    _inf8104 = _d8104 / "val_hexbin_step44k"
+    if _inf8104.exists():
+        st.markdown("**Inference hexbin · step 44k**")
+        _balanced = _inf8104 / "mces_hexbin_balanced.png"
         if _balanced.exists():
             show_hexbin(_balanced)
         else:
-            _panels = sorted(_inf_dir.glob("*_linear.png"))
+            _panels = sorted(_inf8104.glob("*_linear.png"))
             if _panels:
                 _cols = st.columns(len(_panels))
                 for _col, _p in zip(_cols, _panels):
                     with _col:
                         show(_p, _p.stem)
 
-    # Retrieval benchmark
-    _ret_tsv = Path(
-        "/home/nkubrakov/simba/results/simba_retrieval_exact_mces_1020_no_meta_step36k.tsv"
+    _ret8104 = Path(
+        "/home/nkubrakov/simba/results/simba_retrieval_bs2048_v2_step44k.tsv"
     )
-    if _ret_tsv.exists():
-        st.markdown(
-            "**Retrieval benchmark · SIMBA NN transfer (test set) · best checkpoint**"
-        )
-        _df = pd.read_csv(_ret_tsv, sep="\t")
+    if _ret8104.exists():
+        st.markdown("**Retrieval benchmark · step 44k (all 194k train spectra)**")
+        _df = pd.read_csv(_ret8104, sep="\t")
         _row = _df.iloc[0]
         _c1, _c2, _c3 = st.columns(3)
-        _c1.metric("hit@1", f"{_row['hit@1'] * 100:.2f}%")
-        _c2.metric("hit@5", f"{_row['hit@5'] * 100:.2f}%")
-        _c3.metric("hit@20", f"{_row['hit@20'] * 100:.2f}%")
+        _c1.metric("SIMBA hit@1", f"{_row['hit@1'] * 100:.2f}%")
+        _c2.metric("SIMBA hit@5", f"{_row['hit@5'] * 100:.2f}%")
+        _c3.metric("SIMBA hit@20", f"{_row['hit@20'] * 100:.2f}%")
         st.caption(
-            f"n={int(_row['n'])} · SIMBA embedding NN → Morgan FP transfer → Tanimoto candidate ranking"
+            f"n={int(_row['n'])} · cosine-NN → Morgan FP transfer → Tanimoto ranking"
         )
 
-    st.markdown("---")
-    st.markdown("""
-### Job 8041 · own val weights · no early stopping
+    _cos_hex = Path(
+        "/home/nkubrakov/simba/results/cosine_hexbins_bs2048_v2_step44k.png"
+    )
+    if _cos_hex.exists():
+        st.markdown(
+            "**Spectral cosine hexbins · step 44k** — GT MCES / pred MCES / calibration error vs spectral cosine (GT-balanced, with marginals)"
+        )
+        show(_cos_hex)
 
-Job 8011 used the **train** split's inverse-frequency bin weights for the val and
-val_official samplers too. This is wrong: val_official has a very different MCES
-distribution (96 % of its pairs in [20,25) due to the threshold-cap effect), so
-applying train weights to it produces a heavily biased sample that doesn't reflect
-what the model sees at validation. This run fixes that — each split's sampler now
-computes its own inverse-frequency weights from its own pair distribution.
-Early stopping disabled for manual inspection across all 8 epochs.
-    """)
-    _d8041 = DATA / "msg_exact_mces_1020_no_meta_own_val_weights"
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Loss · job 8041**")
-        show(_d8041 / "loss_plot.png")
-    with c2:
-        st.markdown("**Metrics · job 8041**")
-        show(_d8041 / "metrics_curves.png")
+    _ret_cos_hex = Path(
+        "/home/nkubrakov/simba/results/retrieval_cosine_hexbins_bs2048_v2_step44k.png"
+    )
+    if _ret_cos_hex.exists():
+        st.markdown(
+            "**Retrieval cosine hexbins · step 44k** — test vs SIMBA-picked training spectrum: GT MCES / pred MCES / error vs spectral cosine"
+        )
+        show(_ret_cos_hex)
 
-    st.markdown("---")
-    st.markdown("""
-### Job 8042 · lr=3.33e-5 · bs=2048 · own val weights · no early stopping
+    _hits_json = Path(
+        "/home/nkubrakov/simba/results/retrieval_diagnostics_bs2048_v2_step44k_dedup_hits.json"
+    )
+    if _hits_json.exists():
+        import json as _json
 
-Same as job 8041 but with the learning rate and batch size matched to the
-scaffold-v2 reference (job 7637) where train and val losses tracked together
-early on. Testing whether the faster divergence in job 8041 was caused by
-lr=0.0001 being too high.
-    """)
-    _d8042 = DATA / "msg_exact_mces_1020_no_meta_lr3e5_bs2048"
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Loss · job 8042**")
-        show(_d8042 / "loss_plot.png")
-    with c2:
-        st.markdown("**Metrics · job 8042**")
-        show(_d8042 / "metrics_curves.png")
+        _hits = _json.loads(_hits_json.read_text())
+        _ora, _sim = _hits.get("oracle", {}), _hits.get("simba_cosine_nn", {})
+        st.markdown("**Oracle vs SIMBA hit rates · step 44k dedup**")
+        _cols = st.columns(6)
+        for _i, _k in enumerate(("hit@1", "hit@5", "hit@20")):
+            _cols[_i].metric(f"Oracle {_k}", f"{_ora.get(_k, 0) * 100:.2f}%")
+            _cols[_i + 3].metric(f"SIMBA {_k} (diag)", f"{_sim.get(_k, 0) * 100:.2f}%")
+        st.caption(
+            "Oracle = best training molecule by GT MCES; SIMBA = cosine-NN pick; Tanimoto candidate ranking"
+        )
+
+    _diag8104 = Path(
+        "/home/nkubrakov/simba/results/retrieval_diagnostics_bs2048_v2_step44k_dedup.png"
+    )
+    _diag8104_mol = Path(
+        "/home/nkubrakov/simba/results/retrieval_diagnostics_bs2048_v2_step44k_dedup_molprops.png"
+    )
+    if not _diag8104.exists():
+        _diag8104 = Path(
+            "/home/nkubrakov/simba/results/retrieval_diagnostics_bs2048_v2_step44k.png"
+        )
+        _diag8104_mol = Path(
+            "/home/nkubrakov/simba/results/retrieval_diagnostics_bs2048_v2_step44k_molprops.png"
+        )
+    if _diag8104.exists():
+        st.markdown(
+            "**Retrieval diagnostics · step 44k** — oracle mol rank, calibration errors, oracle GT MCES"
+        )
+        show(_diag8104)
+    if _diag8104_mol.exists():
+        st.markdown(
+            "**Molecular property analysis · step 44k** — Tanimoto, SIMBA GT vs oracle GT"
+        )
+        show(_diag8104_mol)
+
+    _cal = Path(
+        "/home/nkubrakov/simba/results/calibration_analysis_bs2048_v2_step44k.png"
+    )
+    _cal_pop = Path(
+        "/home/nkubrakov/simba/results/calibration_analysis_bs2048_v2_step44k_pop.png"
+    )
+    if _cal.exists():
+        st.markdown(
+            "**Calibration error anatomy · step 44k** — cosine sim distributions, error vs mass/atoms/Tanimoto"
+        )
+        show(_cal)
+    if _cal_pop.exists():
+        st.markdown(
+            "**Calibration error population analysis** — high-error vs low-error pair properties"
+        )
+        show(_cal_pop)
 
 st.markdown("---")
 
@@ -473,14 +506,40 @@ the retrieval candidates available in the training set and the Tanimoto ranking 
 Morgan FPs.
 """)
 
-_c1, _c2, _c3 = st.columns(3)
-_c1.metric("Oracle hit@1", "23.46 %")
-_c2.metric("Oracle hit@5", "45.48 %")
-_c3.metric("Oracle hit@20", "68.21 %")
+_oracle_tsv = Path("/home/nkubrakov/simba/results/oracle_retrieval_max_lb_hdf5.tsv")
+if _oracle_tsv.exists():
+    _odf = pd.read_csv(_oracle_tsv, sep="\t")
+    _or = _odf.iloc[0]
+    _c1, _c2, _c3 = st.columns(3)
+    _c1.metric("Oracle hit@1", f"{_or['hit@1'] * 100:.2f}%")
+    _c2.metric("Oracle hit@5", f"{_or['hit@5'] * 100:.2f}%")
+    _c3.metric("Oracle hit@20", f"{_or['hit@20'] * 100:.2f}%")
+else:
+    _c1, _c2, _c3 = st.columns(3)
+    _c1.metric("Oracle hit@1", "—")
+    _c2.metric("Oracle hit@5", "—")
+    _c3.metric("Oracle hit@20", "—")
 
 st.markdown("""
 *Script: `tools/oracle_retrieval_max_lb_hdf5.py` · Result: `results/oracle_retrieval_max_lb_hdf5.tsv`*
 """)
+
+_spec_cos_tsv = Path(
+    "/home/nkubrakov/simba/results/oracle_retrieval_spectral_cosine_bs2048_v2_step44k.tsv"
+)
+if _spec_cos_tsv.exists():
+    st.markdown(
+        "**Spectral cosine oracle** — picks training spectrum with highest peak-based cosine sim to test spectrum"
+    )
+    _scdf = pd.read_csv(_spec_cos_tsv, sep="\t")
+    _scr = _scdf.iloc[0]
+    _c1, _c2, _c3 = st.columns(3)
+    _c1.metric("Spectral-cos oracle hit@1", f"{_scr['hit@1'] * 100:.2f}%")
+    _c2.metric("Spectral-cos oracle hit@5", f"{_scr['hit@5'] * 100:.2f}%")
+    _c3.metric("Spectral-cos oracle hit@20", f"{_scr['hit@20'] * 100:.2f}%")
+    st.caption(
+        f"n={int(_scr['n'])} · spectral cosine NN → Morgan FP transfer → Tanimoto ranking"
+    )
 
 st.markdown("---")
 
