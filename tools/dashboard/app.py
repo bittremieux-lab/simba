@@ -392,10 +392,10 @@ Results appear below as they arrive.
                         show(_p, _p.stem)
 
     _ret8104 = Path(
-        "/home/nkubrakov/simba/results/simba_retrieval_bs2048_v2_step44k.tsv"
+        "/home/nkubrakov/simba/results/simba_retrieval_bs2048_v2_step44k_fixed_all.tsv"
     )
     if _ret8104.exists():
-        st.markdown("**Retrieval benchmark · step 44k (all 194k train spectra)**")
+        st.markdown("**Retrieval benchmark · step 44k · fixed preprocessing**")
         _df = pd.read_csv(_ret8104, sep="\t")
         _row = _df.iloc[0]
         _c1, _c2, _c3 = st.columns(3)
@@ -403,7 +403,8 @@ Results appear below as they arrive.
         _c2.metric("SIMBA hit@5", f"{_row['hit@5'] * 100:.2f}%")
         _c3.metric("SIMBA hit@20", f"{_row['hit@20'] * 100:.2f}%")
         st.caption(
-            f"n={int(_row['n'])} · cosine-NN → Morgan FP transfer → Tanimoto ranking"
+            f"n={int(_row['n'])} · cosine-NN → Morgan FP transfer → Tanimoto ranking  "
+            f"(n_layers=5 · top-N intensity · sqrt+L2 norm)"
         )
 
     _cos_hex = Path(
@@ -460,27 +461,40 @@ Results appear below as they arrive.
         )
         show(_diag8104)
     if _diag8104_mol.exists():
-        st.markdown(
-            "**Molecular property analysis · step 44k** — Tanimoto, SIMBA GT vs oracle GT"
-        )
-        show(_diag8104_mol)
+        st.markdown("**Tanimoto analysis · step 44k** — oracle vs SIMBA pick")
+        img_mol = Image.open(_diag8104_mol)
+        w_mol, h_mol = img_mol.size
+        cropped_mol = img_mol.crop((0, 0, w_mol // 3, h_mol))
+        buf_mol = io.BytesIO()
+        cropped_mol.save(buf_mol, format="PNG")
+        st.image(buf_mol.getvalue(), use_container_width=False, width=500)
 
     _cal = Path(
         "/home/nkubrakov/simba/results/calibration_analysis_bs2048_v2_step44k.png"
     )
-    _cal_pop = Path(
-        "/home/nkubrakov/simba/results/calibration_analysis_bs2048_v2_step44k_pop.png"
-    )
     if _cal.exists():
         st.markdown(
-            "**Calibration error anatomy · step 44k** — cosine sim distributions, error vs mass/atoms/Tanimoto"
+            "**Calibration error anatomy · step 44k** — spectral cosine distributions + GT MCES of picks"
         )
         show(_cal)
-    if _cal_pop.exists():
+
+    _tt_hex = Path(
+        "/home/nkubrakov/simba/results/test_test_mces_hexbin_bs2048_v2_step44k_fixed_all.png"
+    )
+    if _tt_hex.exists():
         st.markdown(
-            "**Calibration error population analysis** — high-error vs low-error pair properties"
+            "**Test-test hexbin · step 44k** — GT-balanced (rho=0.574) vs unbalanced (rho=0.692)"
         )
-        show(_cal_pop)
+        show(_tt_hex)
+
+    _ttr_hex = Path(
+        "/home/nkubrakov/simba/results/test_train_mces_hexbin_bs2048_v2_step44k_fixed_all.png"
+    )
+    if _ttr_hex.exists():
+        st.markdown(
+            "**Test-train hexbin · step 44k** — 5-panel cross-split analysis (rho=0.680)"
+        )
+        show(_ttr_hex)
 
 st.markdown("---")
 

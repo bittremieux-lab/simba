@@ -1,0 +1,2 @@
+split	model	n	hit@1	hit@5	hit@20
+test	msg_exact_mces_1020_no_meta_own_val_weights_bs2048_v2	17556	0.04665071770334928	0.12593984962406016	0.265436318067897

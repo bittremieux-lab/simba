@@ -628,11 +628,8 @@ def main():
     plt.savefig(out_path, dpi=140, bbox_inches="tight")
     print(f"Figure 1 saved → {out_path}")
 
-    # ── Figure 2: molecular properties ───────────────────────────────────────
-    fig2, axes2 = plt.subplots(1, 3, figsize=(16, 5))
-
-    # 5. Tanimoto distributions
-    ax = axes2[0]
+    # ── Figure 2: Tanimoto distributions (panel 5) ───────────────────────────
+    fig2, ax = plt.subplots(1, 1, figsize=(6, 5))
     bins5 = np.linspace(0, 1, 41)
     ax.hist(
         oracle_tanis[om],
@@ -652,40 +649,11 @@ def main():
     )
     ax.set_xlabel("Tanimoto similarity (Morgan FP, r=2)")
     ax.set_ylabel("# test spectra")
-    ax.set_title("5 · Tanimoto: oracle vs SIMBA pair", fontweight="bold")
+    ax.set_title("Tanimoto: oracle vs SIMBA pair", fontweight="bold")
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.2)
 
-    # 6. Oracle rank vs Oracle GT MCES scatter (hexbin)
-    ax = axes2[1]
-    valid = om & (oracle_ranks <= 10000)
-    hb = ax.hexbin(
-        oracle_gt_arr[valid],
-        np.log10(oracle_ranks[valid].astype(float) + 1),
-        gridsize=30,
-        cmap="Blues",
-        mincnt=1,
-    )
-    plt.colorbar(hb, ax=ax, label="count")
-    ax.set_xlabel("Oracle GT MCES")
-    ax.set_ylabel("log10(rank of oracle mol + 1)")
-    ax.set_title("6 · Oracle rank vs GT MCES", fontweight="bold")
-    ax.grid(True, alpha=0.2)
-
-    # 7. SIMBA retrieved GT vs Oracle GT MCES
-    ax = axes2[2]
-    hb2 = ax.hexbin(
-        oracle_gt_arr[om], simba_gt_arr[om], gridsize=30, cmap="Oranges", mincnt=1
-    )
-    plt.colorbar(hb2, ax=ax, label="count")
-    ax.plot([0, 40], [0, 40], "r--", lw=1, label="ideal (SIMBA = oracle)")
-    ax.set_xlabel("Oracle GT MCES")
-    ax.set_ylabel("SIMBA retrieved GT MCES")
-    ax.set_title("7 · SIMBA GT vs Oracle GT MCES", fontweight="bold")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.2)
-
-    fig2.suptitle("SIMBA Retrieval — Molecular Property Analysis", fontsize=12)
+    fig2.suptitle("SIMBA Retrieval — Tanimoto Analysis", fontsize=12)
     plt.tight_layout()
     plt.savefig(fig2_path, dpi=140, bbox_inches="tight")
     print(f"Figure 2 saved → {fig2_path}")
