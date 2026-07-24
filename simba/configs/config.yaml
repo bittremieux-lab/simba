@@ -34,6 +34,7 @@ paths:
   preprocessing_dir: null
   preprocessing_dir_train: null
   preprocessing_dir_val_test: null
+  mgf_path: null  # Overrides the MGF path stored in a lightweight mapping.pkl
   checkpoint_dir: null  # Auto-generated if null
   output_dir: null  # Output directory for inference results (defaults to checkpoint_dir)
   mol_spec_mapping_file: "edit_distance_neurips_nist_exhaustive.pkl"

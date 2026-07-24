@@ -1,13 +1,37 @@
 """Workflow utility functions."""
 
 import copy
+import hashlib
+from pathlib import Path
 
+import dill
 from rdkit import Chem
 
 from simba.core.data.loaders import LoadData, LoaderSaver
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
 from simba.utils.logger_setup import logger
+
+
+def _spectra_cache_path(
+    file_name: str,
+    min_peaks: int,
+    n_samples: int,
+    use_gnps_format: bool,
+    use_only_protonized_adducts: bool,
+) -> Path:
+    """Build a cache path next to `file_name`, keyed by loader params + source
+    file identity (mtime + size), so a changed .mgf or different params can't
+    silently hit a stale cache.
+    """
+    src = Path(file_name)
+    stat = src.stat()
+    key = (
+        f"{src.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|"
+        f"{min_peaks}|{n_samples}|{use_gnps_format}|{use_only_protonized_adducts}"
+    )
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return src.with_suffix(f".spectra_cache.{digest}.pkl")
 
 
 def filter_invalid_smiles(spectra: list[SpectrumExt]) -> list[SpectrumExt]:
@@ -67,6 +91,26 @@ def load_spectra(
     List[SpectrumExt]
         A list of preprocessed SpectrumExt objects.
     """
+    cache_path = None
+    if file_name.endswith(".mgf"):
+        cache_path = _spectra_cache_path(
+            file_name,
+            min_peaks,
+            n_samples,
+            use_gnps_format,
+            use_only_protonized_adducts,
+        )
+        if cache_path.exists():
+            logger.info(f"Loading cached parsed spectra from {cache_path}...")
+            try:
+                with open(cache_path, "rb") as f:
+                    return dill.load(f)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load spectra cache ({type(e).__name__}: {e}); "
+                    "re-parsing from source."
+                )
+
     # load
     logger.info(f"Starting to load spectra from {file_name}...")
     if file_name.endswith(".mgf"):
@@ -143,5 +187,13 @@ def load_spectra(
 
     # Filter out spectra with unparseable SMILES to prevent C++ aborts downstream
     filtered_spectra = filter_invalid_smiles(filtered_spectra)
+
+    if cache_path is not None:
+        try:
+            with open(cache_path, "wb") as f:
+                dill.dump(filtered_spectra, f)
+            logger.info(f"Cached parsed spectra to {cache_path}")
+        except Exception as e:
+            logger.warning(f"Failed to write spectra cache ({type(e).__name__}: {e})")
 
     return filtered_spectra

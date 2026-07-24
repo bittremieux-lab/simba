@@ -4,6 +4,7 @@ This module contains the main training logic adapted to work with Hydra configur
 Refactored from legacy/training_scripts/final_training.py to use DictConfig.
 """
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -287,11 +288,43 @@ def prepare_data(
     ed_col = cfg.model.data_columns.edit_distance
     mces_col = cfg.model.data_columns.mces20
 
-    def _apply_remap(arr, mol_pairs):
+    def _remap_cache_path(prefix, remap):
+        """Cache path for a split's remapped array, next to its source npy files.
+
+        Keyed on the source files' identity (mtime+size) and the remap dict's
+        content, so a changed preprocessing dir or a different dropped-molecule
+        set can't silently hit a stale cache.
+        """
+        prepro_dir = Path(cfg.paths.preprocessing_dir_train)
+        src_files = sorted(prepro_dir.glob(f"{prefix}_node*_chunk*.npy"))
+        if not src_files:
+            return None
+        stats = [(f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in src_files]
+        key = (
+            f"{stats}|{sorted(remap.items())}|"
+            f"{cfg.model.tasks.edit_distance.enabled}|{cfg.model.multitasking.enabled}|"
+            f"{cfg.sampling.add_high_similarity_pairs}"
+        )
+        digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+        return prepro_dir / f"{prefix}.remap_cache.{digest}.npy"
+
+    def _apply_remap(arr, mol_pairs, prefix):
         """Filter and remap molecule indices in pair array using mol_pairs._mol_idx_remap."""
         remap = getattr(mol_pairs, "_mol_idx_remap", None)
         if remap is None:
             return arr
+
+        cache_path = _remap_cache_path(prefix, remap)
+        if cache_path is not None and cache_path.exists():
+            logger.info(f"Loading cached remap result from {cache_path}")
+            try:
+                return np.load(cache_path)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load remap cache ({type(e).__name__}: {e}); "
+                    "recomputing."
+                )
+
         col0 = arr[:, 0].astype(int)
         col1 = arr[:, 1].astype(int)
         mask = np.array([c in remap and d in remap for c, d in zip(col0, col1)])
@@ -301,13 +334,25 @@ def prepare_data(
         logger.info(
             f"mol_idx_remap: kept {mask.sum()} / {len(mask)} pairs after filtering"
         )
+
+        if cache_path is not None:
+            try:
+                np.save(cache_path, arr)
+                logger.info(f"Cached remap result to {cache_path}")
+            except Exception as e:
+                logger.warning(f"Failed to write remap cache ({type(e).__name__}: {e})")
+
         return arr
 
     indexes_tani_multitasking_train = _apply_remap(
-        indexes_tani_multitasking_train, molecule_pairs_train
+        indexes_tani_multitasking_train,
+        molecule_pairs_train,
+        "ed_mces_indexes_tani_incremental_train",
     )
     indexes_tani_multitasking_val = _apply_remap(
-        indexes_tani_multitasking_val, molecule_pairs_val
+        indexes_tani_multitasking_val,
+        molecule_pairs_val,
+        "ed_mces_indexes_tani_incremental_val",
     )
 
     molecule_pairs_train.pair_distances = indexes_tani_multitasking_train[
@@ -335,7 +380,9 @@ def prepare_data(
             indexes_tani_multitasking_val_official
         )
         indexes_tani_multitasking_val_official = _apply_remap(
-            indexes_tani_multitasking_val_official, molecule_pairs_val_official
+            indexes_tani_multitasking_val_official,
+            molecule_pairs_val_official,
+            "ed_mces_indexes_tani_incremental_val_official",
         )
         molecule_pairs_val_official.pair_distances = (
             indexes_tani_multitasking_val_official[:, [0, 1, ed_col]]

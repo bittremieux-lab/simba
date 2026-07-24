@@ -699,9 +699,25 @@ class SimilarityModelMultitask(SimilarityModel):
         return loss
 
     def training_step(self, batch, batch_idx):
+        logits_list = self(batch)
+        logits1 = logits_list[0]  # [B, n_classes]
+        logits2 = logits_list[1]  # [B] cosine similarity
+
+        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
+        target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
+
         loss = self.step(batch, batch_idx)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
+
+        result = {
+            "loss": loss,
+            "mces_pred": logits2.view(-1).cpu(),
+            "mces_target": target2.cpu(),
+        }
+        if not self.use_edit_distance_regresion:
+            result["ed_pred"] = torch.argmax(logits1, dim=1).cpu()
+            result["ed_target"] = target1.cpu()
+        return result
 
     def step_mse(self, batch, batch_idx, threshold=0.5):
         logits = self(batch)
