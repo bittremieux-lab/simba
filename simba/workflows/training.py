@@ -344,15 +344,33 @@ def prepare_data(
 
         return arr
 
+    def _filter_exact_mces(arr, name):
+        """Drop pairs whose raw MCES distance equals `cfg.sampling.exclude_mces_value`."""
+        if cfg.sampling.exclude_mces_value is None:
+            return arr
+        raw_mces = (1.0 - arr[:, mces_col]) * cfg.model.tasks.mces.max_value
+        mask = ~np.isclose(raw_mces, cfg.sampling.exclude_mces_value)
+        logger.info(
+            f"[{name}] excluding MCES=={cfg.sampling.exclude_mces_value}: "
+            f"kept {mask.sum()} / {len(mask)} pairs"
+        )
+        return arr[mask]
+
     indexes_tani_multitasking_train = _apply_remap(
         indexes_tani_multitasking_train,
         molecule_pairs_train,
         "ed_mces_indexes_tani_incremental_train",
     )
+    indexes_tani_multitasking_train = _filter_exact_mces(
+        indexes_tani_multitasking_train, "train"
+    )
     indexes_tani_multitasking_val = _apply_remap(
         indexes_tani_multitasking_val,
         molecule_pairs_val,
         "ed_mces_indexes_tani_incremental_val",
+    )
+    indexes_tani_multitasking_val = _filter_exact_mces(
+        indexes_tani_multitasking_val, "val"
     )
 
     molecule_pairs_train.pair_distances = indexes_tani_multitasking_train[
@@ -383,6 +401,9 @@ def prepare_data(
             indexes_tani_multitasking_val_official,
             molecule_pairs_val_official,
             "ed_mces_indexes_tani_incremental_val_official",
+        )
+        indexes_tani_multitasking_val_official = _filter_exact_mces(
+            indexes_tani_multitasking_val_official, "val_official"
         )
         molecule_pairs_val_official.pair_distances = (
             indexes_tani_multitasking_val_official[:, [0, 1, ed_col]]
@@ -798,6 +819,7 @@ def train(
         max_epochs=cfg.training.epochs,
         accelerator=cfg.hardware.accelerator,
         devices=cfg.hardware.devices,
+        strategy=cfg.hardware.strategy,
         precision=cfg.hardware.precision,
         val_check_interval=cfg.training.val_check_interval,
         limit_train_batches=cfg.training.limit_train_batches,

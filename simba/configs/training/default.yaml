@@ -39,6 +39,9 @@ sampling:
   # Add high similarity pairs
   add_high_similarity_pairs: false
 
+  # Drop train/val pairs whose raw MCES distance equals this value exactly (null = keep all)
+  exclude_mces_value: null
+
 # Augmentation
 augmentation:
   enabled: false
@@ -51,3 +54,7 @@ hardware:
   devices: 1
   num_workers: 10
   precision: "32-true"  # Lightning Trainer precision, e.g. "bf16-mixed" on bf16-capable GPUs
+  strategy: "auto"  # Set to "ddp" for multi-process-per-node SLURM launches (srun + devices=1/task);
+                     # "auto" picks SingleDeviceStrategy for devices=1, which does NOT pick up
+                     # SLURM's rank/world-size env vars and makes every process think it's rank 0
+                     # (each one then writes its own checkpoint/-v1/-v2/-v3 duplicates).
