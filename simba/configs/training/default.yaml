@@ -50,3 +50,4 @@ hardware:
   accelerator: gpu
   devices: 1
   num_workers: 10
+  precision: "32-true"  # Lightning Trainer precision, e.g. "bf16-mixed" on bf16-capable GPUs

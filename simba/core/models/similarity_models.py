@@ -711,7 +711,7 @@ class SimilarityModelMultitask(SimilarityModel):
 
         result = {
             "loss": loss,
-            "mces_pred": logits2.view(-1).cpu(),
+            "mces_pred": logits2.detach().view(-1).cpu(),
             "mces_target": target2.cpu(),
         }
         if not self.use_edit_distance_regresion:

@@ -582,6 +582,7 @@ def create_dataloaders(
         sampler=train_sampler,
         num_workers=cfg.hardware.num_workers,
         persistent_workers=cfg.hardware.num_workers > 0,
+        pin_memory=True,
     )
 
     dataloader_val_scaffold = DataLoader(
@@ -591,6 +592,7 @@ def create_dataloaders(
         sampler=val_sampler,
         num_workers=cfg.hardware.num_workers,
         persistent_workers=cfg.hardware.num_workers > 0,
+        pin_memory=True,
         generator=torch.Generator().manual_seed(42) if val_sampler is None else None,
     )
 
@@ -602,6 +604,7 @@ def create_dataloaders(
             sampler=val_official_sampler,
             num_workers=cfg.hardware.num_workers,
             persistent_workers=cfg.hardware.num_workers > 0,
+            pin_memory=True,
             generator=(
                 torch.Generator().manual_seed(43)
                 if val_official_sampler is None
@@ -795,6 +798,7 @@ def train(
         max_epochs=cfg.training.epochs,
         accelerator=cfg.hardware.accelerator,
         devices=cfg.hardware.devices,
+        precision=cfg.hardware.precision,
         val_check_interval=cfg.training.val_check_interval,
         limit_train_batches=cfg.training.limit_train_batches,
         limit_val_batches=cfg.training.limit_val_batches,

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J simba_train_mces_4gpu_bs8192
+#SBATCH -J simba_train_mces_4gpu_bs16384_bf16
 #SBATCH -p zen4_h200
 #SBATCH --account=zen4-h200-2026_053-1
 #SBATCH --time=24:00:00
@@ -11,8 +11,8 @@
 # runs, so they can't reference $OUTPUT_DIR below) — keep the two in sync, and
 # the target dir must already exist before this is submitted (Slurm opens
 # these files prior to the script body's own `mkdir -p "$OUTPUT_DIR"`).
-#SBATCH -o /sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs8192_4gpu/%x_%j.out
-#SBATCH -e /sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs8192_4gpu/%x_%j.err
+#SBATCH -o /sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs16384_4gpu_bf16/%x_%j.out
+#SBATCH -e /sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs16384_4gpu_bf16/%x_%j.err
 
 # MCES-only training: no edit distance head, no metadata, own val weights.
 # 4x H200 via Lightning DDP. Launched with `srun` so Slurm actually starts the
@@ -36,10 +36,20 @@
 # NOTE: an earlier version of this script divided batch_size by 4 as well
 # (512), which under-scaled the per-epoch volume by an extra 4x on top of this
 # — that bug is fixed by restoring batch_size to 2048 here.
-# optimizer.lr scaled via sqrt(global-batch-ratio) = sqrt(8192/2048) = 2x
-# (0.0001 -> 0.0002): Adam has no warmup/scheduler configured here, so full
-# linear LR scaling (4x) risked early instability; sqrt is the standard more
-# conservative rule for Adam-family optimizers without a warmup.
+# optimizer.lr scaled via sqrt(global-batch-ratio): base 0.0001 at batch=2048,
+# global batch is now 16384 -> sqrt(16384/2048)=2.83x -> 0.00028. Adam has no
+# warmup/scheduler configured here, so full linear scaling risked early
+# instability; sqrt is the standard more conservative rule for Adam-family
+# optimizers without a warmup.
+# hardware.precision=bf16-mixed: the previous bs=2048/bf32 run only used
+# ~29% of each H200's 143GB (~41GB peak) and averaged ~50-57% compute
+# utilization (see gpu_util_*.csv from that run) — both compute and memory
+# headroom were being left on the table. bf16 roughly halves activation
+# memory and raises tensor-core throughput on H200; batch_size is doubled
+# (2048 -> 4096/rank) to use the freed-up memory, and limit_train_batches/
+# limit_val_batches are halved (2500/25 -> 1250/13) to keep the same
+# per-epoch data volume as before rather than silently training on 2x more
+# data per epoch.
 
 set -uo pipefail
 
@@ -49,7 +59,7 @@ module load uv
 # script on the compute node, so that path doesn't point at the repo.
 SIMBA_DIR=/sofia/projects/2026_053/simba_project/simba
 
-echo "===== SIMBA Training: exact MCES [10-20] · no metadata · own val weights · 4x H200 DDP · global bs=8192 · lr=0.0002 ====="
+echo "===== SIMBA Training: exact MCES [10-20] · no metadata · own val weights · 4x H200 DDP · global bs=16384 · bf16-mixed · lr=0.00028 ====="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node:   $SLURM_NODELIST"
 echo "Date:   $(date)"
@@ -59,7 +69,7 @@ nvidia-smi
 
 PREPRO_DIR=/sofia/projects/2026_053/simba_project/data/massspecgym/preprocessing_msg_exact_mces_1020
 MGF=/sofia/projects/2026_053/simba_project/data/massspecgym/data/auxiliary/MassSpecGym.mgf
-OUTPUT_DIR=/sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs8192_4gpu
+OUTPUT_DIR=/sofia/projects/2026_053/simba_project/experiments/training/msg_exact_mces_1020_no_meta_own_val_weights_bs16384_4gpu_bf16
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -82,15 +92,16 @@ srun bash -c 'export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID; exec "$@"' bash \
   paths.checkpoint_dir="${OUTPUT_DIR}" \
   paths.mgf_path="${MGF}" \
   training.epochs=8 \
-  training.batch_size=2048 \
+  training.batch_size=4096 \
   training.val_check_interval=1000 \
-  training.limit_train_batches=2500 \
-  training.limit_val_batches=25 \
+  training.limit_train_batches=1250 \
+  training.limit_val_batches=13 \
   training.early_stopping_patience=0 \
-  optimizer.lr=0.0002 \
+  optimizer.lr=0.00028 \
   hardware.accelerator=gpu \
   hardware.devices=1 \
   hardware.num_workers=14 \
+  hardware.precision=bf16-mixed \
   logging.enable_progress_bar=false \
   logging.log_every_n_steps=10 \
   model.features.use_adduct=false \
