@@ -23,9 +23,12 @@
 #
 # See tools/slurm/train_msg_official.slurm.sh for the full rationale behind
 # the DDP/srun launch pattern, bf16 precision, and batch size — unchanged
-# here. hardware.strategy=ddp is likewise required (see that script's
-# comments): without it every one of the 4 srun tasks independently believes
-# it's rank 0, and each writes its own checkpoint (-v1/-v2/-v3 duplicates).
+# here. hardware.devices=4 + hardware.strategy=ddp + no CUDA_VISIBLE_DEVICES
+# scoping is likewise required (see that script's comments for the two ways
+# this breaks otherwise): devices=1/strategy=auto silently writes one
+# checkpoint per rank (-v1/-v2/-v3), and devices=1/strategy=ddp combined with
+# per-task CUDA_VISIBLE_DEVICES scoping crashes outright once Lightning's
+# SLURM validation and per-rank device indexing kick in.
 
 set -uo pipefail
 
@@ -60,8 +63,7 @@ nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory
 GPU_MONITOR_PID=$!
 trap 'kill "${GPU_MONITOR_PID}" 2>/dev/null' EXIT
 
-srun bash -c 'export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID; exec "$@"' bash \
-  uv run simba train \
+srun uv run simba train \
   paths.preprocessing_dir="${PREPRO_DIR}" \
   paths.preprocessing_dir_train="${PREPRO_DIR}" \
   paths.preprocessing_pickle_file=mapping.pkl \
@@ -76,7 +78,7 @@ srun bash -c 'export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID; exec "$@"' bash \
   optimizer.lr=0.00028 \
   sampling.exclude_mces_value=20 \
   hardware.accelerator=gpu \
-  hardware.devices=1 \
+  hardware.devices=4 \
   hardware.num_workers=14 \
   hardware.precision=bf16-mixed \
   hardware.strategy=ddp \

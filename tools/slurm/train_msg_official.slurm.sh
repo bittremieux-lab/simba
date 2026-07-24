@@ -18,23 +18,25 @@
 # 4x H200 via Lightning DDP. Launched with `srun` so Slurm actually starts the
 # 4 tasks --ntasks-per-node=4 reserves — without srun, only 1 task ever runs
 # and Lightning's SLURMEnvironment hangs forever waiting for 3 peers that were
-# never launched. Each of the 4 srun tasks is its own rank managing exactly
-# ONE GPU (hardware.devices=1 below); it does not self-spawn sub-processes in
-# this mode.
-# hardware.strategy=ddp is REQUIRED here: with devices=1 and strategy left as
-# Lightning's default "auto", Lightning picks SingleDeviceStrategy (since it
-# only looks at devices-per-process, not the surrounding Slurm allocation),
-# which never attaches a cluster_environment — so every one of the 4 ranks
-# independently believes it's rank 0 of a world size of 1, and each writes
-# its own checkpoint (hence the `-v1`/`-v2`/`-v3` filename collisions seen
-# previously). Explicitly requesting "ddp" makes Lightning auto-detect
-# SLURMEnvironment (via SLURM_NTASKS/SLURM_PROCID, set by srun) and derive
-# the correct global rank/world size, so only rank 0 saves checkpoints.
-# This cluster does NOT auto-scope CUDA_VISIBLE_DEVICES per task (all 4 tasks
-# see all 4 GPUs identically), and Lightning doesn't correct for that on its
-# own — every rank defaulted to physical GPU 0, leaving 1-3 idle. Fixed below
-# by explicitly setting CUDA_VISIBLE_DEVICES=$SLURM_LOCALID per task so each
-# rank claims exactly one distinct GPU.
+# never launched.
+# hardware.devices=4 + hardware.strategy=ddp, and NO CUDA_VISIBLE_DEVICES
+# scoping (every task sees all 4 physical GPUs) — this exact combination is
+# required, and each piece alone breaks differently:
+#  - devices=1 + strategy="auto" (Lightning's default): picks
+#    SingleDeviceStrategy, which never attaches a cluster_environment, so
+#    every one of the 4 ranks independently believes it's rank 0 of world
+#    size 1 and writes its own checkpoint (-v1/-v2/-v3 filename collisions).
+#  - devices=1 + strategy=ddp + CUDA_VISIBLE_DEVICES=$SLURM_LOCALID per task
+#    (an earlier attempt at fixing the above): Lightning's SLURMEnvironment
+#    requires devices == --ntasks-per-node once strategy=ddp is set (fails
+#    outright with "HINT: Set devices=4"), because DDPStrategy picks each
+#    process's device as parallel_devices[local_rank] — with devices=4 that
+#    then tries to index cuda:1/2/3 inside a process that (via the per-task
+#    CUDA_VISIBLE_DEVICES scoping) can only see cuda:0, and crashes.
+#  - devices=4 + strategy=ddp + no CUDA_VISIBLE_DEVICES scoping (this
+#    config): each process sees all 4 GPUs, so parallel_devices[local_rank]
+#    (local_rank = SLURM_LOCALID, 0-3) resolves to a distinct real GPU per
+#    rank — this is Lightning's documented SLURM launch pattern.
 # batch_size is per-process under DDP. Kept at the same 2048 that was validated
 # on a single GPU (plenty of memory headroom: ~11GB/143GB used at batch=512),
 # so the effective global batch is now 8192 (4x the single-GPU baseline) rather
@@ -93,8 +95,7 @@ nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory
 GPU_MONITOR_PID=$!
 trap 'kill "${GPU_MONITOR_PID}" 2>/dev/null' EXIT
 
-srun bash -c 'export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID; exec "$@"' bash \
-  uv run simba train \
+srun uv run simba train \
   paths.preprocessing_dir="${PREPRO_DIR}" \
   paths.preprocessing_dir_train="${PREPRO_DIR}" \
   paths.preprocessing_pickle_file=mapping.pkl \
@@ -108,7 +109,7 @@ srun bash -c 'export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID; exec "$@"' bash \
   training.early_stopping_patience=0 \
   optimizer.lr=0.00028 \
   hardware.accelerator=gpu \
-  hardware.devices=1 \
+  hardware.devices=4 \
   hardware.num_workers=14 \
   hardware.precision=bf16-mixed \
   hardware.strategy=ddp \
