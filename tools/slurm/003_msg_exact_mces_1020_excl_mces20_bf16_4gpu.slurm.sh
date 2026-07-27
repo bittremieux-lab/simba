@@ -23,12 +23,14 @@
 #
 # See tools/slurm/train_msg_official.slurm.sh for the full rationale behind
 # the DDP/srun launch pattern, bf16 precision, and batch size — unchanged
-# here. hardware.devices=4 + hardware.strategy=ddp + no CUDA_VISIBLE_DEVICES
-# scoping is likewise required (see that script's comments for the two ways
-# this breaks otherwise): devices=1/strategy=auto silently writes one
-# checkpoint per rank (-v1/-v2/-v3), and devices=1/strategy=ddp combined with
-# per-task CUDA_VISIBLE_DEVICES scoping crashes outright once Lightning's
-# SLURM validation and per-rank device indexing kick in.
+# here. hardware.devices=4 + hardware.strategy=ddp_find_unused_parameters_true
+# + no CUDA_VISIBLE_DEVICES scoping is likewise required (see that script's
+# comments for the three ways this breaks otherwise): devices=1/strategy=auto
+# silently writes one checkpoint per rank (-v1/-v2/-v3); devices=1/strategy=ddp
+# combined with per-task CUDA_VISIBLE_DEVICES scoping crashes outright once
+# Lightning's SLURM validation and per-rank device indexing kick in; and
+# plain strategy=ddp (without find_unused_parameters) crashes because this
+# MCES-only config never backprops through the edit-distance head.
 
 set -uo pipefail
 
@@ -81,7 +83,7 @@ srun uv run simba train \
   hardware.devices=4 \
   hardware.num_workers=14 \
   hardware.precision=bf16-mixed \
-  hardware.strategy=ddp \
+  hardware.strategy=ddp_find_unused_parameters_true \
   logging.enable_progress_bar=false \
   logging.log_every_n_steps=10 \
   model.features.use_adduct=false \

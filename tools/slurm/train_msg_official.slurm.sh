@@ -37,6 +37,17 @@
 #    config): each process sees all 4 GPUs, so parallel_devices[local_rank]
 #    (local_rank = SLURM_LOCALID, 0-3) resolves to a distinct real GPU per
 #    rank — this is Lightning's documented SLURM launch pattern.
+# strategy=ddp_find_unused_parameters_true (not plain "ddp"): this config
+# trains MCES-only (model.tasks.edit_distance.enabled=false below) — the
+# edit-distance head's layers still run in the forward pass, but their
+# output never enters the backward graph of the loss actually returned by
+# training_step, so DDP's default unused-parameter check aborts with
+# "parameters that were not used in producing the loss". The
+# find_unused_parameters variant tells DDP to skip those specific params
+# in its gradient all-reduce instead of erroring; every parameter that IS
+# used (everything feeding the MCES loss) is still fully synchronized
+# across all 4 GPUs every step — this does not weaken DDP, it only adds a
+# small per-step graph-traversal overhead to identify the skipped params.
 # batch_size is per-process under DDP. Kept at the same 2048 that was validated
 # on a single GPU (plenty of memory headroom: ~11GB/143GB used at batch=512),
 # so the effective global batch is now 8192 (4x the single-GPU baseline) rather
@@ -112,7 +123,7 @@ srun uv run simba train \
   hardware.devices=4 \
   hardware.num_workers=14 \
   hardware.precision=bf16-mixed \
-  hardware.strategy=ddp \
+  hardware.strategy=ddp_find_unused_parameters_true \
   logging.enable_progress_bar=false \
   logging.log_every_n_steps=10 \
   model.features.use_adduct=false \
