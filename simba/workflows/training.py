@@ -356,6 +356,28 @@ def prepare_data(
         )
         return arr[mask]
 
+    def _add_identity_pairs(arr, mol_pairs, name):
+        """Append one molecule-paired-with-itself row per molecule in this split.
+
+        Uses `mol_pairs.df_smiles.index` as the valid molecule-index universe for
+        this split (the exact space `pair_distances`/`extra_distances` already use
+        post-remap, and the same space the dataset later looks up spectra in) —
+        rather than guessing from e.g. max(col0), which can silently miss or
+        over-generate indices. ED/MCES are stored as normalized similarities
+        (matching normalize_ed/normalize_mces20's `1 - dist/max_value`), so a
+        raw distance of 0 (identical molecule) encodes as 1.0 in both columns.
+        """
+        if not cfg.sampling.add_identity_pairs:
+            return arr
+        idx = np.asarray(mol_pairs.df_smiles.index, dtype=arr.dtype)
+        identity_rows = np.zeros((len(idx), arr.shape[1]), dtype=arr.dtype)
+        identity_rows[:, 0] = idx
+        identity_rows[:, 1] = idx
+        identity_rows[:, ed_col] = 1.0
+        identity_rows[:, mces_col] = 1.0
+        logger.info(f"[{name}] added {len(idx)} identity pairs (MCES=0, ED=0)")
+        return np.concatenate([arr, identity_rows], axis=0)
+
     indexes_tani_multitasking_train = _apply_remap(
         indexes_tani_multitasking_train,
         molecule_pairs_train,
@@ -364,6 +386,9 @@ def prepare_data(
     indexes_tani_multitasking_train = _filter_exact_mces(
         indexes_tani_multitasking_train, "train"
     )
+    indexes_tani_multitasking_train = _add_identity_pairs(
+        indexes_tani_multitasking_train, molecule_pairs_train, "train"
+    )
     indexes_tani_multitasking_val = _apply_remap(
         indexes_tani_multitasking_val,
         molecule_pairs_val,
@@ -371,6 +396,9 @@ def prepare_data(
     )
     indexes_tani_multitasking_val = _filter_exact_mces(
         indexes_tani_multitasking_val, "val"
+    )
+    indexes_tani_multitasking_val = _add_identity_pairs(
+        indexes_tani_multitasking_val, molecule_pairs_val, "val"
     )
 
     molecule_pairs_train.pair_distances = indexes_tani_multitasking_train[
@@ -404,6 +432,11 @@ def prepare_data(
         )
         indexes_tani_multitasking_val_official = _filter_exact_mces(
             indexes_tani_multitasking_val_official, "val_official"
+        )
+        indexes_tani_multitasking_val_official = _add_identity_pairs(
+            indexes_tani_multitasking_val_official,
+            molecule_pairs_val_official,
+            "val_official",
         )
         molecule_pairs_val_official.pair_distances = (
             indexes_tani_multitasking_val_official[:, [0, 1, ed_col]]

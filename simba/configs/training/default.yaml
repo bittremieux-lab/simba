@@ -42,6 +42,9 @@ sampling:
   # Drop train/val pairs whose raw MCES distance equals this value exactly (null = keep all)
   exclude_mces_value: null
 
+  # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
+  add_identity_pairs: false
+
 # Augmentation
 augmentation:
   enabled: false
