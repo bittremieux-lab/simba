@@ -1,9 +1,6 @@
 """
 SIMBA retrieval baseline: SIMBA-embedding NN transfer + Tanimoto candidate ranking.
 
-Adapts spectrawl/spectral_nn.py — replaces modified cosine NN with SIMBA cosine
-similarity on learned embeddings, keeps everything else identical.
-
 For each test spectrum:
   1. Find nearest train spectrum by cosine similarity of SIMBA embeddings.
   2. Transfer that train molecule's Morgan fingerprint as the predicted FP.
@@ -18,7 +15,7 @@ Usage:
 """
 
 import argparse
-import contextlib
+import copy
 import json
 from pathlib import Path
 
@@ -32,10 +29,12 @@ from tqdm.auto import tqdm
 
 from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
 from simba.core.data.encoding import encode_adduct_mass
+from simba.core.data.preprocessor import Preprocessor
+from simba.core.data.spectrum import SpectrumExt
 from simba.core.models.similarity_models import SimilarityModelMultitask
 
 
-MAX_PEAKS = 100  # must match SIMBA training preprocessor
+MAX_PEAKS = 100  # must match model.transformer.context_length
 N_ADDUCTS = len(ADDUCT_TO_MASS)
 
 
@@ -62,8 +61,52 @@ def load_model(checkpoint_path: str, device: torch.device) -> SimilarityModelMul
 # ── Spectrum loading ───────────────────────────────────────────────────────────
 
 
+def _to_spectrum_ext(spec: matchms.Spectrum, fold: str) -> SpectrumExt:
+    """Wrap a matchms Spectrum as a SpectrumExt so it can go through Preprocessor."""
+    charge = spec.get("charge")
+    charge = int(charge) if charge else 1
+
+    ce_val = spec.get("ce") or spec.get("collision_energy")
+    ce = None
+    if ce_val is not None:
+        try:
+            ce = int(float(ce_val))
+        except (ValueError, TypeError):
+            ce = None
+
+    ionmode = spec.get("ionmode")
+    ionmode = ionmode.lower() if ionmode else "none"
+
+    return SpectrumExt(
+        identifier=str(spec.get("scans") or ""),
+        precursor_mz=float(spec.get("precursor_mz") or 0.0),
+        precursor_charge=charge,
+        mz=np.asarray(spec.peaks.mz, dtype=np.float64),
+        intensity=np.asarray(spec.peaks.intensities, dtype=np.float64),
+        retention_time=np.nan,
+        params={},
+        library=None,
+        inchi=None,
+        smiles=spec.get("smiles"),
+        ionmode=ionmode,
+        adduct=spec.get("adduct"),
+        ce=ce,
+        ion_activation=None,
+        ionization_method=None,
+        bms=None,
+        superclass=None,
+        classe=None,
+        subclass=None,
+        fold=fold,
+    )
+
+
 def load_spectra(mgf_path: str, fold: str):
-    """Return (smiles, spectra) for the given fold from the MGF file."""
+    """Return (smiles, spectra) for the given fold from the MGF file.
+
+    Peaks are still raw at this point — preprocessing happens in
+    spectra_to_tensors below.
+    """
     smiles_list, spectra = [], []
     for spec in tqdm(
         matchms.importing.load_from_mgf(mgf_path), desc=f"Loading {fold}", unit="spec"
@@ -76,7 +119,7 @@ def load_spectra(mgf_path: str, fold: str):
         if spec.peaks is None or len(spec.peaks.mz) < 1:
             continue
         smiles_list.append(smi)
-        spectra.append(spec)
+        spectra.append(_to_spectrum_ext(spec, fold))
     return smiles_list, spectra
 
 
@@ -88,24 +131,18 @@ def canonicalize(smi: str) -> str:
 # ── Embedding ─────────────────────────────────────────────────────────────────
 
 
-def _encode_ionmode(ionmode_str: str | None) -> float:
-    # Replicates SIMBA's multitask_dataset_builder.py logic exactly:
-    # loader sets ionmode="none" when field absent in MGF (MassSpecGym has no ionmode field)
-    # → "none" is not None and not "None" → else branch → -1.0
-    # → "positive" → 1.0, anything else → -1.0
-    if ionmode_str is None:
-        return -1.0  # matches SIMBA's "none" → not "positive" → -1.0
-    return 1.0 if ionmode_str.lower() == "positive" else -1.0
+def _encode_ionmode(ionmode_val: str | None) -> float:
+    # MassSpecGym has no ionmode field, so this is always the literal string
+    # "none" rather than None — which doesn't match "positive" either, so it
+    # ends up -1.0 whenever ion mode isn't explicitly positive.
+    if ionmode_val is None or ionmode_val == "None":
+        return 0.0
+    return 1.0 if ionmode_val == "positive" else -1.0
 
 
-def spectra_to_tensors(specs: list, device: torch.device):
-    """Pad a list of matchms Spectra to (B, MAX_PEAKS) tensors plus metadata.
-
-    Metadata encoding matches SIMBA's multitask_dataset_builder.py exactly:
-    - ionmode: -1.0 default (MassSpecGym MGF has no ionmode field → SIMBA loader gives "none")
-    - adduct: one-hot via encode_adduct_mass from adduct string
-    - ce: 0 default (MGF has "collision_energy" not "ce"; SIMBA loader looks for "ce" → None → 0)
-    """
+def spectra_to_tensors(specs: list[SpectrumExt], device: torch.device):
+    """Pad a list of SpectrumExt to (B, MAX_PEAKS) tensors plus metadata."""
+    pp = Preprocessor()
     B = len(specs)
     mz_t = torch.zeros(B, MAX_PEAKS, dtype=torch.float32)
     int_t = torch.zeros(B, MAX_PEAKS, dtype=torch.float32)
@@ -116,50 +153,34 @@ def spectra_to_tensors(specs: list, device: torch.device):
     ce_t = torch.zeros(B, dtype=torch.float32)
 
     for i, spec in enumerate(specs):
-        mz_raw = np.asarray(spec.peaks.mz, dtype=np.float32)
-        int_raw = np.asarray(spec.peaks.intensities, dtype=np.float32)
-
-        # Match training filter_intensity(min_intensity=0.01, max_num_peaks=MAX_PEAKS):
-        # keep peaks above 1% of max intensity, then keep top MAX_PEAKS by intensity.
-        if int_raw.max() > 0:
-            keep = int_raw >= 0.01 * int_raw.max()
-            mz_raw, int_raw = mz_raw[keep], int_raw[keep]
-        if len(int_raw) > MAX_PEAKS:
-            top_idx = np.argpartition(int_raw, -MAX_PEAKS)[-MAX_PEAKS:]
-            top_idx = np.sort(top_idx)  # restore m/z ascending order
-            mz_raw, int_raw = mz_raw[top_idx], int_raw[top_idx]
-
-        mz = mz_raw
-        intensity = int_raw
+        processed = pp.preprocess_spectrum(
+            copy.copy(spec),
+            fragment_tol_mass=10,
+            fragment_tol_mode="ppm",
+            min_intensity=0.01,
+            max_num_peaks=MAX_PEAKS,
+            scale_intensity=None,
+        )
+        mz = np.asarray(processed.mz, dtype=np.float32)
+        intensity = np.asarray(processed.intensity, dtype=np.float32)
         n = len(mz)
         mz_t[i, :n] = torch.from_numpy(mz)
         int_t[i, :n] = torch.from_numpy(intensity)
-        prec_t[i] = float(spec.get("precursor_mz") or 0.0)
+        prec_t[i] = float(spec.precursor_mz or 0.0)
 
-        charge = spec.get("charge")
-        if charge is not None:
-            with contextlib.suppress(ValueError, TypeError):
-                charge_t[i] = float(charge)
+        if spec.precursor_charge:
+            charge_t[i] = float(spec.precursor_charge)
 
-        # ionmode: matchms returns None when field absent → maps to -1.0 (same as SIMBA "none")
-        ionmode_t[i] = _encode_ionmode(spec.get("ionmode"))
+        ionmode_t[i] = _encode_ionmode(spec.ionmode)
 
-        # adduct: one-hot over ADDUCT_TO_MASS; zeros if absent/unrecognized
-        adduct_str = spec.get("adduct")
-        if adduct_str:
+        if spec.adduct:
             adduct_t[i] = torch.tensor(
-                encode_adduct_mass(adduct_str), dtype=torch.float32
+                encode_adduct_mass(spec.adduct), dtype=torch.float32
             )
 
-        # SIMBA training loader reads params.get("ce") or params.get("collision_energy").
-        # MassSpecGym MGF uses "collision_energy", not "ce".
-        ce_val = spec.get("ce") or spec.get("collision_energy")
-        if ce_val is not None:
-            with contextlib.suppress(ValueError, TypeError):
-                ce_t[i] = float(ce_val)
+        ce_t[i] = 0.0 if spec.ce is None else float(spec.ce)
 
-    # Apply the same normalization as multitask_dataset.__getitem__'s
-    # Augmentation.normalize_intensities: sqrt then L2-normalize per spectrum.
+    # sqrt-compress then L2-normalize each spectrum's intensities.
     int_t = torch.sqrt(int_t.clamp(min=0.0))
     norms = int_t.pow(2).sum(dim=1, keepdim=True).sqrt().clamp(min=1e-8)
     int_t = int_t / norms
@@ -189,7 +210,9 @@ def embed_spectra(
     """
     Encode spectra through SIMBA encoder + MCES projection head.
     Passes metadata (ionmode/adduct/ce) when the model was trained with them.
-    Returns L2-normalized (N, d_model) embeddings.
+    Returns L2-normalized (N, d_model) embeddings — normalized so that
+    nearest_neighbor_transfer's all-pairs matmul (`chunk @ train_embs.T`)
+    gives cosine similarity directly.
 
     force_ce_zero: zero out CE for all spectra before passing to the encoder.
     Useful for diagnosing CE-induced embedding collapse: with CE conditioning,

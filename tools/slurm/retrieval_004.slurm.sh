@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J simba_retrieval_004
+#SBATCH -J simba_retrieval_004_fixed
 #SBATCH -p zen4_h200
 #SBATCH --account=zen4-h200-2026_053-1
 #SBATCH --time=02:00:00
@@ -8,15 +8,13 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 # -o/-e must be a literal path (target dir must already exist before submission).
-#SBATCH -o /sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu/%x_%j.out
-#SBATCH -e /sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu/%x_%j.err
+#SBATCH -o /sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu/retrieval_fixed/%x_%j.out
+#SBATCH -e /sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu/retrieval_fixed/%x_%j.err
 
-# Retrieval eval for experiment 004, run as-is via tools/simba_retrieval.py
-# (SIMBA-embedding NN transfer + Tanimoto candidate ranking) — known discrepancies
-# vs the training pipeline (precursor peak not removed, no protonated-adduct
-# filter) are NOT fixed here, run intentionally as-is per request.
-# Results land in the same folder as the training run (checkpoints/plots), not
-# a separate retrieval directory.
+# Retrieval eval for experiment 004 via tools/simba_retrieval.py: SIMBA-embedding
+# nearest-neighbor transfer + Tanimoto candidate ranking. Spectra are loaded
+# unfiltered (every spectrum in the MGF fold), preprocessed the same way as
+# validation (precursor-peak removal, then the intensity floor/top-N cut).
 
 set -uo pipefail
 
@@ -32,13 +30,14 @@ echo "Branch: $(git -C "${SIMBA_DIR}" rev-parse --abbrev-ref HEAD)"
 echo "Commit: $(git -C "${SIMBA_DIR}" rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
-OUTPUT_DIR=/sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu
-CHECKPOINT="${OUTPUT_DIR}/best_model.ckpt"
+EXPERIMENT_DIR=/sofia/projects/2026_053/simba_project/experiments/training/004_msg_exact_mces_1020_excl_mces20_identity_bf16_4gpu
+OUTPUT_DIR="${EXPERIMENT_DIR}/retrieval_fixed"
+CHECKPOINT="${EXPERIMENT_DIR}/best_model.ckpt"
 MGF=/sofia/projects/2026_053/simba_project/data/massspecgym/data/auxiliary/MassSpecGym.mgf
-# Formula-matched candidate pool — the mass-matched pool referenced by the
-# original retrieval script isn't present on this machine; this is what's
-# available (from spectrawl_project's data dir).
+# Formula-matched candidate pool (the mass-matched pool isn't available on this machine).
 CANDIDATES=/sofia/projects/2026_053/spectrawl_project/data/massspecgym/MassSpecGym_retrieval_candidates_formula.json
+
+mkdir -p "${OUTPUT_DIR}"
 
 cd "${SIMBA_DIR}"
 
