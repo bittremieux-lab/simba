@@ -31,7 +31,7 @@ from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
 from simba.core.data.encoding import encode_adduct_mass
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
-from simba.core.models.similarity_models import SimilarityModelMultitask
+from simba.core.models.similarity_models import HEAD_MODES, SimilarityModelMultitask
 
 
 MAX_PEAKS = 100  # must match model.transformer.context_length
@@ -41,7 +41,9 @@ N_ADDUCTS = len(ADDUCT_TO_MASS)
 # ── Model ─────────────────────────────────────────────────────────────────────
 
 
-def load_model(checkpoint_path: str, device: torch.device) -> SimilarityModelMultitask:
+def load_model(
+    checkpoint_path: str, device: torch.device, head_mode: str = "cosine_relu"
+) -> SimilarityModelMultitask:
     model = SimilarityModelMultitask.load_from_checkpoint(
         checkpoint_path,
         map_location=device,
@@ -51,6 +53,7 @@ def load_model(checkpoint_path: str, device: torch.device) -> SimilarityModelMul
         use_gumbel=False,
         lr=1e-4,
         use_cosine_distance=True,
+        head_mode=head_mode,
         use_edit_distance=False,
         strict=False,
     )
@@ -248,11 +251,24 @@ def embed_spectra(
         emb = emb[:, 0, :]  # CLS token → (B, d_model)
         emb = model.relu(emb)
 
-        # MCES similarity projection head (same path as compute_from_embeddings)
-        emb = model.linear2(emb)
-        emb = model.dropout(emb)  # no-op in eval mode
-        emb = model.relu(emb)
-        emb = model.relu(model.linear2_cossim(emb))
+        # Same projection compute_from_embeddings uses for this head_mode.
+        # L2-normalizing afterward makes cosine-similarity NN search and
+        # nearest-by-Euclidean-distance search equivalent (‖u-v‖²=2-2·cos(u,v)
+        # for unit vectors), so one normalize+matmul step works for every mode.
+        if model.head_mode in ("cosine_no_head", "distance_no_head"):
+            pass
+        elif model.head_mode in ("cosine_linear_head", "distance_linear_head"):
+            emb = model.linear2(emb)
+            emb = model.dropout(emb)
+            emb = model.relu(emb)
+            emb = model.linear2_cossim(emb)
+        elif model.head_mode == "cosine_relu":
+            emb = model.linear2(emb)
+            emb = model.dropout(emb)
+            emb = model.relu(emb)
+            emb = model.relu(model.linear2_cossim(emb))
+        else:
+            raise ValueError(f"Unknown head_mode: {model.head_mode!r}")
 
         emb = F.normalize(emb, p=2, dim=-1)
         all_embs.append(emb.cpu())
@@ -369,6 +385,7 @@ def run(
     output_tsv: str | None = None,
     intermediates_dir: str | None = None,
     force_ce_zero: bool = False,
+    head_mode: str = "cosine_relu",
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -414,8 +431,8 @@ def run(
     )  # (N_train, 2048)
 
     # Load model and embed
-    print(f"\nLoading SIMBA checkpoint: {checkpoint}")
-    model = load_model(checkpoint, device)
+    print(f"\nLoading SIMBA checkpoint: {checkpoint} (head_mode={head_mode})")
+    model = load_model(checkpoint, device, head_mode=head_mode)
 
     if force_ce_zero:
         print("  [CE=0 mode] CE zeroed out for all spectra — CE-agnostic embeddings.")
@@ -495,6 +512,12 @@ def main():
         "--force_ce_zero",
         action="store_true",
         help="Zero out CE for all spectra — CE-agnostic embedding diagnostic",
+    )
+    p.add_argument(
+        "--head_mode",
+        default="cosine_relu",
+        choices=HEAD_MODES,
+        help="Must match the head_mode the checkpoint was trained with",
     )
     args = p.parse_args()
     run(**vars(args))

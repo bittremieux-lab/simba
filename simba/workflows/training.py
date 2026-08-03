@@ -764,6 +764,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_gumbel": cfg.model.tasks.edit_distance.use_gumbel,
         "use_element_wise": cfg.model.features.use_element_wise,
         "use_cosine_distance": cfg.model.tasks.cosine_similarity.use_cosine_distance,
+        "head_mode": cfg.model.tasks.cosine_similarity.head_mode,
         "use_edit_distance_regresion": cfg.model.tasks.edit_distance.use_regression,
         "use_fingerprints": cfg.model.tasks.fingerprints.enabled,
         "USE_LEARNABLE_MULTITASK": cfg.model.multitasking.learnable,

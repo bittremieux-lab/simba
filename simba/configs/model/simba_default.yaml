@@ -65,6 +65,11 @@ tasks:
   cosine_similarity:
     enabled: true
     use_cosine_distance: true
+    # How emb_sim_2 is computed from emb0/emb1 when use_cosine_distance=true.
+    # One of: cosine_relu, cosine_no_head, cosine_linear_head,
+    # distance_linear_head, distance_no_head — see HEAD_MODES in
+    # simba/core/models/similarity_models.py.
+    head_mode: "cosine_relu"
 
   # Tanimoto similarity
   tanimoto:

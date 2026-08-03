@@ -338,6 +338,29 @@ class CustomizedCrossEntropyLoss(nn.Module):
         return cross_entropy_loss
 
 
+# How the second-similarity ("emb_sim_2") score is computed from emb0/emb1 in
+# compute_from_embeddings, when use_cosine_distance=True:
+#   cosine_relu           - 2-layer projection head, final ReLU, cosine similarity
+#                            (current/original SIMBA head).
+#   cosine_no_head         - no projection layers; cosine similarity directly on
+#                            emb0/emb1 (Sentence-BERT / MS2DeepScore style).
+#   cosine_linear_head     - 2-layer projection head, no final activation, cosine
+#                            similarity (SimCLR-style projection head).
+#   distance_linear_head   - 2-layer projection head, no final activation,
+#                            L2-normalized Euclidean distance mapped through
+#                            exp(-dist).
+#   distance_no_head       - no projection layers; L2-normalized Euclidean
+#                            distance on emb0/emb1 mapped through exp(-dist)
+#                            (MaLSTM / Chopra-Hadsell-LeCun style).
+HEAD_MODES = (
+    "cosine_relu",
+    "cosine_no_head",
+    "cosine_linear_head",
+    "distance_linear_head",
+    "distance_no_head",
+)
+
+
 class SimilarityModelMultitask(SimilarityModel):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embeds spectra."""
 
@@ -352,6 +375,7 @@ class SimilarityModelMultitask(SimilarityModel):
         lr=None,
         use_element_wise=True,
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
+        head_mode="cosine_relu",  # one of HEAD_MODES; only applies when use_cosine_distance=True
         weights_sim2=None,  # weights of second similarity
         use_edit_distance_regresion=False,
         use_mces20_log_loss=True,
@@ -383,6 +407,11 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ion_mode=use_ion_mode,
         )
         self.weights = weights
+        if head_mode not in HEAD_MODES:
+            raise ValueError(
+                f"head_mode must be one of {HEAD_MODES}, got {head_mode!r}"
+            )
+        self.head_mode = head_mode
 
         # Add a linear layer for projection
         self.classifier = nn.Linear(d_model, n_classes)
@@ -589,7 +618,7 @@ class SimilarityModelMultitask(SimilarityModel):
         """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
-        logits2 = logits_list[1]  # [B] cosine similarity
+        logits2 = logits_list[1]  # [B] similarity — see HEAD_MODES
 
         target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
@@ -597,7 +626,7 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = self.step(batch, batch_idx)
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
-        # MCES MAE in raw MCES units: target2 = 1 - MCES/40, logits2 = cosine sim pred
+        # MCES MAE in raw MCES units: target2 = 1 - MCES/40, logits2 = predicted similarity
         mces_mae = (40.0 * (logits2.view(-1) - target2).abs()).mean()
         self.log("val_mces_mae", mces_mae, on_step=False, on_epoch=True, prog_bar=False)
 
@@ -647,7 +676,10 @@ class SimilarityModelMultitask(SimilarityModel):
             logits2_for_loss = torch.log((a + 1) - (a * x)) / scaling_factor
             return 1 - logits2_for_loss
 
-        if self.use_mces20_log_loss:
+        # the log-warp compensates for cosine similarity's compressed range;
+        # distance-based heads already have their own nonlinearity (exp), so
+        # they skip it and train on plain MSE.
+        if self.use_mces20_log_loss and "distance" not in self.head_mode:
             logits2_for_loss = log_conversion(logits2)
             target2_for_loss = log_conversion(target2)
         else:
@@ -701,7 +733,7 @@ class SimilarityModelMultitask(SimilarityModel):
     def training_step(self, batch, batch_idx):
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
-        logits2 = logits_list[1]  # [B] cosine similarity
+        logits2 = logits_list[1]  # [B] similarity — see HEAD_MODES
 
         target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
@@ -755,16 +787,44 @@ class SimilarityModelMultitask(SimilarityModel):
         # note: assume emb0/emb1 already had model.relu and fingerprint logic applied
         # now do exactly what you had in compute_emb_from_existing_embeddings:
         if self.use_cosine_distance:
-            # transform for cos-sim
-            def transform(x):
+
+            def transform_relu(x):
                 x = self.linear2(x)
                 x = self.dropout(x)
                 x = self.relu(x)
                 return self.relu(self.linear2_cossim(x))
 
-            e0 = transform(emb0)
-            e1 = transform(emb1)
-            emb_sim_2 = self.cosine_similarity(e0, e1)
+            def transform_linear(x):
+                x = self.linear2(x)
+                x = self.dropout(x)
+                x = self.relu(x)
+                return self.linear2_cossim(x)
+
+            def normalized_distance_sim(e0, e1):
+                # L2-normalize before taking the distance so it's bounded to
+                # [0, 2] (unit vectors) — keeps exp(-dist) away from the
+                # near-zero-gradient regime that an unbounded distance would
+                # hit for confidently-wrong predictions.
+                e0n = F.normalize(e0, p=2, dim=-1)
+                e1n = F.normalize(e1, p=2, dim=-1)
+                dist = torch.norm(e0n - e1n, p=2, dim=-1)
+                return torch.exp(-dist)
+
+            if self.head_mode == "cosine_relu":
+                e0, e1 = transform_relu(emb0), transform_relu(emb1)
+                emb_sim_2 = self.cosine_similarity(e0, e1)
+            elif self.head_mode == "cosine_no_head":
+                emb_sim_2 = self.cosine_similarity(emb0, emb1)
+            elif self.head_mode == "cosine_linear_head":
+                e0, e1 = transform_linear(emb0), transform_linear(emb1)
+                emb_sim_2 = self.cosine_similarity(e0, e1)
+            elif self.head_mode == "distance_linear_head":
+                e0, e1 = transform_linear(emb0), transform_linear(emb1)
+                emb_sim_2 = normalized_distance_sim(e0, e1)
+            elif self.head_mode == "distance_no_head":
+                emb_sim_2 = normalized_distance_sim(emb0, emb1)
+            else:
+                raise ValueError(f"Unknown head_mode: {self.head_mode!r}")
         else:
             x = self.relu(self.linear2(emb0 + emb1))
             # clamp to ≤1
@@ -816,6 +876,7 @@ class EmbeddingExtractor(pl.LightningModule):
                 use_gumbel=use_gumbel,
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
+                head_mode=self.config.model.tasks.cosine_similarity.head_mode,
                 strict=strict,
                 use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,
