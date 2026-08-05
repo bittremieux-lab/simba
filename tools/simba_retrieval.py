@@ -31,7 +31,11 @@ from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
 from simba.core.data.encoding import encode_adduct_mass
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
-from simba.core.models.similarity_models import HEAD_MODES, SimilarityModelMultitask
+from simba.core.models.similarity_models import (
+    DEFAULT_CORN_BIN_EDGES,
+    HEAD_MODES,
+    SimilarityModelMultitask,
+)
 
 
 MAX_PEAKS = 100  # must match model.transformer.context_length
@@ -42,7 +46,13 @@ N_ADDUCTS = len(ADDUCT_TO_MASS)
 
 
 def load_model(
-    checkpoint_path: str, device: torch.device, head_mode: str = "cosine_relu"
+    checkpoint_path: str,
+    device: torch.device,
+    head_mode: str = "cosine_relu",
+    corn_bin_edges=DEFAULT_CORN_BIN_EDGES,
+    corn_use_mlp: bool = False,
+    corn_use_product: bool = False,
+    mces_max_value: float = 40.0,
 ) -> SimilarityModelMultitask:
     model = SimilarityModelMultitask.load_from_checkpoint(
         checkpoint_path,
@@ -54,6 +64,10 @@ def load_model(
         lr=1e-4,
         use_cosine_distance=True,
         head_mode=head_mode,
+        corn_bin_edges=corn_bin_edges,
+        corn_use_mlp=corn_use_mlp,
+        corn_use_product=corn_use_product,
+        mces_max_value=mces_max_value,
         use_edit_distance=False,
         strict=False,
     )

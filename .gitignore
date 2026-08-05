@@ -74,6 +74,7 @@ run_scripts_tfs*
 *.hdf5
 *.npy
 *.csv
+*.pkl
 
 # Logs
 logs/

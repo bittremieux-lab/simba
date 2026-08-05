@@ -352,13 +352,25 @@ class CustomizedCrossEntropyLoss(nn.Module):
 #   distance_no_head       - no projection layers; L2-normalized Euclidean
 #                            distance on emb0/emb1 mapped through exp(-dist)
 #                            (MaLSTM / Chopra-Hadsell-LeCun style).
+#   corn                   - CORN ordinal classification (Shi, Cao & Raschka,
+#                            2021/2023) on binned raw MCES. emb_sim_2 holds
+#                            len(corn_bin_edges) raw logits (not a scalar);
+#                            see corn_bin_edges / corn_use_mlp / corn_use_product
+#                            / mces_max_value.
 HEAD_MODES = (
     "cosine_relu",
     "cosine_no_head",
     "cosine_linear_head",
     "distance_linear_head",
     "distance_no_head",
+    "corn",
 )
+
+# Upper edges of each ordinal MCES bin (last bin is implicitly ">= last edge").
+# Step 2 up to MCES=10, then uniform step 6 up to mces.max_value=40: bins are
+# [0,2),[2,4),[4,6),[6,8),[8,10),[10,16),[16,22),[22,28),[28,34),[34,40),
+# [40,inf) — 11 bins total.
+DEFAULT_CORN_BIN_EDGES = (2, 4, 6, 8, 10, 16, 22, 28, 34, 40)
 
 
 class SimilarityModelMultitask(SimilarityModel):
@@ -376,6 +388,10 @@ class SimilarityModelMultitask(SimilarityModel):
         use_element_wise=True,
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
         head_mode="cosine_relu",  # one of HEAD_MODES; only applies when use_cosine_distance=True
+        corn_bin_edges=DEFAULT_CORN_BIN_EDGES,  # upper edges of ordinal MCES bins; only applies when head_mode="corn"
+        corn_use_mlp=False,  # small MLP before the CORN logits, vs a single linear layer
+        corn_use_product=False,  # concat elementwise product with |emb0-emb1|, vs |emb0-emb1| alone
+        mces_max_value=40.0,  # must match model.tasks.mces.max_value; converts target2 <-> raw MCES for corn
         weights_sim2=None,  # weights of second similarity
         use_edit_distance_regresion=False,
         use_mces20_log_loss=True,
@@ -412,6 +428,19 @@ class SimilarityModelMultitask(SimilarityModel):
                 f"head_mode must be one of {HEAD_MODES}, got {head_mode!r}"
             )
         self.head_mode = head_mode
+        edges_t = torch.tensor(list(corn_bin_edges), dtype=torch.float32)
+        self.register_buffer("corn_bin_edges", edges_t)
+        # Representative raw-MCES value per bin (its midpoint), used to decode
+        # a predicted bin index back to a continuous MCES estimate. The last
+        # (open-ended, ">= last edge") bin borrows the previous bin's width.
+        lower = torch.cat([edges_t.new_zeros(1), edges_t])
+        last_width = edges_t[-1] - edges_t[-2] if len(edges_t) > 1 else edges_t[-1]
+        upper = torch.cat([edges_t, (edges_t[-1] + last_width).view(1)])
+        self.register_buffer("corn_bin_midpoints", (lower + upper) / 2)
+        self.corn_n_classes = len(corn_bin_edges) + 1
+        self.corn_use_mlp = corn_use_mlp
+        self.corn_use_product = corn_use_product
+        self.mces_max_value = mces_max_value
 
         # Add a linear layer for projection
         self.classifier = nn.Linear(d_model, n_classes)
@@ -441,6 +470,19 @@ class SimilarityModelMultitask(SimilarityModel):
         self.use_edit_distance_regresion = use_edit_distance_regresion
         if self.use_edit_distance_regresion:
             self.linear1_cossim = nn.Linear(d_model, d_model)
+
+        if self.head_mode == "corn":
+            corn_input_dim = d_model * 2 if corn_use_product else d_model
+            if corn_use_mlp:
+                self.corn_mlp = nn.Sequential(
+                    nn.Linear(corn_input_dim, d_model),
+                    nn.ReLU(),
+                    nn.Linear(d_model, d_model),
+                )
+                corn_head_input_dim = d_model
+            else:
+                corn_head_input_dim = corn_input_dim
+            self.corn_head = nn.Linear(corn_head_input_dim, len(corn_bin_edges))
 
         self.use_mces20_log_loss = use_mces20_log_loss
         self.use_fingerprints = use_fingerprints
@@ -619,6 +661,8 @@ class SimilarityModelMultitask(SimilarityModel):
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
         logits2 = logits_list[1]  # [B] similarity — see HEAD_MODES
+        if self.head_mode == "corn":
+            logits2 = self._corn_decode_similarity(logits2)
 
         target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
@@ -671,41 +715,49 @@ class SimilarityModelMultitask(SimilarityModel):
             else:
                 loss1 = self.customised_ce(logits1, target1)
 
-        def log_conversion(x, a=5):
-            scaling_factor = np.log(a + 1)
-            logits2_for_loss = torch.log((a + 1) - (a * x)) / scaling_factor
-            return 1 - logits2_for_loss
-
-        # the log-warp compensates for cosine similarity's compressed range;
-        # distance-based heads already have their own nonlinearity (exp), so
-        # they skip it and train on plain MSE.
-        if self.use_mces20_log_loss and "distance" not in self.head_mode:
-            logits2_for_loss = log_conversion(logits2)
-            target2_for_loss = log_conversion(target2)
+        if self.head_mode == "corn":
+            raw_mces_target = (1.0 - target2) * self.mces_max_value
+            target_bins = self._corn_target_bins(raw_mces_target)
+            loss2 = self._corn_loss(logits2, target_bins)
         else:
-            logits2_for_loss = logits2
-            target2_for_loss = target2
 
-        if self.weights_sim2 is not None:
-            squared_diff = (
-                logits2_for_loss.view(-1, 1).float()
-                - target2_for_loss.view(-1, 1).float()
-            ) ** 2
-            weight_mask = SimilarityWeightSampler.compute_sample_weights(
-                molecule_pairs=None,
-                weights=self.weights_sim2,
-                use_molecule_pair_object=False,
-                bining_sim1=False,
-                targets=target2.cpu().numpy(),
-                normalize=False,
-            )
-            weight_mask = torch.tensor(weight_mask).to(self.device)
-            loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
-        else:
-            squared_diff = (
-                logits2.view(-1, 1).float() - target2.view(-1, 1).float()
-            ) ** 2
-            loss2 = squared_diff.view(-1, 1).mean()
+            def log_conversion(x, a=5):
+                scaling_factor = np.log(a + 1)
+                logits2_for_loss = torch.log((a + 1) - (a * x)) / scaling_factor
+                return 1 - logits2_for_loss
+
+            # the log-warp compensates for cosine similarity's compressed range;
+            # distance-based heads already have their own nonlinearity (exp), so
+            # they skip it and train on plain MSE.
+            if self.use_mces20_log_loss and "distance" not in self.head_mode:
+                logits2_for_loss = log_conversion(logits2)
+                target2_for_loss = log_conversion(target2)
+            else:
+                logits2_for_loss = logits2
+                target2_for_loss = target2
+
+            if self.weights_sim2 is not None:
+                squared_diff = (
+                    logits2_for_loss.view(-1, 1).float()
+                    - target2_for_loss.view(-1, 1).float()
+                ) ** 2
+                weight_mask = SimilarityWeightSampler.compute_sample_weights(
+                    molecule_pairs=None,
+                    weights=self.weights_sim2,
+                    use_molecule_pair_object=False,
+                    bining_sim1=False,
+                    targets=target2.cpu().numpy(),
+                    normalize=False,
+                )
+                weight_mask = torch.tensor(weight_mask).to(self.device)
+                loss2 = (
+                    squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()
+                ).mean()
+            else:
+                squared_diff = (
+                    logits2.view(-1, 1).float() - target2.view(-1, 1).float()
+                ) ** 2
+                loss2 = squared_diff.view(-1, 1).mean()
 
         weight_loss2 = self.calculate_weight_loss2()
         # loss = loss1 + (weight_loss2 * loss2)
@@ -734,6 +786,8 @@ class SimilarityModelMultitask(SimilarityModel):
         logits_list = self(batch)
         logits1 = logits_list[0]  # [B, n_classes]
         logits2 = logits_list[1]  # [B] similarity — see HEAD_MODES
+        if self.head_mode == "corn":
+            logits2 = self._corn_decode_similarity(logits2)
 
         target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
@@ -823,6 +877,15 @@ class SimilarityModelMultitask(SimilarityModel):
                 emb_sim_2 = normalized_distance_sim(e0, e1)
             elif self.head_mode == "distance_no_head":
                 emb_sim_2 = normalized_distance_sim(emb0, emb1)
+            elif self.head_mode == "corn":
+                pair_repr = torch.abs(emb0 - emb1)
+                if self.corn_use_product:
+                    pair_repr = torch.cat([pair_repr, emb0 * emb1], dim=-1)
+                if self.corn_use_mlp:
+                    pair_repr = self.corn_mlp(pair_repr)
+                emb_sim_2 = self.corn_head(
+                    pair_repr
+                )  # (B, len(corn_bin_edges)) raw logits
             else:
                 raise ValueError(f"Unknown head_mode: {self.head_mode!r}")
         else:
@@ -846,6 +909,49 @@ class SimilarityModelMultitask(SimilarityModel):
             emb = self.relu(e0 + e1)
             emb = self.classifier(emb)
         return emb, emb_sim_2
+
+    def _corn_target_bins(self, raw_mces: torch.Tensor) -> torch.Tensor:
+        """Discretize raw MCES into bin indices via corn_bin_edges.
+
+        bucketize(..., right=True) puts a value exactly at an edge into the
+        bin that starts there (half-open [edge_i, edge_{i+1}) bins), with a
+        final catch-all bin for anything >= the last edge.
+        """
+        return torch.bucketize(raw_mces.clamp(min=0), self.corn_bin_edges, right=True)
+
+    def _corn_loss(
+        self, logits: torch.Tensor, target_bins: torch.Tensor
+    ) -> torch.Tensor:
+        """CORN conditional-training loss (Shi, Cao & Raschka, 2021/2023, Eq. 5).
+
+        For threshold j, only pairs whose true bin already exceeds j-1 (subset
+        S_j = {target_bin >= j}) contribute, with target 1{target_bin > j} —
+        this conditioning is what CORN uses for rank consistency instead of
+        CORAL's weight-sharing, so corn_head's K-1 outputs can be independent.
+        """
+        total_loss = logits.new_tensor(0.0)
+        total_count = logits.new_tensor(0.0)
+        for j in range(self.corn_n_classes - 1):
+            mask = target_bins >= j
+            if not mask.any():
+                continue
+            target_j = (target_bins[mask] > j).float()
+            total_loss = total_loss + F.binary_cross_entropy_with_logits(
+                logits[mask, j], target_j, reduction="sum"
+            )
+            total_count = total_count + mask.sum()
+        return total_loss / total_count.clamp(min=1)
+
+    def _corn_decode_similarity(self, logits: torch.Tensor) -> torch.Tensor:
+        """Chain-rule decode (cumulative product of conditional probabilities) to a
+        predicted bin, then map back into the "1 - mces/max_value" domain the rest
+        of the pipeline (mces_mae, spearman, retrieval ranking) already expects.
+        """
+        probas = torch.sigmoid(logits)
+        cumprod = torch.cumprod(probas, dim=1)
+        predicted_bin = (cumprod > 0.5).sum(dim=1)
+        predicted_raw_mces = self.corn_bin_midpoints[predicted_bin]
+        return 1.0 - predicted_raw_mces / self.mces_max_value
 
 
 class EmbeddingExtractor(pl.LightningModule):
@@ -877,6 +983,10 @@ class EmbeddingExtractor(pl.LightningModule):
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
                 head_mode=self.config.model.tasks.cosine_similarity.head_mode,
+                corn_bin_edges=self.config.model.tasks.cosine_similarity.corn_bin_edges,
+                corn_use_mlp=self.config.model.tasks.cosine_similarity.corn_use_mlp,
+                corn_use_product=self.config.model.tasks.cosine_similarity.corn_use_product,
+                mces_max_value=self.config.model.tasks.mces.max_value,
                 strict=strict,
                 use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,

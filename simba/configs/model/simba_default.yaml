@@ -67,9 +67,15 @@ tasks:
     use_cosine_distance: true
     # How emb_sim_2 is computed from emb0/emb1 when use_cosine_distance=true.
     # One of: cosine_relu, cosine_no_head, cosine_linear_head,
-    # distance_linear_head, distance_no_head — see HEAD_MODES in
+    # distance_linear_head, distance_no_head, corn — see HEAD_MODES in
     # simba/core/models/similarity_models.py.
     head_mode: "cosine_relu"
+    # Only used when head_mode="corn". Upper edges of each ordinal MCES bin
+    # (last bin is implicitly ">= last edge"): step 2 below MCES=10, then
+    # uniform step 6 up to mces.max_value=40.
+    corn_bin_edges: [2, 4, 6, 8, 10, 16, 22, 28, 34, 40]
+    corn_use_mlp: false  # small MLP before the final linear layer, vs a single linear layer
+    corn_use_product: false  # concat elementwise product with |emb0-emb1|, vs |emb0-emb1| alone
 
   # Tanimoto similarity
   tanimoto:
