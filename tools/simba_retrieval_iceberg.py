@@ -13,6 +13,10 @@ For each test spectrum:
      equivalent to the model's own trained similarity function for every
      head_mode, since exp(-dist) and cosine similarity are both monotonic in
      the same angle between L2-normalized vectors.
+  4. (3c) Extend hit@1/5/20 with the MIN GT MCES to the true molecule among
+     the top-1/5/20 ranked candidates — the closest (best) wrong guess, not
+     the farthest — via a lookup built by tools/prepare_gt_mces_retrieval.py
+     + asimov2's exact-MCES computation (see that script's docstring).
 
 Usage:
     uv run python tools/simba_retrieval_iceberg.py \\
@@ -21,7 +25,8 @@ Usage:
         --mgf /path/to/MassSpecGym.mgf \\
         --candidates /path/to/MassSpecGym_retrieval_candidates_formula.json \\
         --candidate_tsv /path/to/candidates_test_official.tsv \\
-        --iceberg_preds /path/to/preds.hdf5
+        --iceberg_preds /path/to/preds.hdf5 \\
+        --gt_mces_dir /path/to/gt_mces_retrieval_candidates
 """
 
 import argparse
@@ -162,88 +167,90 @@ def compute_hit_rates_from_ranking(
     return {f"hit@{k}": hits[k] / n if n > 0 else 0.0 for k in ks}, n_no_candidates
 
 
-def compute_mces_batch(
-    smiles_0: list, smiles_1: list, threshold_mces: int, num_jobs: int, work_dir: str
-) -> np.ndarray:
-    """Batch-compute myopic MCES for parallel (smiles_0[i], smiles_1[i]) pairs.
+def load_gt_mces_lookup(gt_mces_dir: str) -> dict[tuple[str, str], float]:
+    """Load the exact-MCES lookup built by tools/prepare_gt_mces_retrieval.py +
+    asimov2's compute_block/combine (see that script's docstring).
 
-    Uses a dedicated work_dir (not the shared "temp/" the MCES.compute_mces_list_smiles
-    convenience wrapper hardcodes) so this can't collide with a concurrent run, and
-    exposes num_jobs since that wrapper hardcodes --num_jobs 1.
+    Reads smiles.txt (mol_idx -> canonical SMILES) and the combined
+    mces_exact.npy ((N, 3) = [mol_idx_a, mol_idx_b, mces]) written by that
+    script's `combine` subcommand, and returns a symmetric
+    {(canon_smi_a, canon_smi_b): mces} dict.
+
+    -1 (solver failed) and NaN (block never computed) entries are dropped —
+    "no reliable GT value", not "GT value is -1/NaN".
     """
-    import subprocess
+    gt_dir = Path(gt_mces_dir)
+    smiles = gt_dir.joinpath("smiles.txt").read_text().splitlines()
+    arr = np.load(gt_dir / "mces_exact.npy")
 
-    work = Path(work_dir)
-    work.mkdir(parents=True, exist_ok=True)
-    input_csv = work / "mces_input.csv"
-    output_csv = work / "mces_output.csv"
+    valid = ~np.isnan(arr[:, 2]) & (arr[:, 2] != -1.0)
+    n_dropped = len(arr) - int(valid.sum())
+    if n_dropped:
+        print(f"  {n_dropped}/{len(arr)} GT MCES pairs unresolved (failed/missing), dropped")
 
-    pd.DataFrame({"smiles_0": smiles_0, "smiles_1": smiles_1}).to_csv(
-        input_csv, header=False
-    )
-
-    command = [
-        "myopic_mces",
-        str(input_csv),
-        str(output_csv),
-        "--num_jobs",
-        str(num_jobs),
-        "--threshold",
-        str(int(threshold_mces)),
-        "--solver_onethreaded",
-        "--solver_no_msg",
-        "--choose_bound_dynamically",
-        "--catch_computation_errors",
-    ]
-    print(f"Running: {' '.join(command)}")
-    subprocess.run(command, check=True)
-
-    # output columns: index, mces distance, computation time (s), computation mode.
-    # Don't assume row order matches input order — parallel workers (--num_jobs)
-    # can return out of sequence; realign explicitly via the index column.
-    results = pd.read_csv(output_csv, header=None)
-    results = results.sort_values(0)
-    return results[1].to_numpy()
+    lookup: dict[tuple[str, str], float] = {}
+    for a, b, m in arr[valid]:
+        smi_a, smi_b = smiles[int(a)], smiles[int(b)]
+        lookup[(smi_a, smi_b)] = float(m)
+        lookup[(smi_b, smi_a)] = float(m)
+    return lookup
 
 
 def compute_mces_stats(
     test_smiles: list,
     per_query_ranked: list,
-    threshold_mces: int = 40,
-    num_jobs: int = -1,
-    work_dir: str = "temp_mces",
+    gt_lookup: dict[tuple[str, str], float],
     ks: tuple = (1, 5, 20),
 ) -> dict:
-    """GT MCES between top-1 / min-over-top-k ranked candidates and the true molecule."""
-    pair_query_smi, pair_cand_smi, pair_query_idx = [], [], []
+    """GT MCES between top-1 / MIN-over-top-k ranked candidates and the true
+    molecule — the closest (best) retrieved candidate, not the farthest, so
+    this reads as "how close did we get" even when the exact hit was missed.
+
+    A ranked candidate that IS the true molecule (a hit) is credited as
+    MCES=0 directly — that pair is deliberately absent from gt_lookup (see
+    prepare_gt_mces_retrieval.py: trivial true-match pairs aren't computed),
+    so it must not be treated as "missing data" and dropped, or every hit
+    would be silently excluded from its own min-over-top-k.
+    """
+    per_query_mces: dict[int, list[float | None]] = {}
+    n_pairs_missing = 0
     for qi, (q_smi, ranked) in enumerate(zip(test_smiles, per_query_ranked)):
         if not ranked:
             continue
+        q_canon = canonicalize(q_smi)
+        vals: list[float | None] = []
         for c in ranked:
-            pair_query_smi.append(q_smi)
-            pair_cand_smi.append(c)
-            pair_query_idx.append(qi)
+            c_canon = canonicalize(c)
+            if c_canon == q_canon:
+                vals.append(0.0)  # true match: GT MCES = 0 by definition
+                continue
+            m = gt_lookup.get((q_canon, c_canon))
+            if m is None:
+                n_pairs_missing += 1
+            vals.append(m)  # None preserves rank position for the v[:k] windows below
+        if any(v is not None for v in vals):
+            per_query_mces[qi] = vals
 
-    print(
-        f"Computing myopic MCES for {len(pair_query_smi)} (query, candidate) pairs ..."
-    )
-    mces_vals = compute_mces_batch(
-        pair_query_smi, pair_cand_smi, threshold_mces, num_jobs, work_dir
-    )
-
-    per_query_mces = {}
-    for qi, m in zip(pair_query_idx, mces_vals):
-        per_query_mces.setdefault(qi, []).append(m)
+    if n_pairs_missing:
+        print(
+            f"  {n_pairs_missing} ranked (query, candidate) pairs had no GT MCES in "
+            "the lookup (excluded from the min, not treated as 0)"
+        )
 
     # k=1 is just the top-1 candidate's own MCES (min of a single-element list);
     # named "mces_top1" rather than "mces_min_top1" since "min" is misleading there.
     results = {}
     for k in ks:
-        vals = [min(v[:k]) for v in per_query_mces.values()]
-        arr = np.array(vals, dtype=float)
+        mins = []
+        for v in per_query_mces.values():
+            window = [x for x in v[:k] if x is not None]
+            if window:
+                mins.append(min(window))
+        arr = np.array(mins, dtype=float)
         name = "mces_top1" if k == 1 else f"mces_min_top{k}"
-        results[f"{name}_mean"] = float(arr.mean())
-        results[f"{name}_median"] = float(np.median(arr))
+        results[f"{name}_mean"] = float(arr.mean()) if len(arr) else float("nan")
+        results[f"{name}_median"] = float(np.median(arr)) if len(arr) else float("nan")
+        results[f"{name}_n"] = int(len(arr))
     return results
 
 
@@ -258,8 +265,7 @@ def run(
     batch_size: int = 512,
     output_tsv: str | None = None,
     intermediates_dir: str | None = None,
-    threshold_mces: int = 40,
-    num_mces_jobs: int = -1,
+    gt_mces_dir: str | None = None,
     skip_mces: bool = False,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -333,23 +339,16 @@ def run(
         print(f"  {k}: {v:.4f} ({v * 100:.2f}%)")
 
     if not skip_mces:
+        print(f"\nLoading GT MCES lookup from {gt_mces_dir} ...")
+        gt_lookup = load_gt_mces_lookup(gt_mces_dir)
+        print(f"  {len(gt_lookup) // 2} unique (test, candidate) pairs with a GT value")
+
         print("\nComputing GT MCES between ranked candidates and the true molecule ...")
-        mces_work_dir = (
-            str(Path(intermediates_dir) / "mces_work")
-            if intermediates_dir
-            else "temp_mces"
-        )
-        mces_results = compute_mces_stats(
-            test_smiles,
-            per_query_ranked,
-            threshold_mces=threshold_mces,
-            num_jobs=num_mces_jobs,
-            work_dir=mces_work_dir,
-        )
+        mces_results = compute_mces_stats(test_smiles, per_query_ranked, gt_lookup)
         results.update(mces_results)
-        print("\n=== GT MCES to true molecule (myopic, capped at threshold) ===")
+        print("\n=== GT MCES to true molecule (exact, threshold=20) ===")
         for k, v in mces_results.items():
-            print(f"  {k}: {v:.3f}")
+            print(f"  {k}: {v}")
 
     if output_tsv:
         pd.DataFrame(
@@ -394,16 +393,13 @@ def main():
         help="Directory to save embeddings and SMILES lists",
     )
     p.add_argument(
-        "--threshold_mces",
-        type=int,
-        default=40,
-        help="Cap for GT MCES computation (myopic_mces --threshold)",
-    )
-    p.add_argument(
-        "--num_mces_jobs",
-        type=int,
-        default=-1,
-        help="Parallel jobs for MCES computation (-1 = all logical CPUs)",
+        "--gt_mces_dir",
+        default=None,
+        help=(
+            "Dir with smiles.txt + combined mces_exact.npy from "
+            "tools/prepare_gt_mces_retrieval.py (run its combine step first). "
+            "Required unless --skip_mces."
+        ),
     )
     p.add_argument(
         "--skip_mces",

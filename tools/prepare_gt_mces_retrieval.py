@@ -30,9 +30,12 @@ different machines):
 compute_block/status/combine are reused UNMODIFIED from
 compute_mces_exact_1020.py (same block/meta.json/smiles.txt/pairs.npy schema,
 same watchdog, same threshold=20 exact-MCES convention used everywhere else
-in SIMBA). combine() still names its output "mces_exact_10_20.npy" — that's
-a harmless misnomer inherited from the reused code, not an [10,20]-lb filter;
-rename the file afterward if that's confusing.
+in SIMBA). combine() writes its output as "mces_exact_10_20.npy" — a name
+inherited from that tool's own [10,20]-lb mining use case, not a filter
+applied here (there is none: every test-to-candidate pair is included, capped
+at threshold=20 same as everywhere else) — this script's own `combine`
+subcommand renames it to "mces_exact.npy" right after, so nothing confusing
+survives into the file you'd actually use downstream.
 
 Paths stored in meta.json are re-derived from --output_dir on every
 compute_block/status/combine call, so it's safe to move the directory
@@ -59,6 +62,7 @@ CANDIDATES_JSON = "/sofia/projects/2026_053/spectrawl_project/data/massspecgym/M
 DEFAULT_OUTPUT_DIR = Path(
     "/sofia/projects/2026_053/simba_project/data/gt_mces_retrieval_candidates"
 )
+COMBINED_NPY_NAME = "mces_exact.npy"
 
 
 def canon(smi: str) -> str | None:
@@ -223,7 +227,7 @@ def main() -> None:
     pb.add_argument("--timeout", type=float, default=None, help="Per-pair solver timeout (s).")
 
     sub.add_parser("status", help="Print completion progress.")
-    sub.add_parser("combine", help="Merge blocks into mces_exact_10_20.npy.")
+    sub.add_parser("combine", help=f"Merge blocks into {COMBINED_NPY_NAME}.")
 
     a = p.parse_args()
     if a.cmd == "prepare":
@@ -237,6 +241,14 @@ def main() -> None:
     elif a.cmd == "combine":
         _fix_meta_paths(a.output_dir)
         combine(a.output_dir)
+        # combine() is reused unmodified from compute_mces_exact_1020.py, so it
+        # always writes "mces_exact_10_20.npy" — a name inherited from that
+        # tool's own [10,20]-lb mining use case, not ours (all test-to-candidate
+        # pairs, no lb filter). Rename to something that doesn't lie about content.
+        legacy_path = a.output_dir / "mces_exact_10_20.npy"
+        final_path = a.output_dir / COMBINED_NPY_NAME
+        legacy_path.replace(final_path)
+        print(f"Renamed {legacy_path.name} -> {final_path.name}")
 
 
 if __name__ == "__main__":

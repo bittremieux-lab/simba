@@ -19,6 +19,8 @@
 # checkpoint (epoch=2/step=24000). Candidate predictions come from
 # ICEBERG/results/candidates_test_official/preds.hdf5 (600,455 candidates,
 # msg_all weights, single fixed CE=35.0 — see ICEBERG/build_candidate_tsv.py).
+# Includes GT-MCES-to-truth stats (3c) via the exact-MCES lookup from
+# tools/prepare_gt_mces_retrieval.py (asimov2 computation, combined).
 
 set -uo pipefail
 
@@ -41,6 +43,7 @@ MGF=/sofia/projects/2026_053/simba_project/data/massspecgym/data/auxiliary/MassS
 CANDIDATES=/sofia/projects/2026_053/spectrawl_project/data/massspecgym/MassSpecGym_retrieval_candidates_formula.json
 CANDIDATE_TSV=/sofia/projects/2026_053/simba_project/ICEBERG/data/candidates_test_official.tsv
 ICEBERG_PREDS=/sofia/projects/2026_053/simba_project/ICEBERG/results/candidates_test_official/preds.hdf5
+GT_MCES_DIR=/sofia/projects/2026_053/simba_project/data/gt_mces_retrieval_candidates
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -55,6 +58,7 @@ uv run python tools/simba_retrieval_iceberg.py \
     --iceberg_preds "${ICEBERG_PREDS}" \
     --split test \
     --batch_size 512 \
+    --gt_mces_dir "${GT_MCES_DIR}" \
     --intermediates_dir "${OUTPUT_DIR}" \
     --output_tsv "${OUTPUT_DIR}/retrieval_results.tsv"
 

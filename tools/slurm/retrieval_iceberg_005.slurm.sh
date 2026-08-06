@@ -11,9 +11,8 @@
 #SBATCH -e /sofia/projects/2026_053/simba_project/experiments/training/005_msg_gaetan_split_max_lb_hdf5_excl_mces20_identity_bf16_4gpu/retrieval_iceberg/%x_%j.err
 
 # SIMBA+ICEBERG retrieval for 005 (head_mode=cosine_relu), checkpoint=best_model.ckpt.
-# hit@k only (--skip_mces) — GT-MCES-to-truth stats are still being fixed
-# (dedup by unique molecule + per-pair time limit + proper SLURM sizing)
-# before being added here; see tools/simba_retrieval_iceberg.py.
+# Includes GT-MCES-to-truth stats (3c) via the exact-MCES lookup from
+# tools/prepare_gt_mces_retrieval.py (asimov2 computation, combined).
 
 set -uo pipefail
 
@@ -36,6 +35,7 @@ MGF=/sofia/projects/2026_053/simba_project/data/massspecgym/data/auxiliary/MassS
 CANDIDATES=/sofia/projects/2026_053/spectrawl_project/data/massspecgym/MassSpecGym_retrieval_candidates_formula.json
 CANDIDATE_TSV=/sofia/projects/2026_053/simba_project/ICEBERG/data/candidates_test_official.tsv
 ICEBERG_PREDS=/sofia/projects/2026_053/simba_project/ICEBERG/results/candidates_test_official/preds.hdf5
+GT_MCES_DIR=/sofia/projects/2026_053/simba_project/data/gt_mces_retrieval_candidates
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -50,7 +50,7 @@ uv run python tools/simba_retrieval_iceberg.py \
     --iceberg_preds "${ICEBERG_PREDS}" \
     --split test \
     --batch_size 512 \
-    --skip_mces \
+    --gt_mces_dir "${GT_MCES_DIR}" \
     --intermediates_dir "${OUTPUT_DIR}" \
     --output_tsv "${OUTPUT_DIR}/retrieval_results.tsv"
 
