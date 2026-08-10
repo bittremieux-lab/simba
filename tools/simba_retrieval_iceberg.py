@@ -186,7 +186,9 @@ def load_gt_mces_lookup(gt_mces_dir: str) -> dict[tuple[str, str], float]:
     valid = ~np.isnan(arr[:, 2]) & (arr[:, 2] != -1.0)
     n_dropped = len(arr) - int(valid.sum())
     if n_dropped:
-        print(f"  {n_dropped}/{len(arr)} GT MCES pairs unresolved (failed/missing), dropped")
+        print(
+            f"  {n_dropped}/{len(arr)} GT MCES pairs unresolved (failed/missing), dropped"
+        )
 
     lookup: dict[tuple[str, str], float] = {}
     for a, b, m in arr[valid]:
@@ -312,7 +314,11 @@ def run(
         torch.save(test_embs, out_dir / "test_embeddings.pt")
         torch.save(cand_embs, out_dir / "candidate_embeddings.pt")
         (out_dir / "test_smiles.json").write_text(json.dumps(test_smiles))
+        (out_dir / "test_adducts.json").write_text(json.dumps(test_adducts))
         (out_dir / "candidate_smiles.json").write_text(json.dumps(cand_smiles))
+        (out_dir / "candidate_adducts.json").write_text(
+            json.dumps([s.adduct for s in cand_spectra])
+        )
         print(f"Intermediates saved to {out_dir}/")
 
     print("\nRanking candidates ...")
