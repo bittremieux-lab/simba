@@ -34,6 +34,12 @@ across all of that molecule's spectra) — no need to reload the raw (400MB)
 candidates JSON. Ranking is over {true candidate (added back in, GT=0) + all
 pool candidates}, matching what real retrieval evaluation ranks over.
 
+Tie-breaking note: ties for the max similarity are broken with a fair random
+pick among tied indices, not np.argmax's first-index default — argmax would
+otherwise always credit self (placed first in the per-query array) on any
+tie, not just genuine wins. This barely matters here since SIMBA's
+continuous dense embeddings essentially never produce exact float ties.
+
 Usage:
     uv run python tools/mces_top1_diagnostics.py \\
         --intermediates_dir /path/to/008_2_.../retrieval_iceberg \\
@@ -68,6 +74,7 @@ def compute_top1_diagnostics(
     idx_to_smiles: list[str],
     mces_max_value: float,
 ) -> dict:
+    rng = np.random.default_rng(0)
     query_pool: dict[int, list[tuple[int, float]]] = defaultdict(list)
     for row in gt_pairs:
         a, b, gt = int(row[0]), int(row[1]), float(row[-1])
@@ -117,7 +124,8 @@ def compute_top1_diagnostics(
 
         mat = np.stack(cand_embs)
         sims = mat @ emb_q
-        best = int(np.argmax(sims))
+        tied = np.flatnonzero(sims == sims.max())
+        best = int(tied[0]) if len(tied) == 1 else int(rng.choice(tied))
         if cand_is_self[best]:
             n_hit += 1
         else:

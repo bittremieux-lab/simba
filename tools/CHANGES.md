@@ -22,7 +22,36 @@ intent is easy to find later without digging through the diff. See
   populations — where the saturation/miscalibration is clearest.
 - `mces_top1_diagnostics.py` — true-candidate prediction and wrong-top-1 error
   diagnostics for test-to-candidate retrieval (item 3c), plus their joint distribution.
+  Ties for the max similarity are broken with a fair random pick among tied
+  indices, not `argmax`'s first-index default (self sits at index 0 of the
+  per-query array) — this barely matters for SIMBA's continuous dense
+  embeddings (float ties are vanishingly rare) but was left in for
+  correctness.
 - `slurm/ood_generalization_check.slurm.sh` — runs the MAE/Spearman summary
   (CPU-only; uses a GPU node purely for fast, uncontended storage I/O).
 - `slurm/mces_plots_all.slurm.sh` — runs all three plotting scripts sequentially
   (same CPU-only-on-a-GPU-node rationale).
+
+## Cosine-similarity pool distribution plots (8a)
+
+The question: `test_to_candidate_gt.png`'s "min" (GT MCES to pool) is very close
+to 0 — top-1/top-2 candidates are often nearly-indistinguishable structures even
+by ground truth. Does the same hold for a plain, no-SIMBA cosine-similarity
+baseline — does its "max" (over the pool) cluster close to 1 too? Pure
+distribution-of-raw-similarity-values question, no MCES-unit conversion, no
+ranking, no ties — see `cosine_similarity_pool_distribution_plots.py`'s
+module docstring for why that conversion doesn't apply here (it's only
+meaningful for SIMBA's *trained* cosine_no_head head).
+
+- `cosine_baseline_intermediates.py` — precomputes and saves the binned-spectrum
+  sparse matrices (`test_mat.npz`/`candidate_mat.npz`) + SMILES/adduct JSON, in the
+  same directory layout as `simba_retrieval_iceberg.py`'s `--intermediates_dir`, so
+  the plotting script below doesn't have to repeat binning ~600k candidate spectra.
+- `slurm/cosine_baseline_intermediates.slurm.sh` — runs the precompute step above.
+- `cosine_similarity_pool_distribution_plots.py` — the plots themselves: min/mean/max
+  of raw cosine similarity over each query's pool (`test_to_candidate_cosine_similarity.png` /
+  `test_to_test_cosine_similarity.png`, nothing excluded except test-to-test's literal
+  self-spectrum, which is trivially similarity=1.0 by construction), plus a top-1-vs-
+  top-2 view for test-to-candidate (`test_to_candidate_cosine_similarity_top1_top2.png`).
+- `slurm/cosine_similarity_pool_distribution_plots.slurm.sh` — runs the plotting
+  script above.
