@@ -55,3 +55,30 @@ meaningful for SIMBA's *trained* cosine_no_head head).
   top-2 view for test-to-candidate (`test_to_candidate_cosine_similarity_top1_top2.png`).
 - `slurm/cosine_similarity_pool_distribution_plots.slurm.sh` — runs the plotting
   script above.
+
+## Retrieval comparison table + checks (8b)
+
+A single reusable table, plus every SIMBA-vs-cosine comparison built on top of it.
+
+- `build_retrieval_comparison_table.py` — the "ultimate" per-(test spectrum,
+  candidate) table: one row per full-pool pair with SIMBA/cosine rank, similarity,
+  MCES (`mces_max_value * (1 - similarity)`), GT MCES, `is_correct`, and raw peak
+  counts (`n_peaks_test`/`n_peaks_candidate`). Directly verifies (not assumes)
+  SIMBA/cosine embedding availability agreement and GT MCES coverage; every later
+  script here reads only this CSV, never re-scores anything.
+- `plot_confusion_matrix_examples.py` — random examples per SIMBA-top1 x cosine-top1
+  confusion-matrix cell, real test spectrum vs the true candidate's ICEBERG spectrum
+  as mirror plots, each shown both raw and after SIMBA's own preprocessing
+  (`remove_precursor_peak` -> `filter_intensity` -> sqrt-compress -> L2-normalize,
+  matching `simba_retrieval.py`'s `spectra_to_tensors` line for line).
+- `plot_retrieval_comparison_checks.py` — three checks, all from the table alone:
+  (1) confusion matrix + hit@k double-check against the already-committed
+  `retrieval_results.tsv` numbers; (2) hit@1 rate vs. real-spectrum peak count
+  (`n_peaks_candidate` is reported but not plotted — it's degenerate, always
+  exactly 100, since ICEBERG was run with `--sparse-k 100 --threshold 0.0`) plus a
+  check of how often cosine's top-1 "win" is an arbitrary tie among a pool that's
+  entirely flat at ~0 similarity; (3) a boxplot of precursor-mass discrepancy
+  (measured vs. formula-implied calculated m/z) across the 4 confusion-matrix
+  cells — can't explain SIMBA picking the wrong candidate within a pool (every
+  candidate in a formula-matched pool shares the same calculated precursor,
+  checked directly), but shows a mild overall-difficulty signal.
