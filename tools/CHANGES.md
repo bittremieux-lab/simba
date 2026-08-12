@@ -112,3 +112,29 @@ to a mass range closer to what training actually saw?
   GT-balanced value. The run log reports each bin's thinnest available count
   and the oversampling factor needed, since some cutoffs (especially for
   test-to-candidate) have very few pairs in the sparsest GT bin.
+
+## Mass1 x mass2 heatmaps (8d)
+
+- `plot_mass_heatmaps.py` — one combined figure, 2 rows (test-to-test,
+  test-to-candidate) x 4 columns (MAE, signed bias, mean GT MCES, per-cell
+  Spearman), each its own heatmap with its own colorbar. Test-to-test axes
+  are min/max(mass_a, mass_b) (pairs are unordered, so this avoids a
+  redundant symmetric square); test-to-candidate axes are query/candidate
+  mass, which coincide almost exactly since candidates are formula-matched
+  — confirmed directly, the heatmap concentrates on the diagonal. Fixed
+  100 Da bins, every occupied cell (n >= `--min_n`, default 1,000)
+  annotated in-cell with its value and a compact sample count (`235M`,
+  `79K`). Reuses `mces_calibration_plots.py`'s `scored_pairs_cache.pkl` (no
+  re-scoring/re-embedding); per-cell Spearman is computed via a single
+  sort-and-split rather than looping a boolean mask per cell, since that
+  would be O(n_cells * n) instead of O(n log n) at test-to-test's ~280M
+  pairs.
+- Found that GT MCES saturates at the clip ceiling for size-mismatched
+  test-to-test pairs, which makes their MAE deceptively low (both GT and
+  prediction sit near the ceiling) — the genuinely hard region is
+  size-matched pairs, especially matched-and-large (underestimated by
+  ~13 MCES). For test-to-candidate, bias flips from negative (small mass)
+  to strongly positive (+10 to +12, large mass), and per-cell Spearman goes
+  to ~0/negative for the two largest mass bins (n=56K and 4K, not a
+  small-sample artifact) — SIMBA's retrieval ranking specifically degrades
+  for the largest-mass molecules in that population.
