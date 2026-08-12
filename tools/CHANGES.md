@@ -82,3 +82,33 @@ A single reusable table, plus every SIMBA-vs-cosine comparison built on top of i
   cells — can't explain SIMBA picking the wrong candidate within a pool (every
   candidate in a formula-matched pool shares the same calculated precursor,
   checked directly), but shows a mild overall-difficulty signal.
+
+## Mass-restricted MCES calibration (8c)
+
+Extends `mces_calibration_plots.py` (item 3e, no new file) with a mass-restricted
+view of the same two calibration plots — does calibration change when restricted
+to a mass range closer to what training actually saw?
+
+- Re-filters the SAME already-scored (pred, GT) pairs (no re-scoring, no
+  re-embedding) by `max(mass_query, mass_other) < cutoff` (RDKit `ExactMolWt`
+  on already-canonical SMILES), for `--mass_cutoffs` (default
+  300/350/400/450/500/750/1000 Da) plus "no limit". Produces
+  `binned_box_by_mass_cutoff.png` (2 columns x len(cutoffs)+1 rows, same
+  boxplot style as the standalone plots) and `mae_spearman_by_mass_cutoff.png`
+  (MAE and Spearman vs. cutoff, one line per population).
+- Caches the expensive, cutoff-independent part (candidate-SMILES
+  canonicalization + the dense test-to-test matmul) to
+  `scored_pairs_cache.pkl` in the output dir, so re-running with different
+  cutoffs skips straight to the cheap filtering/plotting step
+  (`--force_recompute` to bypass).
+- `mae_spearman_by_mass_cutoff.png` also overlays a GT-MCES-balanced version
+  of both metrics (dashed): every non-empty GT bin (0-5, 5-10, ..., up to
+  `gt_clip_max`) is resampled to exactly `--gt_balance_target_n` pairs
+  (default 10,000) — oversampled with replacement if a bin has fewer — so
+  the metric isn't dominated by whichever GT range has the most pairs
+  (typically near-0). Revealed that raw test-to-test's "calibration keeps
+  improving with no mass cap" trend reverses once GT-balanced, and that raw
+  test-to-candidate's Spearman is understated at every cutoff vs. its
+  GT-balanced value. The run log reports each bin's thinnest available count
+  and the oversampling factor needed, since some cutoffs (especially for
+  test-to-candidate) have very few pairs in the sparsest GT bin.
