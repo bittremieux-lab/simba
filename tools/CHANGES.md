@@ -138,3 +138,31 @@ to a mass range closer to what training actually saw?
   to ~0/negative for the two largest mass bins (n=56K and 4K, not a
   small-sample artifact) — SIMBA's retrieval ranking specifically degrades
   for the largest-mass molecules in that population.
+
+## Retrieval split comparison — Gaetan's sanity check
+
+Gaetan's question (Slack): is SIMBA's retrieval weakness vs. cosine specific to the
+official MassSpecGym split, or does it hold up more generally? Filled in a 4x3 table
+(4 retrieval methods x 3 splits) to check. See
+`../../NOTES_RETRIEVAL_SPLIT_COMPARISON.md` for the full plan/journal.
+
+- `cosine_retrieval.py` — cosine-embedding counterpart of `simba_retrieval.py`'s
+  train-NN-transfer pipeline (find each test spectrum's nearest *training* spectrum,
+  transfer its fingerprint, rank candidates by Tanimoto) — same pipeline, only the
+  embedding step changes from a trained SIMBA checkpoint to plain binned-spectrum
+  cosine similarity. Needed because no cosine counterpart of this particular
+  retrieval method existed yet.
+- `extract_spectra_by_mgf_index.py` — pulls a split's spectra out of the raw MGF by
+  global index (scaffold-val and Gaetan's own split aren't raw MGF folds, only
+  `mapping.pkl` records which spectra belong to them) into a standalone mini-MGF,
+  so the existing retrieval scripts can be pointed at it unchanged. Self-verifies
+  every extracted group against `mapping.pkl` before declaring success, since a
+  silent index mistake here would silently corrupt everything downstream.
+- `simba_retrieval_iceberg.py` / `cosine_baseline_iceberg.py` — generalized to accept
+  a list of `--candidate_tsv`/`--iceberg_preds` paths (not just one), so new splits'
+  candidate predictions can be combined with the existing 600K-candidate official-split
+  predictions without physically merging files or re-embedding what's already computed.
+
+Result: SIMBA loses to cosine in every cell, on every split — official, Gaetan's own
+split, and the scaffold-held-out split all show the same gap, so it isn't an
+artifact of the official split specifically.

@@ -18,14 +18,22 @@ For each test spectrum:
      the farthest — via a lookup built by tools/prepare_gt_mces_retrieval.py
      + asimov2's exact-MCES computation (see that script's docstring).
 
+--candidate_tsv / --iceberg_preds each accept one path or several (matched
+1:1 by position) -- for scoring a query set whose candidates are split
+across the original candidates_test_official.tsv/preds.hdf5 plus a delta
+file of only the newly-generated pairs (ICEBERG/build_candidate_tsv_delta.py
++ a fresh predict_smis.py run), without needing to physically merge the two
+TSVs/HDF5s first. Delta files use disjoint cand_id numbering by
+construction, so results merge unambiguously.
+
 Usage:
     uv run python tools/simba_retrieval_iceberg.py \\
         --checkpoint /path/to/checkpoint.ckpt \\
         --head_mode cosine_no_head \\
         --mgf /path/to/MassSpecGym.mgf \\
         --candidates /path/to/MassSpecGym_retrieval_candidates_formula.json \\
-        --candidate_tsv /path/to/candidates_test_official.tsv \\
-        --iceberg_preds /path/to/preds.hdf5 \\
+        --candidate_tsv /path/to/candidates_test_official.tsv [/path/to/delta.tsv ...] \\
+        --iceberg_preds /path/to/preds.hdf5 [/path/to/delta_preds.hdf5 ...] \\
         --gt_mces_dir /path/to/gt_mces_retrieval_candidates
 """
 
@@ -43,33 +51,49 @@ from tqdm.auto import tqdm
 from simba.core.data.spectrum import SpectrumExt
 
 
-def load_candidate_index(candidate_tsv: str) -> pd.DataFrame:
-    """Load the (smiles, adduct) -> cand_id / precursor mapping built for ICEBERG."""
-    df = pd.read_csv(candidate_tsv, sep="\t")
+def load_candidate_index(candidate_tsv: str | list[str]) -> pd.DataFrame:
+    """Load the (smiles, adduct) -> cand_id / precursor mapping built for
+    ICEBERG. Accepts one path or a list (e.g. the original
+    candidates_test_official.tsv plus a delta file of new pairs for a
+    different split's query set, built with disjoint cand_id numbering so
+    they never collide) -- concatenated, then indexed as usual."""
+    paths = [candidate_tsv] if isinstance(candidate_tsv, str) else list(candidate_tsv)
+    dfs = [pd.read_csv(p, sep="\t") for p in paths]
+    df = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
     df = df.set_index(["smiles", "ionization"])
     return df
 
 
-def load_iceberg_spectra(iceberg_preds: str, cand_ids: list[str]) -> dict:
-    """Load (masses, intensities) for each cand_id from the ICEBERG predictions HDF5."""
-    result = {}
-    with h5py.File(iceberg_preds, "r") as f:
-        manifest = f["__predspec_manifest__"]
-        name_to_leaf = {}
-        for name, leaf in zip(manifest["name"][:], manifest["leaf_path"][:]):
-            # manifest names are "pred_<spec>"; TSV/cand_ids use "<spec>" without the prefix
-            name_to_leaf[name.decode().removeprefix("pred_")] = leaf.decode()
+def load_iceberg_spectra(iceberg_preds: str | list[str], cand_ids: list[str]) -> dict:
+    """Load (masses, intensities) for each cand_id from the ICEBERG
+    predictions HDF5. Accepts one path or a list (paired with
+    load_candidate_index's multi-path support -- e.g. the original
+    preds.hdf5 plus a delta run's own preds.hdf5) -- results merged into one
+    dict, looked up the same way regardless of which file a cand_id came
+    from."""
+    paths = [iceberg_preds] if isinstance(iceberg_preds, str) else list(iceberg_preds)
+    result: dict = {}
+    wanted = set(cand_ids)
+    for path in paths:
+        with h5py.File(path, "r") as f:
+            manifest = f["__predspec_manifest__"]
+            name_to_leaf = {}
+            for name, leaf in zip(manifest["name"][:], manifest["leaf_path"][:]):
+                # manifest names are "pred_<spec>"; TSV/cand_ids use "<spec>" without the prefix
+                name_to_leaf[name.decode().removeprefix("pred_")] = leaf.decode()
 
-        wanted = set(cand_ids)
-        for name, leaf in tqdm(name_to_leaf.items(), desc="Loading ICEBERG spectra"):
-            if name not in wanted:
-                continue
-            arr = f[leaf]["f"][:]
-            mask = arr[:, 0] > 0
-            result[name] = (
-                arr[mask, 0].astype(np.float64),
-                arr[mask, 1].astype(np.float64),
-            )
+            for name, leaf in tqdm(
+                name_to_leaf.items(),
+                desc=f"Loading ICEBERG spectra ({Path(path).parent.name})",
+            ):
+                if name not in wanted:
+                    continue
+                arr = f[leaf]["f"][:]
+                mask = arr[:, 0] > 0
+                result[name] = (
+                    arr[mask, 0].astype(np.float64),
+                    arr[mask, 1].astype(np.float64),
+                )
     return result
 
 
@@ -261,8 +285,8 @@ def run(
     head_mode: str,
     mgf: str,
     candidates: str,
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     split: str = "test",
     batch_size: int = 512,
     output_tsv: str | None = None,
@@ -387,9 +411,17 @@ def main():
     p.add_argument(
         "--candidate_tsv",
         required=True,
-        help="ICEBERG candidate TSV (smiles/ionization/precursor)",
+        nargs="+",
+        help="ICEBERG candidate TSV(s) (smiles/ionization/precursor) -- "
+        "one path, or several (e.g. the original plus a delta file) "
+        "to be concatenated, matched 1:1 by position with --iceberg_preds",
     )
-    p.add_argument("--iceberg_preds", required=True, help="ICEBERG predictions HDF5")
+    p.add_argument(
+        "--iceberg_preds",
+        required=True,
+        nargs="+",
+        help="ICEBERG predictions HDF5(s) -- one path, or several to merge",
+    )
     p.add_argument("--split", default="test", choices=["val", "test"])
     p.add_argument("--batch_size", type=int, default=512)
     p.add_argument("--output_tsv", default=None)

@@ -14,12 +14,17 @@ that query's own candidate list (<=256 rows) — no SIMBA embedding pass, no
 GPU, so this should run fine directly on the login node (no SLURM job
 needed unless it turns out to be too slow in practice).
 
+--candidate_tsv / --iceberg_preds each accept one path or several (matched
+1:1 by position) -- see simba_retrieval_iceberg.py's docstring for why
+(scoring a query set whose candidates are split across the original files
+plus a delta file of only the newly-generated pairs).
+
 Usage:
     uv run python tools/cosine_baseline_iceberg.py \\
         --mgf /path/to/MassSpecGym.mgf \\
         --candidates /path/to/MassSpecGym_retrieval_candidates_formula.json \\
-        --candidate_tsv /path/to/candidates_test_official.tsv \\
-        --iceberg_preds /path/to/preds.hdf5 \\
+        --candidate_tsv /path/to/candidates_test_official.tsv [/path/to/delta.tsv ...] \\
+        --iceberg_preds /path/to/preds.hdf5 [/path/to/delta_preds.hdf5 ...] \\
         --gt_mces_dir /path/to/gt_mces_retrieval_candidates
 """
 
@@ -68,7 +73,9 @@ def bin_spectra(spectra: list, bin_width: float, max_mz: float) -> sp.csr_matrix
     # coo -> csr sums duplicate (row, col) entries automatically, i.e. multiple
     # peaks landing in the same bin are summed, not overwritten.
     mat = sp.coo_matrix((data, (rows, cols)), shape=(len(spectra), n_bins)).tocsr()
-    mat.data = np.sqrt(mat.data)  # standard intensity compression (matches SIMBA's own preprocessing)
+    mat.data = np.sqrt(
+        mat.data
+    )  # standard intensity compression (matches SIMBA's own preprocessing)
     mat = normalize(mat, norm="l2", axis=1, copy=False)
     return mat
 
@@ -109,8 +116,8 @@ def rank_candidates_cosine(
 def run(
     mgf: str,
     candidates: str,
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     split: str = "test",
     bin_width: float = 0.01,
     max_mz: float = 1100.0,
@@ -217,9 +224,17 @@ def main():
     p.add_argument(
         "--candidate_tsv",
         required=True,
-        help="ICEBERG candidate TSV (smiles/ionization/precursor)",
+        nargs="+",
+        help="ICEBERG candidate TSV(s) (smiles/ionization/precursor) -- "
+        "one path, or several (e.g. the original plus a delta file) "
+        "to be concatenated, matched 1:1 by position with --iceberg_preds",
     )
-    p.add_argument("--iceberg_preds", required=True, help="ICEBERG predictions HDF5")
+    p.add_argument(
+        "--iceberg_preds",
+        required=True,
+        nargs="+",
+        help="ICEBERG predictions HDF5(s) -- one path, or several to merge",
+    )
     p.add_argument("--split", default="test", choices=["val", "test"])
     p.add_argument("--bin_width", type=float, default=0.01, help="m/z bin width (Da)")
     p.add_argument(
