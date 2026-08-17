@@ -166,3 +166,81 @@ official MassSpecGym split, or does it hold up more generally? Filled in a 4x3 t
 Result: SIMBA loses to cosine in every cell, on every split — official, Gaetan's own
 split, and the scaffold-held-out split all show the same gap, so it isn't an
 artifact of the official split specifically.
+
+## Retrieval error deep-dive: oracle upper bound, error structure, precursor mass
+
+Continuation of Gaetan's sanity-check table plus a deeper look at *why* SIMBA loses
+to cosine specifically on the official split (Wout's questions on Slack). See
+`../../NOTES_RETRIEVAL_SPLIT_COMPARISON.md` for the oracle row's journal entry.
+
+- `oracle_retrieval_gt_mces.py` — 6th table row: oracle GT-MCES NN-transfer, an
+  upper bound on the train-NN-transfer rows. Same pipeline as
+  `simba_retrieval.py`/`cosine_retrieval.py`, except the nearest-training-neighbor
+  is picked by TRUE structural distance (`max(lb_matrix, all_smiles_mces.hdf5)`,
+  both pre-existing all-vs-all matrices, no new MCES computation) instead of
+  embedding similarity. Fingerprinting is deliberately reordered to run *after* the
+  oracle lookup (unlike the SIMBA/cosine rows, the oracle pick doesn't depend on
+  fingerprints at all) so only train molecules actually selected as a nearest
+  neighbor get fingerprinted, not the whole pool. Needs the whole `lb_matrix.npy`
+  (116 GB) loaded fully into RAM, not memory-mapped — mmap turned ~35M scattered
+  lookups into a 2+ hour stall; a full sequential load fixed it (~4-7 min per split).
+  Result: oracle roughly doubles both real NN-transfer methods on every split, still
+  short of ICEBERG+Cosine — and its own diagnostic shows the official split has no
+  training analog closer than GT MCES=10 for any test molecule, vs. 1-3 for the
+  other two splits, explaining a chunk of the official-vs-other-splits gap directly.
+- `hit1_by_mass_cutoff.py` — hit@1 (not MAE/Spearman) vs. mass cutoff, reusing item
+  8b's `retrieval_comparison_table.csv` directly. Filters by the query molecule's
+  own mass (a per-spectrum metric, unlike 8c's pair-level `max(mass_query,
+  mass_other)`). hit@1 drops from 17.4% (<300 Da) to 10.25% (no limit) — a real but
+  modest effect, not the dominant driver of SIMBA's retrieval gap.
+- `synthetic_mae_vs_hit1.py` — interpolates `c = gt_mces + (simba_mces - gt_mces) * w`
+  from the perfect predictor (w=0) toward SIMBA's own real prediction (w=1) on the
+  same table, tracking hit@1 as it goes. w=1 exactly reproduces SIMBA's known
+  official-split hit@1 (10.25%, MAE=7.18) — a built-in correctness check. Answers
+  "how much would SIMBA's MAE need to improve to close the gap with cosine": an
+  MAE of ~6.5 already doubles hit@1, ~5 would beat cosine outright. Ceiling isn't
+  literally 100% even at w=0 — 27/17,555 test spectra have multiple candidates tied
+  at GT MCES=0 (stereoisomers MCES can't distinguish), broken fairly via a
+  shuffle-then-idxmin tie-break (confirmed the candidate JSON lists the true
+  candidate first in 100% of groups, so an unshuffled tie-break would hand it every
+  win). An earlier version also compared against independent random noise at
+  matching MAE — dropped per request, kept only the real-error interpolation.
+- `plot_retrieval_comparison_checks.py` — added a 4th check, `run_score_heatmaps`:
+  SIMBA-predicted-MCES x cosine-similarity 2D histograms (+ per-axis marginal
+  histograms) for the true candidate, one per confusion-matrix cell, saved at both
+  log and linear color scales. Also: `cosine_hit1` now excludes floor-tie wins
+  (cosine_similarity exactly 0 for the whole candidate pool, i.e. arbitrary
+  list-order luck — confirmed 100% of these have the true candidate listed first in
+  the candidate JSON) from *every* check in the file, moving cosine's table-derived
+  hit@1 from 37.59% to a corrected 31.89%; `report_zero_cosine_hits` keeps a
+  separate raw flag since it's specifically diagnosing this exact phenomenon. The
+  precursor-mass-discrepancy boxplot now uses the FULL 17,555-query population (not
+  a 100/cell sample) and reads `test_precursor_mz`/`candidate_precursor_mz` straight
+  off the table (see `add_precursor_columns.py`) instead of a fresh MGF scan +
+  per-row RDKit-canonicalized candidate_tsv lookup every run — that lookup alone
+  used to take ~44 minutes; now the whole 4-check script runs in ~7 seconds.
+- `add_precursor_columns.py` — extends `retrieval_comparison_table.csv` with
+  `test_precursor_mz` (measured, one MGF scan) and `candidate_precursor_mz`
+  (calculated, already sitting in `candidate_tsv` — no new mass computation, just a
+  one-time canonicalization of its 600,455 raw SMILES so it joins against the
+  table's already-canonical `candidate_smiles`). Caches the canonical lookup to disk
+  so no future script pays that cost again. Backs up the table before overwriting.
+- `plot_low_cosine_hit_examples.py` — 10 random examples of cosine "hits" with
+  genuinely low but nonzero similarity (0 < sim < 0.05, i.e. not a floor-tie by the
+  strict definition) — real vs. ICEBERG-predicted-candidate mirror plots, titled
+  with candidate pool size and second-best cosine similarity. Most (7/10) still have
+  a second-best of ~0 too, i.e. still wins by default, just with a technically
+  nonzero winning value.
+- `plot_mces_vs_precursor_ppm.py` — does SIMBA's predicted MCES for the true
+  candidate track precursor-mass discrepancy (measured vs. calculated m/z)? Real but
+  partial effect (r=0.334 on log-ppm; binned mean rises from ~13 near-zero ppm to
+  ~18-23 at higher ppm) — but predicted MCES is already ~13 even at near-perfect
+  mass match, so this isn't the main driver of SIMBA's confidence. Candidates used
+  the calculated precursor and test spectra the measured one when passing through
+  SIMBA for these predictions; worth rechecking with measured precursor used
+  uniformly for both.
+- `plot_confusion_matrix_examples.py` — dropped `cosine_mces` from example titles
+  (not a calibrated quantity, misleading next to SIMBA's real one); fixed a
+  title/content overlap (more vertical spacing + padding); excludes cosine floor-tie
+  wins (rank=1 but similarity<0.01) from the example pool, same fix as the
+  confusion-matrix correction above.

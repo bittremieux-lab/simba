@@ -157,10 +157,17 @@ def pick_examples(
     correct["simba_hit1"] = correct["simba_rank"] == 1
     correct["cosine_hit1"] = correct["cosine_rank"] == 1
 
+    # Cells where cosine "wins" (both_correct, cosine_only) exclude floor-tie
+    # wins -- cosine_similarity < 0.01 means the whole candidate pool was
+    # ~flat at 0 (see plot_retrieval_comparison_checks.py's
+    # report_zero_cosine_hits), so cosine's rank-1 there is arbitrary sort
+    # order, not a real example of cosine "working." Doesn't apply to
+    # simba_only/neither -- cosine didn't win there regardless of its score.
+    cosine_real_win = correct["cosine_hit1"] & (correct["cosine_similarity"] >= 0.01)
     masks = {
-        "both_correct": correct["simba_hit1"] & correct["cosine_hit1"],
+        "both_correct": correct["simba_hit1"] & cosine_real_win,
         "simba_only": correct["simba_hit1"] & ~correct["cosine_hit1"],
-        "cosine_only": ~correct["simba_hit1"] & correct["cosine_hit1"],
+        "cosine_only": ~correct["simba_hit1"] & cosine_real_win,
         "neither": ~correct["simba_hit1"] & ~correct["cosine_hit1"],
     }
     rng = np.random.default_rng(seed)
@@ -323,7 +330,7 @@ def plot_mirror(
     ax.vlines(real_mz, 0, real_norm, color="tab:blue", linewidth=1)
     ax.vlines(iceberg_mz, 0, -iceberg_norm, color="tab:red", linewidth=1)
     ax.axhline(0, color="black", linewidth=0.5)
-    ax.set_title(title, fontsize=7)
+    ax.set_title(title, fontsize=7, pad=8)
     ax.set_ylim(-1.15, 1.15)
     ax.tick_params(labelsize=7)
 
@@ -366,7 +373,10 @@ def run(
     n_cat = len(CELLS)
     n_cols = n_per_cell
     n_rows = n_cat * 2
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.2 * n_rows))
+    # 3.6 (up from 3.2) + an explicit hspace below: the 3-line titles were
+    # colliding with the row of subplots above them -- tight_layout alone
+    # wasn't leaving enough room for them.
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.6 * n_rows))
     if n_rows == 1:
         axes = axes[np.newaxis, :]
     if n_cols == 1:
@@ -398,8 +408,12 @@ def run(
                 f"idx={spec_idx} [raw]\n"
                 f"SIMBA: r={row['simba_rank']:.0f} sim={row['simba_similarity']:.2f} "
                 f"mces={row['simba_mces']:.1f}\n"
-                f"cosine: r={row['cosine_rank']:.0f} sim={row['cosine_similarity']:.2f} "
-                f"mces={row['cosine_mces']:.1f}"
+                f"cosine: r={row['cosine_rank']:.0f} sim={row['cosine_similarity']:.2f}"
+                # cosine_mces dropped -- not a calibrated quantity (raw cosine
+                # similarity was never trained to predict MCES, see
+                # cosine_similarity_pool_distribution_plots.py's module
+                # docstring), just a same-formula convenience transform that
+                # doesn't mean anything to show alongside SIMBA's real one.
             )
             plot_mirror(
                 raw_ax, real_mz, real_intensity, iceberg_mz, iceberg_intensity, title
@@ -430,6 +444,7 @@ def run(
         fontsize=11,
     )
     fig.tight_layout()
+    fig.subplots_adjust(hspace=0.9, top=0.94)
     out_path = out_dir / "confusion_matrix_examples.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
