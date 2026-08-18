@@ -355,7 +355,6 @@ class ValMetricsCallback(Callback):
             return
 
         step = trainer.global_step
-        epoch = trainer.current_epoch
 
         for idx in sorted(self._preds.keys()):
             buf = self._preds[idx]
@@ -380,9 +379,10 @@ class ValMetricsCallback(Callback):
             abs_err = np.abs(pred_mces - gt_mces)
             is_self = mol_idx_0 == mol_idx_1
 
-            self._log_binned_mae(pl_module, gt_mces, abs_err, is_self, val_name)
-            self._save_csv(
-                epoch,
+            bin_idx = self._bin_index(gt_mces, is_self)
+            self._log_binned_mae(pl_module, abs_err, bin_idx, val_name)
+            self._log_overlap_coefficients(pl_module, pred_mces, bin_idx, val_name)
+            self._save_consolidated(
                 step,
                 val_name,
                 mol_idx_0,
@@ -393,8 +393,8 @@ class ValMetricsCallback(Callback):
                 smiles_1,
                 gt_mces,
                 pred_mces,
-                abs_err,
                 is_self,
+                bin_idx,
             )
             self._plot_binned_box(gt_mces, pred_mces, is_self, step, val_name)
 
@@ -413,9 +413,8 @@ class ValMetricsCallback(Callback):
         )
         return idx
 
-    def _log_binned_mae(self, pl_module, gt_mces, abs_err, is_self, val_name):
+    def _log_binned_mae(self, pl_module, abs_err, bin_idx, val_name):
         labels = self._bin_labels()
-        bin_idx = self._bin_index(gt_mces, is_self)
         for li, label in enumerate(labels):
             mask = bin_idx == li
             n = int(mask.sum())
@@ -431,9 +430,69 @@ class ValMetricsCallback(Callback):
                 add_dataloader_idx=False,
             )
 
-    def _save_csv(
+    @staticmethod
+    def _overlap_coefficient(a: np.ndarray, b: np.ndarray, n_bins: int = 50) -> float:
+        """Overlapping coefficient between two prediction samples: sum of
+        min(p_a, p_b) over a shared histogram, each normalized to sum to 1.
+        0 = fully separated, 1 = identical distributions -- unlike a rank/AUC
+        test, this isn't fooled by large n into looking separated when there's
+        still real practical overlap."""
+        if len(a) == 0 or len(b) == 0:
+            return float("nan")
+        lo, hi = min(a.min(), b.min()), max(a.max(), b.max())
+        if hi <= lo:
+            return 1.0
+        edges = np.linspace(lo, hi, n_bins + 1)
+        pa, _ = np.histogram(a, bins=edges)
+        pb, _ = np.histogram(b, bins=edges)
+        pa = pa / pa.sum()
+        pb = pb / pb.sum()
+        return float(np.minimum(pa, pb).sum())
+
+    def _log_overlap_coefficients(
+        self, pl_module, pred_mces, bin_idx, val_name, max_skip=4
+    ):
+        """Overlap coefficient between GT-MCES bins at skip distances
+        0..max_skip (0 = adjacent, e.g. self vs (0,5]; 1 = one bin further,
+        e.g. self vs (5,10]; ...), logged the same way as _log_binned_mae so
+        the dashboard's overlap-coefficient view can read these directly for
+        skip 0-4 instead of always recomputing from the per-pair data. Also
+        logs val_overlap_avg/skip{k}/{val_name}, the mean over all bin-pairs
+        at that skip distance -- one summary number per skip level, same
+        idea as "overall MAE" alongside the per-bin MAE lines."""
+        labels = self._bin_labels()
+        n_bins = len(labels)
+        pred_by_bin = {
+            i: pred_mces[bin_idx == i] for i in range(n_bins) if (bin_idx == i).any()
+        }
+        for skip in range(max_skip + 1):
+            skip_values = []
+            for i in range(n_bins - skip - 1):
+                j = i + skip + 1
+                if i not in pred_by_bin or j not in pred_by_bin:
+                    continue
+                ovl = self._overlap_coefficient(pred_by_bin[i], pred_by_bin[j])
+                pl_module.log(
+                    f"val_overlap/{labels[i]}_vs_{labels[j]}_skip{skip}/{val_name}",
+                    ovl,
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                    add_dataloader_idx=False,
+                )
+                skip_values.append(ovl)
+            if skip_values:
+                pl_module.log(
+                    f"val_overlap_avg/skip{skip}/{val_name}",
+                    float(np.mean(skip_values)),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                    add_dataloader_idx=False,
+                )
+
+    def _save_consolidated(
         self,
-        epoch,
         step,
         val_name,
         mol_idx_0,
@@ -444,34 +503,61 @@ class ValMetricsCallback(Callback):
         smiles_1,
         gt_mces,
         pred_mces,
-        abs_err,
         is_self,
+        bin_idx,
     ):
+        """Wide per-pair table: static columns (pair identity, GT, bin) once,
+        one pred_mces_step{N:06d} column added per validation check, instead
+        of a full fresh CSV each time (which was ~750MB x every check on the
+        Gaetan-split val set -- ~120GB for 160 checks alone). Row order is
+        positionally aligned across checks (not re-joined by pair identity)
+        because it's guaranteed stable: the val DataLoader is sequential
+        (shuffle=False, see create_dataloaders in workflows/training.py), so
+        every check iterates the exact same pair order. The array_equal
+        check below makes that assumption loud instead of silently
+        misaligning predictions with the wrong pairs if it's ever violated
+        (e.g. shuffling gets reintroduced for val).
+        """
         import pandas as pd
 
         labels = self._bin_labels()
-        bin_idx = self._bin_index(gt_mces, is_self)
-        df = pd.DataFrame(
-            {
-                "epoch": epoch,
-                "step": step,
-                "val_name": val_name,
-                "mol_idx_0": mol_idx_0,
-                "mol_idx_1": mol_idx_1,
-                "spec_idx_0": spec_idx_0,
-                "spec_idx_1": spec_idx_1,
-                "smiles_0": smiles_0,
-                "smiles_1": smiles_1,
-                "gt_mces": gt_mces,
-                "pred_mces": pred_mces,
-                "abs_error": abs_err,
-                "mces_bin": [labels[i] for i in bin_idx],
-                "is_self_pair": is_self,
-                "same_spectrum": spec_idx_0 == spec_idx_1,
-            }
+        path = os.path.join(
+            self.output_dir, f"val_pairs_{val_name}_consolidated.parquet"
         )
-        path = os.path.join(self.output_dir, f"val_pairs_{val_name}_step{step:06d}.csv")
-        df.to_csv(path, index=False)
+        pred_col = f"pred_mces_step{step:06d}"
+
+        if not os.path.exists(path):
+            df = pd.DataFrame(
+                {
+                    "mol_idx_0": mol_idx_0,
+                    "mol_idx_1": mol_idx_1,
+                    "spec_idx_0": spec_idx_0,
+                    "spec_idx_1": spec_idx_1,
+                    "smiles_0": smiles_0,
+                    "smiles_1": smiles_1,
+                    "gt_mces": gt_mces,
+                    "mces_bin": [labels[i] for i in bin_idx],
+                    "is_self_pair": is_self,
+                    "same_spectrum": spec_idx_0 == spec_idx_1,
+                }
+            )
+            df[pred_col] = pred_mces.astype(np.float32)
+            df.to_parquet(path, index=False, compression="snappy")
+            return
+
+        base = pd.read_parquet(path)
+        if len(base) != len(mol_idx_0) or not (
+            np.array_equal(base["mol_idx_0"].to_numpy(), mol_idx_0)
+            and np.array_equal(base["mol_idx_1"].to_numpy(), mol_idx_1)
+        ):
+            raise RuntimeError(
+                "val_pairs_consolidated row order/count doesn't match this check's "
+                "pairs, so a positional column append isn't safe. This relies on the "
+                "val DataLoader being sequential (shuffle=False) -- something must "
+                "have changed that."
+            )
+        base[pred_col] = pred_mces.astype(np.float32)
+        base.to_parquet(path, index=False, compression="snappy")
 
     def _plot_binned_box(self, gt_mces, pred_mces, is_self, step, val_name):
         """Same convention as mces_calibration_plots.py's binned_box_on_ax

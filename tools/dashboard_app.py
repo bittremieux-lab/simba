@@ -128,6 +128,64 @@ def load_pair_csv(path_str: str, columns: tuple[str, ...]) -> pd.DataFrame:
     return pd.read_csv(path_str, usecols=list(columns))
 
 
+def consolidated_parquet_path(exp_dir: Path, val_name: str) -> Path:
+    return exp_dir / f"val_pairs_{val_name}_consolidated.parquet"
+
+
+_PARQUET_PRED_COL_RE = re.compile(r"^pred_mces_step(\d+)$")
+
+
+@st.cache_data(show_spinner=False)
+def list_consolidated_steps(exp_dir_str: str, val_name: str) -> list[int]:
+    """Steps available in the consolidated parquet file (one static table +
+    one pred_mces_step{N} column per validation check), read from its schema
+    only -- no data loaded."""
+    path = consolidated_parquet_path(Path(exp_dir_str), val_name)
+    if not path.exists():
+        return []
+    import pyarrow.parquet as pq
+
+    steps = []
+    for name in pq.ParquetFile(path).schema.names:
+        m = _PARQUET_PRED_COL_RE.match(name)
+        if m:
+            steps.append(int(m.group(1)))
+    return sorted(steps)
+
+
+def list_available_steps(exp_dir: Path, val_name: str) -> list[int]:
+    """Prefer the consolidated parquet file's steps when present (its whole
+    point is being cheap to read regardless of how many checks it covers);
+    fall back to per-step CSVs for experiments that don't have one yet."""
+    consolidated = list_consolidated_steps(str(exp_dir), val_name)
+    return consolidated if consolidated else list_csv_steps(exp_dir, val_name)
+
+
+@st.cache_data(show_spinner="Loading per-pair data ...")
+def load_pair_data_for_step(
+    exp_dir_str: str, val_name: str, step: int, columns: tuple[str, ...]
+) -> pd.DataFrame:
+    """Same interface as load_pair_csv (a DataFrame with a plain 'pred_mces'
+    column for this one step) but transparently prefers the consolidated
+    parquet file when one exists -- reads only the needed static columns
+    plus this step's single prediction column, columnar and fast regardless
+    of how many total checks the run has had. Falls back to the per-step CSV
+    for experiments without a consolidated file yet."""
+    exp_dir = Path(exp_dir_str)
+    parquet_path = consolidated_parquet_path(exp_dir, val_name)
+    if parquet_path.exists():
+        pred_col = f"pred_mces_step{step:06d}"
+        wants_pred = "pred_mces" in columns
+        static_needed = [c for c in columns if c != "pred_mces"]
+        read_cols = static_needed + ([pred_col] if wants_pred else [])
+        df = pd.read_parquet(parquet_path, columns=read_cols)
+        if wants_pred:
+            df = df.rename(columns={pred_col: "pred_mces"})
+        return df
+    csv_path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
+    return load_pair_csv(str(csv_path), columns)
+
+
 def render_loss_tab(df: pd.DataFrame, x_col: str, x_label: str):
     fig = go.Figure()
     train = df[df["train_loss_step"].notna()]
@@ -170,8 +228,7 @@ def bin_counts_for_val(exp_dir_str: str, val_name: str, step: int) -> dict[str, 
     1000/70000/143000 all gave the exact same per-bin counts for this
     experiment) -- one step's CSV is enough to label every point on the
     curve, no need to recompute per step."""
-    path = Path(exp_dir_str) / f"val_pairs_{val_name}_step{step:06d}.csv"
-    df = pd.read_csv(path, usecols=["mces_bin"])
+    df = load_pair_data_for_step(exp_dir_str, val_name, step, ("mces_bin",))
     return df["mces_bin"].value_counts().to_dict()
 
 
@@ -187,8 +244,9 @@ def mol_idx_mass_lookup(exp_dir_str: str, val_name: str, step: int) -> dict[int,
     identity (and therefore mass) doesn't depend on model weights or
     training step, so one step's smiles_0/smiles_1<->mol_idx_0/mol_idx_1
     correspondence is enough for the whole run."""
-    path = Path(exp_dir_str) / f"val_pairs_{val_name}_step{step:06d}.csv"
-    df = pd.read_csv(path, usecols=["mol_idx_0", "mol_idx_1", "smiles_0", "smiles_1"])
+    df = load_pair_data_for_step(
+        exp_dir_str, val_name, step, ("mol_idx_0", "mol_idx_1", "smiles_0", "smiles_1")
+    )
     idx_to_smiles = dict(zip(df["mol_idx_0"], df["smiles_0"]))
     idx_to_smiles.update(zip(df["mol_idx_1"], df["smiles_1"]))
     unique_smiles = tuple(sorted(set(idx_to_smiles.values())))
@@ -233,11 +291,13 @@ def build_mass_filtered_metrics_figure(
     mces_range: tuple[float, float],
 ) -> go.Figure:
     per_step = []
-    progress = st.progress(0.0, text="Reading per-pair CSVs ...")
+    progress = st.progress(0.0, text="Reading per-pair data ...")
     for i, step in enumerate(steps):
-        path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
-        pair_df = load_pair_csv(
-            str(path), ("mol_idx_0", "mol_idx_1", "gt_mces", "pred_mces", "mces_bin")
+        pair_df = load_pair_data_for_step(
+            str(exp_dir),
+            val_name,
+            step,
+            ("mol_idx_0", "mol_idx_1", "gt_mces", "pred_mces", "mces_bin"),
         )
         per_step.append(
             _mass_diff_masked_bin_stats(pair_df, mol_mass, mass_range[0], mass_range[1])
@@ -371,11 +431,13 @@ def build_overlap_coefficient_figure(
     adjacent_pairs = list(zip(active_labels, active_labels[skip + 1 :]))
 
     per_step = []
-    progress = st.progress(0.0, text="Reading per-pair CSVs ...")
+    progress = st.progress(0.0, text="Reading per-pair data ...")
     for i, step in enumerate(steps):
-        path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
-        pair_df = load_pair_csv(
-            str(path), ("mol_idx_0", "mol_idx_1", "pred_mces", "mces_bin")
+        pair_df = load_pair_data_for_step(
+            str(exp_dir),
+            val_name,
+            step,
+            ("mol_idx_0", "mol_idx_1", "pred_mces", "mces_bin"),
         )
         pred_by_bin = _mass_diff_masked_pred_by_bin(
             pair_df, mol_mass, mass_range[0], mass_range[1]
@@ -395,6 +457,24 @@ def build_overlap_coefficient_figure(
     progress.empty()
 
     fig = go.Figure()
+
+    avg_xy = [
+        (s, np.mean([v[0] for v in res.values()]))
+        for s, res in zip(steps, per_step)
+        if res
+    ]
+    if avg_xy:
+        xs, avgs = zip(*avg_xy)
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=avgs,
+                mode="lines+markers",
+                name="average (over currently-filtered pairs)",
+                line={"width": 3, "color": "black", "dash": "dot"},
+            )
+        )
+
     for i, (a, b) in enumerate(adjacent_pairs):
         xy = [(s, res[(a, b)]) for s, res in zip(steps, per_step) if (a, b) in res]
         if not xy:
@@ -423,6 +503,80 @@ def build_overlap_coefficient_figure(
             f"Predicted-MCES overlap with {skip_desc} -- "
             f"mass diff in [{mass_range[0]:g}, {mass_range[1]:g}] Da"
         ),
+    )
+    return fig
+
+
+_LOGGED_MAX_SKIP = (
+    4  # ValMetricsCallback logs skip 0..4 directly; beyond that needs recomputation
+)
+
+
+def build_overlap_fast_figure(
+    df: pd.DataFrame,
+    x_col: str,
+    x_label: str,
+    skip: int,
+    include_self: bool,
+    mces_range: tuple[float, float],
+    bin_counts: dict,
+) -> go.Figure:
+    """Reads val_overlap/{a}_vs_{b}_skip{skip}/{val_name} straight from the
+    pre-logged metrics.csv -- same fast path as MAE, valid for skip 0-4 since
+    that's what ValMetricsCallback logs directly every check."""
+    active_labels = _active_bin_labels(include_self, mces_range)
+    pairs = list(zip(active_labels, active_labels[skip + 1 :]))
+    fig = go.Figure()
+
+    avg_matching = [
+        c for c in df.columns if c.startswith(f"val_overlap_avg/skip{skip}/")
+    ]
+    for col in avg_matching:
+        sub = df[df[col].notna()]
+        if not len(sub):
+            continue
+        val_name = col.rsplit("/", 1)[-1]
+        fig.add_trace(
+            go.Scatter(
+                x=sub[x_col],
+                y=sub[col],
+                mode="lines+markers",
+                name=f"average [{val_name}]",
+                line={"width": 3, "color": "black", "dash": "dot"},
+            )
+        )
+
+    for i, (a, b) in enumerate(pairs):
+        prefix = f"val_overlap/{a}_vs_{b}_skip{skip}/"
+        matching = [c for c in df.columns if c.startswith(prefix)]
+        for col in matching:
+            sub = df[df[col].notna()]
+            if not len(sub):
+                continue
+            val_name = col.rsplit("/", 1)[-1]
+            n_a = bin_counts.get(val_name, {}).get(a)
+            n_b = bin_counts.get(val_name, {}).get(b)
+            n_label = (
+                f" (n={n_a:,}/{n_b:,})" if n_a is not None and n_b is not None else ""
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[x_col],
+                    y=sub[col],
+                    mode="lines+markers",
+                    name=f"{a} vs {b} [{val_name}]{n_label}",
+                    line={"width": 1.5, "color": _TAB10[i % len(_TAB10)]},
+                    marker={"size": 4},
+                )
+            )
+    fig.update_layout(
+        xaxis_title=x_label,
+        yaxis_title="Overlap coefficient (0=separated, 1=identical)",
+        yaxis={"range": [0, 1]},
+        legend={"orientation": "h", "yanchor": "top", "y": -0.2},
+        height=600,
+        margin={"t": 40},
+        title=f"Predicted-MCES overlap, skip={skip} (adjacent bins if 0)",
     )
     return fig
 
@@ -456,24 +610,42 @@ def render_metrics_tab(df: pd.DataFrame, x_col: str, x_label: str, exp_dir: Path
     )
     bin_counts = {}
     for val_name in val_names_present:
-        steps = list_csv_steps(exp_dir, val_name)
+        steps = list_available_steps(exp_dir, val_name)
         bin_counts[val_name] = (
             bin_counts_for_val(str(exp_dir), val_name, steps[-1]) if steps else {}
+        )
+
+    # Skip control (overlap coefficient only). ValMetricsCallback logs skip
+    # 0-4 directly every check, so those read from metrics.csv just like
+    # MAE; skip > 4 has no pre-logged fast path and needs recomputation.
+    skip = 0
+    if metric_choice != "MAE":
+        n_active = len(_active_bin_labels(include_self, mces_range))
+        max_skip = max(0, n_active - 2)
+        skip = st.number_input(
+            "Bins to skip between comparisons (0 = adjacent, e.g. self vs (0,5]; "
+            "1 = skip one, e.g. self vs (5,10]; 2 = self vs (10,15]; ... "
+            f"0-{_LOGGED_MAX_SKIP} are pre-logged/instant, higher needs recomputation)",
+            min_value=0,
+            max_value=max_skip,
+            value=0,
+            step=1,
         )
 
     # Molecule mass-difference filter. Unlike the GT-MCES filter above (a
     # free reshuffle of already-logged per-bin scalars), this dimension was
     # never logged at training time -- honoring it means recomputing directly
-    # from each validation check's per-pair CSV (mol mass via RDKit, joined
-    # against that step's gt/pred), so *every* curve reflects only
-    # mass-difference-matching pairs. That's multiple large file reads
-    # instead of one cheap metrics.csv read, so it's opt-in behind a button
-    # rather than reactive like the rest of this tab. The overlap-coefficient
-    # metric needs each bin's full predicted-value array (not an aggregate
-    # scalar), so it has no pre-logged fast path at all -- it always uses
-    # this same heavier per-pair-CSV route, mass filter or not.
+    # from each validation check's per-pair data (mol mass via RDKit, joined
+    # against that step's gt/pred). With the consolidated parquet file
+    # (static columns once + one pred_mces_step{N} column per check), this is
+    # cheap regardless of how many checks are involved. Without it (older
+    # experiments, per-step CSVs only), it's still a large file read per
+    # check.
     primary_val = val_names_present[0] if val_names_present else None
-    steps_avail = list_csv_steps(exp_dir, primary_val) if primary_val else []
+    steps_avail = list_available_steps(exp_dir, primary_val) if primary_val else []
+    has_consolidated = (
+        bool(primary_val) and consolidated_parquet_path(exp_dir, primary_val).exists()
+    )
 
     st.divider()
     mass_diff_range, max_diff = None, 1.0
@@ -500,38 +672,45 @@ def render_metrics_tab(df: pd.DataFrame, x_col: str, x_label: str, exp_dir: Path
         0.0,
         max_diff,
     )
-    needs_heavy_path = metric_choice != "MAE" or mass_filter_active
+    # Skip 0-4 has a fast path (ValMetricsCallback logs it directly) only if
+    # this run's metrics.csv actually has those columns -- older runs (like
+    # any experiment before this feature existed) don't, so fall back to
+    # recomputing from the per-pair data instead of silently showing an
+    # empty chart.
+    overlap_logged_at_all = any(c.startswith("val_overlap/") for c in df.columns)
+    overlap_not_logged = metric_choice != "MAE" and not overlap_logged_at_all
+    overlap_needs_recompute = metric_choice != "MAE" and (
+        skip > _LOGGED_MAX_SKIP or overlap_not_logged
+    )
+    needs_heavy_path = mass_filter_active or overlap_needs_recompute
 
     if needs_heavy_path:
+        if overlap_not_logged and not mass_filter_active and skip <= _LOGGED_MAX_SKIP:
+            st.info(
+                "Overlap coefficient isn't in this run's metrics.csv (it predates "
+                "this feature) -- building it from the per-pair data instead."
+            )
         if not steps_avail:
             return
         effective_mass_range = mass_diff_range or (0.0, max_diff)
 
-        skip = 0
-        if metric_choice != "MAE":
-            n_active = len(_active_bin_labels(include_self, mces_range))
-            max_skip = max(0, n_active - 2)
-            skip = st.number_input(
-                "Bins to skip between comparisons (0 = adjacent, e.g. self vs (0,5]; "
-                "1 = skip one, e.g. self vs (5,10]; 2 = self vs (10,15]; ...)",
-                min_value=0,
-                max_value=max_skip,
-                value=0,
-                step=1,
-            )
-
+        default_checks = min(10, len(steps_avail))
         max_checks = st.slider(
-            "Validation checks to sample (fewer = faster; each one is a full per-pair CSV read)",
-            min_value=min(5, len(steps_avail)),
+            "Validation checks to use (fewer = faster -- 160 available checks can "
+            "take a couple minutes to build; 10-30 is usually plenty)",
+            min_value=min(2, len(steps_avail)),
             max_value=len(steps_avail),
-            value=min(30, len(steps_avail)),
+            value=default_checks,
         )
         stride = max(1, len(steps_avail) // max_checks)
         sampled_steps = steps_avail[::stride]
         if steps_avail[-1] not in sampled_steps:
             sampled_steps.append(steps_avail[-1])
+        source_note = (
+            "consolidated file" if has_consolidated else "per-step CSVs (slower)"
+        )
         st.caption(
-            f"Will read {len(sampled_steps)} per-pair CSVs (of {len(steps_avail)} available)."
+            f"Using {len(sampled_steps)} of {len(steps_avail)} available checks ({source_note})."
         )
         if st.button("Build curves"):
             if metric_choice == "MAE":
@@ -556,6 +735,15 @@ def render_metrics_tab(df: pd.DataFrame, x_col: str, x_label: str, exp_dir: Path
                     skip,
                 )
             st.plotly_chart(fig, width="stretch")
+        return
+
+    if metric_choice != "MAE":
+        # Fast path: skip 0-4, no mass filter -- read straight from the
+        # pre-logged metrics.csv, same as MAE below.
+        fig = build_overlap_fast_figure(
+            df, x_col, x_label, skip, include_self, mces_range, bin_counts
+        )
+        st.plotly_chart(fig, width="stretch")
         return
 
     # Fast path: MAE metric, mass-difference filter at its default (any
@@ -707,9 +895,12 @@ def render_box_plot_tab(exp_dir: Path):
 
     st.divider()
     st.subheader(f"Fine-grained box plot -- same step ({step:,}), custom bin width")
-    csv_path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
-    if not csv_path.exists():
-        st.info(f"No val_pairs CSV found for step {step}.")
+    has_data = (
+        consolidated_parquet_path(exp_dir, val_name).exists()
+        or (exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv").exists()
+    )
+    if not has_data:
+        st.info(f"No per-pair data found for step {step}.")
         return
 
     col1, col2 = st.columns([1, 2])
@@ -718,11 +909,13 @@ def render_box_plot_tab(exp_dir: Path):
             "Bin width (MCES units)", min_value=0.1, max_value=10.0, value=1.0, step=0.5
         )
 
-    # Only ever touches this one step's CSV (already loaded/cheap), so unlike
-    # the Validation Metrics tab's mass filter, this stays reactive -- no
-    # button needed.
-    pair_df = load_pair_csv(
-        str(csv_path),
+    # Only ever touches this one step's data (already fast/cheap either way),
+    # so unlike the Validation Metrics tab's mass filter, this stays
+    # reactive -- no button needed.
+    pair_df = load_pair_data_for_step(
+        str(exp_dir),
+        val_name,
+        step,
         ("gt_mces", "pred_mces", "is_self_pair", "mol_idx_0", "mol_idx_1"),
     )
     mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
@@ -873,7 +1066,7 @@ def render_mass_heatmap_tab(exp_dir: Path):
         if len(val_names) > 1
         else val_names[0]
     )
-    steps = list_csv_steps(exp_dir, val_name)
+    steps = list_available_steps(exp_dir, val_name)
     if not steps:
         st.info("No val_pairs_*.csv found yet for this val set.")
         return
@@ -899,9 +1092,11 @@ def render_mass_heatmap_tab(exp_dir: Path):
             value=True,
         )
 
-    path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
-    pair_df = load_pair_csv(
-        str(path), ("smiles_0", "smiles_1", "gt_mces", "pred_mces", "is_self_pair")
+    pair_df = load_pair_data_for_step(
+        str(exp_dir),
+        val_name,
+        step,
+        ("smiles_0", "smiles_1", "gt_mces", "pred_mces", "is_self_pair"),
     )
     if not include_self:
         pair_df = pair_df[~pair_df["is_self_pair"].astype(bool)]

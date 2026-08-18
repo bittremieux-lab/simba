@@ -649,31 +649,35 @@ def create_dataloaders(
         pin_memory=True,
     )
 
+    # Validation never shuffles: shuffling exists to decorrelate batches for
+    # SGD training updates, which doesn't apply to a metrics-only forward
+    # pass -- and previously (shuffle=(val_sampler is None), i.e. whenever
+    # resampling is off) it actively hurt: with a single generator built once
+    # and never reset, every validation check drew a *different* permutation
+    # from wherever that generator's state had advanced to, so the same pair
+    # would land in a different CSV row from one check to the next with no
+    # way to align predictions across checks except by re-joining on pair
+    # identity. Sequential order (or, with resampling on, the sampler's own
+    # already-fixed seed=0) makes every check's row order identical.
     dataloader_val_scaffold = DataLoader(
         dataset_val,
         batch_size=cfg.training.batch_size,
-        shuffle=(val_sampler is None),
+        shuffle=False,
         sampler=val_sampler,
         num_workers=cfg.hardware.num_workers,
         persistent_workers=cfg.hardware.num_workers > 0,
         pin_memory=True,
-        generator=torch.Generator().manual_seed(42) if val_sampler is None else None,
     )
 
     if dataset_val_official is not None:
         dataloader_val_official = DataLoader(
             dataset_val_official,
             batch_size=cfg.training.batch_size,
-            shuffle=(val_official_sampler is None),
+            shuffle=False,
             sampler=val_official_sampler,
             num_workers=cfg.hardware.num_workers,
             persistent_workers=cfg.hardware.num_workers > 0,
             pin_memory=True,
-            generator=(
-                torch.Generator().manual_seed(43)
-                if val_official_sampler is None
-                else None
-            ),
         )
         return dataloader_train, [dataloader_val_scaffold, dataloader_val_official]
 

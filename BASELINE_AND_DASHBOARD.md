@@ -21,11 +21,12 @@ fronts:
 | Val evaluation | `limit_val_batches=13`, weighted-resampled subset (~53K pairs) | full val set every check (~3.73M pairs), no resampling |
 | Val metrics/plots | Spearman, ED confusion matrix, MCES hexbin | per-GT-MCES-bin MAE (self-pairs as their own bin), full per-pair CSV, GT-binned box plot |
 
-**Status**: cancelled by request at step ~160,000 of a planned 240,000
-(~epoch 16/24, ~67% through). Partial artifacts (checkpoints, per-step CSVs,
-plots, `metrics.csv`) remain under
+**Status**: cancelled by request (twice — once at step ~160,000/240,000, then
+again shortly after a fresh restart once the changes in section 3 landed).
+Not currently running. Partial artifacts (checkpoints, the consolidated
+per-pair parquet, plots, `metrics.csv`) remain under
 `experiments/training/009_msg_gaetan_split_v2_cosine_no_head_1gpu/` and are
-browsable via the dashboard (section 4).
+browsable via the dashboard (section 5).
 
 **To resubmit**: `sbatch tools/slurm/009_msg_gaetan_split_v2_cosine_no_head_1gpu.slurm.sh`
 from the repo root. If you want a genuinely fresh run rather than resuming
@@ -96,12 +97,42 @@ caused multi-hour stalls elsewhere in this project).
   - logs MAE (raw MCES units) per GT-MCES bin, with self-pairs
     (`mol_idx_0==mol_idx_1`) as their own bin rather than folded into the
     lowest numeric bin;
-  - saves the full per-pair CSV: `val_pairs_{val_name}_step{N:06d}.csv`
-    (columns: `epoch, step, val_name, mol_idx_0/1, spec_idx_0/1, smiles_0/1,
-    gt_mces, pred_mces, abs_error, mces_bin, is_self_pair, same_spectrum`);
+  - logs **overlap coefficient** between each bin and its neighbor at skip
+    distances 0-4 (0 = adjacent, e.g. self vs `(0,5]`; 1 = one bin further,
+    e.g. self vs `(5,10]`; ...) — `val_overlap/{a}_vs_{b}_skip{k}/{val_name}`,
+    0 = fully separated, 1 = identical predicted-MCES distributions between
+    the two bins (equals 2x the Bayes-optimal misclassification rate between
+    them under equal priors). Plus `val_overlap_avg/skip{k}/{val_name}`, the
+    mean over all bin-pairs at that skip level, same idea as "overall MAE"
+    alongside the per-bin MAE lines. This is the metric that actually
+    disambiguates "MAE went up" from "the model can no longer tell these
+    bins apart" — MAE conflates calibration drift with real loss of
+    separability, overlap coefficient isolates the latter.
+  - saves/updates one **consolidated parquet file**,
+    `val_pairs_{val_name}_consolidated.parquet`: static per-pair columns
+    (`mol_idx_0/1, spec_idx_0/1, smiles_0/1, gt_mces, mces_bin, is_self_pair,
+    same_spectrum`) written once, then one `pred_mces_step{N:06d}` column
+    *appended* per validation check, instead of a fresh full CSV every time
+    (~750MB x every check → ~120GB for just 160 checks on this val set). The
+    append is **positional**, not a re-join by pair identity — safe only
+    because the val DataLoader is now sequential (see next bullet); this
+    only holds as long as that stays true, so a cheap `array_equal` sanity
+    check raises loudly instead of silently misaligning predictions with the
+    wrong pairs if that assumption is ever violated.
   - saves a GT-binned predicted-MCES box plot:
     `mces_binned_box_{val_name}_step{N:06d}.png` (whis=(5,95), outliers
     hidden, pred=GT reference line, each box n-annotated).
+- **Validation DataLoader no longer shuffles** (`create_dataloaders` in
+  `simba/workflows/training.py`): was `shuffle=(val_sampler is None)` with a
+  generator created once and reused across the whole run, so every
+  validation check drew a different permutation from wherever that
+  generator's state had advanced to — meaning the same pair landed in a
+  different row every check, with no way to line predictions up across
+  checks except by re-joining on pair identity. Now `shuffle=False`
+  unconditionally: shuffling only ever mattered for decorrelating SGD
+  updates during training, never for a metrics-only validation pass, so
+  there was no reason to pay for it. This is also what makes the
+  consolidated file's positional column-append (above) safe.
 - **`cfg.sampling.use_resampling`** (`simba/workflows/training.py`): existed
   in config but was never read anywhere — the inverse-MCES-bin-frequency
   weighted sampler was always active regardless. Now wired up: when `false`,
@@ -110,7 +141,7 @@ caused multi-hour stalls elsewhere in this project).
   unweighted pass (val).
 - **Pair-identity plumbing**: `mol_idx_0/1`, `spec_idx_0/1`, `smiles_0/1`
   threaded from `CustomDatasetMultitasking.__getitem__` through
-  `validation_step` into the callback — needed for the per-pair CSV and to
+  `validation_step` into the callback — needed for the per-pair data and to
   correctly distinguish "self-pair" (same molecule, possibly *different*
   spectra) from same-spectrum-vs-itself.
 
@@ -160,23 +191,30 @@ the current `ValMetricsCallback`) — right now that's just 009.
   - **Overlap coefficient (vs next bin)** — how much a bin's predicted-MCES
     distribution overlaps its neighbor's (0 = fully separated, 1 = identical;
     equals `2x` the Bayes-optimal misclassification rate between the two
-    bins under equal priors). Not derivable from the pre-logged summary, so
-    it always recomputes from the per-pair CSVs (see below).
+    bins under equal priors), plus an "average" line (mean over all
+    currently-shown bin-pairs). Skip 0-4 is a **fast path** too now — those
+    are logged directly by the callback — so it's instant just like MAE;
+    only skip >4 (or a mass-difference filter, see below) triggers
+    recomputation. If a run's `metrics.csv` predates this feature (e.g. the
+    existing 009 data, recorded before `_log_overlap_coefficients` existed),
+    the tab detects the missing columns and offers the recompute path with a
+    clear message instead of silently rendering an empty chart.
   - Controls: include/exclude self-pairs, GT-MCES range (which bins to
     show), molecule mass-difference filter (|mass_0 - mass_1|, Da — applies
     to *every* curve, not just an extra line), and (overlap-coefficient only)
-    how many bins to skip between compared pairs (0 = adjacent, 1 = skip
-    one, ...).
-  - Whenever the mass filter is narrowed or the overlap-coefficient metric is
-    selected, the tab switches from the fast metrics.csv path to recomputing
-    from each validation check's per-pair CSV directly (RDKit mass lookup +
-    filter + aggregate) — that's a large file read per check, so it's gated
-    behind a "checks to sample" slider and an explicit **Build** button
-    rather than fully reactive.
+    how many bins to skip between compared pairs.
+  - Whenever recomputation is needed (mass filter narrowed, skip >4, or an
+    older run without the pre-logged columns), the tab reads per-pair data
+    directly — from the consolidated parquet file when the experiment has
+    one (cheap, columnar, no cap needed), or per-step CSVs for older
+    experiments (one large file read per check). Either way it's gated
+    behind a "checks to use" slider (default 10 — 160 checks can take
+    1-2 minutes to build) and an explicit **Build** button rather than
+    fully reactive.
 - **Box plot** — the pre-rendered training-time PNG (step slider), plus an
-  on-demand fine-grained rebuild from that same step's per-pair CSV: custom
+  on-demand fine-grained rebuild from that same step's per-pair data: custom
   bin width (vs. the fixed 5 used at training time) and the same molecule
-  mass-difference filter, reactive (only touches one file, so no button
+  mass-difference filter, reactive (only touches one step, so no button
   needed).
 - **Mass heatmap** — MAE / signed bias / mean-GT-MCES heatmaps over
   (min mass, max mass) of the pair's two molecules (reproducing the
@@ -185,12 +223,14 @@ the current `ValMetricsCallback`) — right now that's just 009.
   diagonal, mass_diff=0) with a toggle to exclude; adjustable mass-bin step
   and minimum-pairs-per-cell threshold.
 
-**Design note on cost**: per-pair CSVs are large (~750MB each, one per
-validation check — 160+ of them for 009 so far). Anything that only needs
-the *currently selected single step* stays fully reactive. Anything that
-needs to scan *multiple* checks (mass-filtered/overlap-coefficient curves)
-is opt-in behind a Build button with a sampling-stride control, so it
-doesn't silently try to read the whole run's history on every widget tweak.
+**Design note on cost**: everywhere that reads per-pair data prefers the
+consolidated parquet file when the experiment has one (`load_pair_data_for_step`
+in `tools/dashboard_app.py`), falling back to per-step CSVs for older
+experiments that predate the consolidated format. Single-step reads
+(box plot, mass heatmap) stay reactive either way. Anything that needs to
+scan *multiple* checks (mass-filtered/overlap-coefficient curves) is opt-in
+behind a Build button with a checks-to-use control, so it doesn't silently
+try to read the whole run's history on every widget tweak.
 
 ## 6. Scripts reference
 
