@@ -10,6 +10,17 @@ For each pair:
 
 Splits: Gaetan's TSV (two columns, `id` and `fold`) assigns every spectrum directly
 to train/val/test, keyed by the MGF's IDENTIFIER field — no scaffold re-split.
+
+v2 fix (output moved to preprocessing_gaetan_split_max_lb_hdf5_v2, original left
+untouched since experiment 005 was trained on it): the HDF5 SMILES lookup used to
+be built from raw, non-canonical strings while the query side was canonicalized,
+so canonical queries mostly failed to match even when the molecule genuinely was
+in the HDF5 set -- silently inflating hdf5_missing to ~94-97% instead of the true
+near-100% coverage (same bug already found and fixed for the official split).
+Also switched lb_matrix from mmap to a full in-RAM load, since the scattered
+per-pair reads this script does turned an equivalent mmap'd lookup elsewhere into
+a 2+ hour stall (this script's original run happened to be fast anyway, but that
+was luck, not something to rely on again).
 """
 
 import pickle
@@ -32,7 +43,7 @@ LB_SMILES = (
 )
 HDF5_PATH = "/sofia/projects/2026_053/simba_project/data/massspecgym/data/auxiliary/all_smiles_mces.hdf5"
 OUT_DIR = Path(
-    "/sofia/projects/2026_053/simba_project/data/massspecgym/preprocessing_gaetan_split_max_lb_hdf5"
+    "/sofia/projects/2026_053/simba_project/data/massspecgym/preprocessing_gaetan_split_max_lb_hdf5_v2"
 )
 
 MCES_CAP = 40.0
@@ -184,9 +195,16 @@ def main():
             lb_smiles_to_idx[line.strip()] = i
     print(f"  {len(lb_smiles_to_idx)} molecules in lb_matrix")
 
-    # 4. Load lb_matrix as mmap
-    print("Opening lb_matrix.npy (mmap)...")
-    lb = np.load(LB_MATRIX, mmap_mode="r")
+    # 4. Load lb_matrix fully into RAM (NOT mmap): build_pairs() below does
+    # per-fold scattered reads (up to ~288M for train here), which turned an
+    # equivalent mmap'd lookup in oracle_retrieval_gt_mces.py into a 2+ hour
+    # stall on this filesystem. A one-time ~116 GB sequential load is far
+    # cheaper than that much random I/O on these nodes (1.5 TB RAM). The
+    # original run of this exact script happened to be fast anyway (~6 min
+    # total, page cache/contention got lucky) -- not worth relying on that
+    # again.
+    print("Loading lb_matrix.npy fully into RAM (~116 GB, one sequential read)...")
+    lb = np.load(LB_MATRIX)
     print(f"  shape={lb.shape}, dtype={lb.dtype}")
 
     # 5. Load HDF5 SMILES index and mces array into RAM (~2.4 GB)
@@ -196,7 +214,22 @@ def main():
             s.decode() if isinstance(s, bytes) else s
             for s in hf["mces_smiles_order"][:]
         ]
-        hdf5_smiles_to_idx = {s: i for i, s in enumerate(hdf5_smiles_list)}
+        # HDF5 stores non-canonical SMILES (verified: 33,066/34,731 differ
+        # from RDKit-canonical form) -- canonicalize before building the
+        # lookup, or canonical query SMILES (below) mostly fail to
+        # string-match even when the molecule genuinely is in the HDF5 set.
+        # This was silently inflating hdf5_missing to ~94-97% instead of the
+        # true near-100% coverage (confirmed independently for the official
+        # split, and it's the exact same bug pattern here). First-seen-wins
+        # on a duplicate canonical SMILES, same convention used everywhere
+        # else in this project.
+        hdf5_smiles_to_idx = {}
+        for i, s in enumerate(
+            tqdm(hdf5_smiles_list, desc="  canonicalizing HDF5 SMILES")
+        ):
+            c = canonicalize(s)
+            if c not in hdf5_smiles_to_idx:
+                hdf5_smiles_to_idx[c] = i
         hdf5_mces = hf["mces"][:].astype(np.float64)
     print(
         f"  {len(hdf5_smiles_to_idx)} molecules in HDF5, mces array shape={hdf5_mces.shape}"

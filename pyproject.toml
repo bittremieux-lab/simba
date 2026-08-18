@@ -95,6 +95,10 @@ docs = [
     "sphinx-rtd-theme>=3.0.2",
     "sphinx-markdown-tables>=0.0.17",
 ]
+dashboard = [
+    "plotly>=6.9.0",
+    "streamlit>=1.59.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/bittremieuxlab/simba"

@@ -548,13 +548,20 @@ def prepare_data(
         use_ion_mode=cfg.model.features.use_ion_mode,
     )
 
-    # Create samplers
-    train_sampler = CustomWeightedRandomSampler(
-        weights=weights_tr, num_samples=len(dataset_train), replacement=True
-    )
-    val_sampler = CustomWeightedRandomSampler(
-        weights=weights_val, num_samples=len(dataset_val), replacement=True, seed=0
-    )
+    # Create samplers. When resampling is disabled, pass sampler=None through to
+    # create_dataloaders -- it already falls back to a plain shuffled DataLoader
+    # over every pair exactly once (no inverse-MCES-bin weighting, no replacement),
+    # which is what "disable weighted sampling" + a full, unweighted val pass means.
+    if cfg.sampling.use_resampling:
+        train_sampler = CustomWeightedRandomSampler(
+            weights=weights_tr, num_samples=len(dataset_train), replacement=True
+        )
+        val_sampler = CustomWeightedRandomSampler(
+            weights=weights_val, num_samples=len(dataset_val), replacement=True, seed=0
+        )
+    else:
+        train_sampler = None
+        val_sampler = None
 
     # Build optional official val dataset + sampler using the same train weights
     dataset_val_official = None
@@ -569,30 +576,33 @@ def prepare_data(
             use_ion_method=cfg.model.features.use_ion_method,
             use_ion_mode=cfg.model.features.use_ion_mode,
         )
-        if use_mces_sampling:
-            mces_sim_off = molecule_pairs_val_official.extra_distances
-            mces_raw_off = (1.0 - mces_sim_off) * 40.0
-            bin_idx_off = np.clip(
-                np.searchsorted(_mces_edges, mces_raw_off).astype(int), 0, n_bins - 1
+        if cfg.sampling.use_resampling:
+            if use_mces_sampling:
+                mces_sim_off = molecule_pairs_val_official.extra_distances
+                mces_raw_off = (1.0 - mces_sim_off) * 40.0
+                bin_idx_off = np.clip(
+                    np.searchsorted(_mces_edges, mces_raw_off).astype(int),
+                    0,
+                    n_bins - 1,
+                )
+                bin_counts_off = np.bincount(bin_idx_off, minlength=n_bins)
+                total_off = bin_counts_off.sum()
+                weights_ed_off = np.where(
+                    bin_counts_off > 0, total_off / bin_counts_off.astype(float), 0.0
+                )
+                weights_ed_off = weights_ed_off / weights_ed_off.sum()
+                weights_off = weights_ed_off[bin_idx_off]
+                weights_off = weights_off / weights_off.sum()
+            else:
+                weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
+                    molecule_pairs_val_official, weights_ed
+                )
+            val_official_sampler = CustomWeightedRandomSampler(
+                weights=weights_off,
+                num_samples=len(dataset_val_official),
+                replacement=True,
+                seed=0,
             )
-            bin_counts_off = np.bincount(bin_idx_off, minlength=n_bins)
-            total_off = bin_counts_off.sum()
-            weights_ed_off = np.where(
-                bin_counts_off > 0, total_off / bin_counts_off.astype(float), 0.0
-            )
-            weights_ed_off = weights_ed_off / weights_ed_off.sum()
-            weights_off = weights_ed_off[bin_idx_off]
-            weights_off = weights_off / weights_off.sum()
-        else:
-            weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
-                molecule_pairs_val_official, weights_ed
-            )
-        val_official_sampler = CustomWeightedRandomSampler(
-            weights=weights_off,
-            num_samples=len(dataset_val_official),
-            replacement=True,
-            seed=0,
-        )
 
     return (
         dataset_train,
@@ -711,10 +721,9 @@ def setup_callbacks(cfg: DictConfig, val_names: list | None = None) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    # Validation metrics callback (saves confusion matrix + MCES hexbins)
+    # Validation metrics callback (per-pair CSV + binned MCES MAE + binned box plot)
     val_metrics_callback = ValMetricsCallback(
         output_dir=str(paths["checkpoint_dir"]),
-        n_classes=cfg.model.tasks.edit_distance.n_classes,
         val_names=val_names or ["val"],
     )
 

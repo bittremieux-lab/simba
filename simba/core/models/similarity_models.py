@@ -657,14 +657,14 @@ class SimilarityModelMultitask(SimilarityModel):
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
+        """Validation step — returns loss + predictions + pair identity for the
+        per-pair CSV dump / binned MAE / binned-box plot (see ValMetricsCallback).
+        No ED outputs -- the ED head isn't scored/plotted here anymore."""
         logits_list = self(batch)
-        logits1 = logits_list[0]  # [B, n_classes]
         logits2 = logits_list[1]  # [B] similarity — see HEAD_MODES
         if self.head_mode == "corn":
             logits2 = self._corn_decode_similarity(logits2)
 
-        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
 
         loss = self.step(batch, batch_idx)
@@ -676,10 +676,14 @@ class SimilarityModelMultitask(SimilarityModel):
 
         return {
             "loss": loss,
-            "ed_pred": torch.argmax(logits1, dim=1).cpu(),
-            "ed_target": target1.cpu(),
             "mces_pred": logits2.view(-1).cpu(),
             "mces_target": target2.cpu(),
+            "mol_idx_0": batch["mol_idx_0"].cpu(),
+            "mol_idx_1": batch["mol_idx_1"].cpu(),
+            "spec_idx_0": batch["spec_idx_0"].cpu(),
+            "spec_idx_1": batch["spec_idx_1"].cpu(),
+            "smiles_0": batch["smiles_0"],
+            "smiles_1": batch["smiles_1"],
         }
 
     def step(self, batch, batch_idx, threshold=0.5, weight_loss2=None):

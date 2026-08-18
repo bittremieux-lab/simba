@@ -291,42 +291,47 @@ class ProgressLogCallback(Callback):
 
 class ValMetricsCallback(Callback):
     """
-    After each validation epoch, saves per-val-set hexbin plots and logs Spearman + MSE.
-    Also tracks train Spearman/MSE from training_step outputs.
-    Supports multiple val dataloaders; val_names labels each one.
+    After each validation epoch: saves a per-pair CSV of every scored validation
+    pair, logs MAE (raw MCES units) broken out by GT-MCES bin (self-pairs kept
+    as their own bin, not lumped into the lowest numeric bin), and saves a
+    GT-binned boxplot of predicted MCES per val set (same style as the
+    test_to_test_binned_box.png investigation plot).
+
+    No Spearman anywhere (train or val) and no ED confusion matrix -- this
+    callback only scores the MCES head now. Supports multiple val dataloaders;
+    val_names labels each one.
     """
 
-    _MAX_TRAIN_PAIRS = 300_000  # cap on pairs accumulated between two val runs
+    _MCES_MAX = 40.0
+    _BIN_EDGES = np.array([5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0])
+    _SELF_LABEL = "self (MCES=0)"
 
-    def __init__(
-        self, output_dir: str, n_classes: int = 6, val_names: list | None = None
-    ):
+    def __init__(self, output_dir: str, val_names: list | None = None):
         self.output_dir = output_dir
-        self.n_classes = n_classes
         self.val_names = val_names or ["val"]
         self._preds: dict = {}
-        self._train_buf: dict = {"mces": [], "mces_t": []}
 
-        # History for metrics curves (one entry per validation run)
-        self._curve_steps: list[int] = []
-        self._curve_train_spearman: list[float] = []
-        self._curve_train_mse: list[float] = []
-        self._curve_val_spearman: dict[str, list[float]] = {}
-        self._curve_val_mse: dict[str, list[float]] = {}
+    def _bin_labels(self) -> list[str]:
+        labels = [self._SELF_LABEL]
+        lo = 0.0
+        for hi in self._BIN_EDGES:
+            labels.append(f"({lo:g},{hi:g}]")
+            lo = hi
+        return labels
 
     def _buf(self, idx: int) -> dict:
         if idx not in self._preds:
-            self._preds[idx] = {"ed": [], "ed_t": [], "mces": [], "mces_t": []}
+            self._preds[idx] = {
+                "mces": [],
+                "mces_t": [],
+                "mol_idx_0": [],
+                "mol_idx_1": [],
+                "spec_idx_0": [],
+                "spec_idx_1": [],
+                "smiles_0": [],
+                "smiles_1": [],
+            }
         return self._preds[idx]
-
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        if not isinstance(outputs, dict) or "mces_pred" not in outputs:
-            return
-        n_pairs = sum(len(x) for x in self._train_buf["mces"])
-        if n_pairs >= self._MAX_TRAIN_PAIRS:
-            return
-        self._train_buf["mces"].append(outputs["mces_pred"].float().numpy())
-        self._train_buf["mces_t"].append(outputs["mces_target"].float().numpy())
 
     def on_validation_batch_end(
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
@@ -336,247 +341,214 @@ class ValMetricsCallback(Callback):
         if not isinstance(outputs, dict):
             return
         buf = self._buf(dataloader_idx)
-        buf["ed"].append(outputs["ed_pred"].numpy())
-        buf["ed_t"].append(outputs["ed_target"].numpy())
         buf["mces"].append(outputs["mces_pred"].float().numpy())
         buf["mces_t"].append(outputs["mces_target"].float().numpy())
+        buf["mol_idx_0"].append(outputs["mol_idx_0"].numpy())
+        buf["mol_idx_1"].append(outputs["mol_idx_1"].numpy())
+        buf["spec_idx_0"].append(outputs["spec_idx_0"].numpy())
+        buf["spec_idx_1"].append(outputs["spec_idx_1"].numpy())
+        buf["smiles_0"].extend(outputs["smiles_0"])
+        buf["smiles_1"].extend(outputs["smiles_1"])
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking or not self._preds:
             return
 
-        from scipy.stats import spearmanr
-
         step = trainer.global_step
-        self._curve_steps.append(step)
+        epoch = trainer.current_epoch
 
-        # --- Train metrics from accumulated buffer ---
-        if self._train_buf["mces"]:
-            tr_pred = np.concatenate(self._train_buf["mces"])
-            tr_target = np.concatenate(self._train_buf["mces_t"])
-            self._train_buf = {"mces": [], "mces_t": []}
-            if len(tr_pred) > 1:
-                r_tr, _ = spearmanr(tr_target, tr_pred)
-                mse_tr = float(np.mean((tr_pred - tr_target) ** 2))
-                self._curve_train_spearman.append(float(r_tr))
-                self._curve_train_mse.append(mse_tr)
-                pl_module.log(
-                    "train_mces_spearman",
-                    float(r_tr),
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                )
-
-        # --- Val metrics per dataloader ---
         for idx in sorted(self._preds.keys()):
             buf = self._preds[idx]
-            if not buf["ed"]:
+            if not buf["mces"]:
                 continue
-            ed_pred = np.concatenate(buf["ed"])
-            ed_target = np.concatenate(buf["ed_t"])
             mces_pred = np.concatenate(buf["mces"])
             mces_target = np.concatenate(buf["mces_t"])
-            buf["ed"].clear()
-            buf["ed_t"].clear()
-            buf["mces"].clear()
-            buf["mces_t"].clear()
+            mol_idx_0 = np.concatenate(buf["mol_idx_0"])
+            mol_idx_1 = np.concatenate(buf["mol_idx_1"])
+            spec_idx_0 = np.concatenate(buf["spec_idx_0"])
+            spec_idx_1 = np.concatenate(buf["spec_idx_1"])
+            smiles_0 = buf["smiles_0"]
+            smiles_1 = buf["smiles_1"]
+            for k in buf:
+                buf[k] = [] if isinstance(buf[k], list) else buf[k]
 
             val_name = self.val_names[idx] if idx < len(self.val_names) else f"val{idx}"
 
-            if len(mces_pred) > 1:
-                r, _ = spearmanr(mces_target, mces_pred)
-                mse = float(np.mean((mces_pred - mces_target) ** 2))
-                pl_module.log(
-                    f"val_mces_spearman/{val_name}",
-                    float(r),
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=False,
-                    add_dataloader_idx=False,
-                )
-                self._curve_val_spearman.setdefault(val_name, []).append(float(r))
-                self._curve_val_mse.setdefault(val_name, []).append(mse)
+            # similarity (1 - MCES/max) -> raw MCES
+            pred_mces = (1.0 - mces_pred) * self._MCES_MAX
+            gt_mces = (1.0 - mces_target) * self._MCES_MAX
+            abs_err = np.abs(pred_mces - gt_mces)
+            is_self = mol_idx_0 == mol_idx_1
 
-            self._plot_confusion(ed_pred, ed_target, step, val_name)
-            self._plot_mces_hexbin(mces_pred, mces_target, step, val_name)
-
-        self._plot_metrics_curves()
-
-    def _plot_metrics_curves(self):
-        """Plot Spearman ρ and MSE curves for train + all val sets over training steps."""
-        steps = self._curve_steps
-        if not steps:
-            return
-
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-        colors = {
-            "train": "steelblue",
-            "scaffold": "darkorange",
-            "official": "forestgreen",
-        }
-        markers = {"scaffold": "o", "official": "s"}
-
-        def _color(name):
-            for k, c in colors.items():
-                if k in name:
-                    return c
-            return "gray"
-
-        def _marker(name):
-            for k, m in markers.items():
-                if k in name:
-                    return m
-            return "^"
-
-        # Spearman
-        ax = axes[0]
-        if self._curve_train_spearman:
-            n = len(self._curve_train_spearman)
-            ax.plot(
-                steps[-n:],
-                self._curve_train_spearman,
-                lw=1.0,
-                color=colors["train"],
-                label="train",
+            self._log_binned_mae(pl_module, gt_mces, abs_err, is_self, val_name)
+            self._save_csv(
+                epoch,
+                step,
+                val_name,
+                mol_idx_0,
+                mol_idx_1,
+                spec_idx_0,
+                spec_idx_1,
+                smiles_0,
+                smiles_1,
+                gt_mces,
+                pred_mces,
+                abs_err,
+                is_self,
             )
-        for name, vals in self._curve_val_spearman.items():
-            n = len(vals)
-            ax.plot(
-                steps[-n:],
-                vals,
-                marker=_marker(name),
-                ms=6,
-                lw=1.5,
-                color=_color(name),
-                label=f"val {name}",
+            self._plot_binned_box(gt_mces, pred_mces, is_self, step, val_name)
+
+    def _bin_index(self, gt_mces: np.ndarray, is_self: np.ndarray) -> np.ndarray:
+        """0 = self-pair bin, 1..len(_BIN_EDGES) = the numeric GT-MCES bins
+        (bin i+1 is (_BIN_EDGES[i-1], _BIN_EDGES[i]])."""
+        idx = np.zeros(len(gt_mces), dtype=int)
+        non_self = ~is_self
+        idx[non_self] = (
+            np.clip(
+                np.digitize(gt_mces[non_self], self._BIN_EDGES[:-1]),
+                0,
+                len(self._BIN_EDGES) - 1,
             )
-        ax.set_title("MCES Spearman ρ")
-        ax.set_xlabel("step")
-        ax.set_ylabel("ρ")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
+            + 1
+        )
+        return idx
 
-        # MSE
-        ax = axes[1]
-        if self._curve_train_mse:
-            n = len(self._curve_train_mse)
-            ax.plot(
-                steps[-n:],
-                self._curve_train_mse,
-                lw=1.0,
-                color=colors["train"],
-                label="train",
+    def _log_binned_mae(self, pl_module, gt_mces, abs_err, is_self, val_name):
+        labels = self._bin_labels()
+        bin_idx = self._bin_index(gt_mces, is_self)
+        for li, label in enumerate(labels):
+            mask = bin_idx == li
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            mae = float(abs_err[mask].mean())
+            pl_module.log(
+                f"val_mae_mces/{label}/{val_name}",
+                mae,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+                add_dataloader_idx=False,
             )
-        for name, vals in self._curve_val_mse.items():
-            n = len(vals)
-            ax.plot(
-                steps[-n:],
-                vals,
-                marker=_marker(name),
-                ms=6,
-                lw=1.5,
-                color=_color(name),
-                label=f"val {name}",
+
+    def _save_csv(
+        self,
+        epoch,
+        step,
+        val_name,
+        mol_idx_0,
+        mol_idx_1,
+        spec_idx_0,
+        spec_idx_1,
+        smiles_0,
+        smiles_1,
+        gt_mces,
+        pred_mces,
+        abs_err,
+        is_self,
+    ):
+        import pandas as pd
+
+        labels = self._bin_labels()
+        bin_idx = self._bin_index(gt_mces, is_self)
+        df = pd.DataFrame(
+            {
+                "epoch": epoch,
+                "step": step,
+                "val_name": val_name,
+                "mol_idx_0": mol_idx_0,
+                "mol_idx_1": mol_idx_1,
+                "spec_idx_0": spec_idx_0,
+                "spec_idx_1": spec_idx_1,
+                "smiles_0": smiles_0,
+                "smiles_1": smiles_1,
+                "gt_mces": gt_mces,
+                "pred_mces": pred_mces,
+                "abs_error": abs_err,
+                "mces_bin": [labels[i] for i in bin_idx],
+                "is_self_pair": is_self,
+                "same_spectrum": spec_idx_0 == spec_idx_1,
+            }
+        )
+        path = os.path.join(self.output_dir, f"val_pairs_{val_name}_step{step:06d}.csv")
+        df.to_csv(path, index=False)
+
+    def _plot_binned_box(self, gt_mces, pred_mces, is_self, step, val_name):
+        """Same convention as mces_calibration_plots.py's binned_box_on_ax
+        (test_to_test_binned_box.png): boxplot of predicted MCES per GT bin,
+        boxes positioned at each bin's real GT-MCES midpoint, whis=(5,95),
+        outliers hidden, pred=GT reference diagonal, each box n-annotated --
+        except self-pairs get their own box at GT=0 instead of being folded
+        into the lowest numeric bin.
+        """
+        labels = self._bin_labels()
+        edges = self._BIN_EDGES
+        groups, positions, widths, ns = [], [], [], []
+
+        self_vals = pred_mces[is_self]
+        groups.append(self_vals)
+        positions.append(0.0)
+        widths.append(1.5)
+        ns.append(len(self_vals))
+
+        non_self_gt = gt_mces[~is_self]
+        non_self_pred = pred_mces[~is_self]
+        bin_idx = np.clip(np.digitize(non_self_gt, edges[:-1]), 0, len(edges) - 1)
+        lo = 0.0
+        for i, hi in enumerate(edges):
+            vals = non_self_pred[bin_idx == i]
+            groups.append(vals)
+            positions.append((lo + hi) / 2.0)
+            widths.append((hi - lo) * 0.8)
+            ns.append(len(vals))
+            lo = hi
+
+        fig, ax = plt.subplots(figsize=(10, 5.5))
+        plot_groups = [g for g in groups if len(g) > 0]
+        plot_positions = [p for p, g in zip(positions, groups) if len(g) > 0]
+        plot_widths = [w for w, g in zip(widths, groups) if len(g) > 0]
+        plot_labels = [lab for lab, g in zip(labels, groups) if len(g) > 0]
+        if not plot_groups:
+            ax.set_title(f"No pairs [{val_name}] — step {step}")
+        else:
+            ax.boxplot(
+                plot_groups,
+                positions=plot_positions,
+                widths=plot_widths,
+                whis=(5, 95),
+                showfliers=False,
             )
-        ax.set_title("MCES MSE (pred vs GT similarity)")
-        ax.set_xlabel("step")
-        ax.set_ylabel("MSE")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(self.output_dir, "metrics_curves.png"), dpi=130)
-        plt.close(fig)
-
-    def _plot_confusion(self, pred, target, step, val_name="val"):
-        n = self.n_classes
-        cm = np.zeros((n, n), dtype=int)
-        for t, p in zip(target, pred):
-            t = int(np.clip(t, 0, n - 1))
-            p = int(np.clip(p, 0, n - 1))
-            cm[t, p] += 1
-
-        cm_pct = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8) * 100
-        accuracy = (pred == target).mean()
-
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-
-        # Left: raw counts
-        ax = axes[0]
-        im = ax.imshow(cm, cmap="Blues")
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        ax.set_xticks(range(n))
-        ax.set_yticks(range(n))
-        ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
-        ax.set_ylabel("True class")
-        ax.set_title(f"ED confusion matrix — counts (step {step})")
-        vmax = cm.max() if cm.max() > 0 else 1
-        for i in range(n):
-            for j in range(n):
+            ax.plot(
+                [0, self._MCES_MAX],
+                [0, self._MCES_MAX],
+                color="red",
+                linestyle="--",
+                linewidth=1,
+                label="pred = GT",
+            )
+            ymax = max(np.percentile(g, 95) for g in plot_groups)
+            label_y = ymax * 1.03
+            for p, n in zip(plot_positions, [n for n in ns if n > 0]):
                 ax.text(
-                    j,
-                    i,
-                    f"{cm[i, j]:,}",
+                    p,
+                    label_y,
+                    f"n={n}",
                     ha="center",
-                    va="center",
+                    va="bottom",
                     fontsize=7,
-                    color="white" if cm[i, j] > 0.5 * vmax else "black",
+                    rotation=90,
                 )
+            ax.set_ylim(top=label_y * 1.25)
+            ax.set_xticks(plot_positions)
+            ax.set_xticklabels(plot_labels, rotation=30, ha="right")
+            ax.legend(fontsize=8)
 
-        # Right: row percentages
-        ax = axes[1]
-        im = ax.imshow(cm_pct, vmin=0, vmax=100, cmap="Blues")
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="%")
-        ax.set_xticks(range(n))
-        ax.set_yticks(range(n))
-        ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
-        ax.set_ylabel("True class")
-        ax.set_title(f"ED confusion matrix — row % (step {step})")
-        for i in range(n):
-            for j in range(n):
-                ax.text(
-                    j,
-                    i,
-                    f"{cm_pct[i, j]:.1f}%",
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color="white" if cm_pct[i, j] > 50 else "black",
-                )
-
-        plt.tight_layout()
-        path = os.path.join(self.output_dir, f"confusion_matrix_{val_name}.png")
-        plt.savefig(path, dpi=130)
-        plt.close(fig)
-
-    def _plot_mces_hexbin(self, pred, target, step, val_name="val"):
-        from scipy.stats import spearmanr
-
-        r, _ = spearmanr(target, pred) if len(pred) > 1 else (float("nan"), None)
-
-        # Convert similarity (1 - MCES/40) back to raw MCES [0, 20]
-        target_mces = (1.0 - target) * 40.0
-        pred_mces = (1.0 - pred) * 40.0
-        lo = min(float(target_mces.min()), float(pred_mces.min()))
-        hi = max(float(target_mces.max()), float(pred_mces.max()))
-
-        fig, ax = plt.subplots(figsize=(6, 5))
-
-        hb = ax.hexbin(target_mces, pred_mces, gridsize=16, cmap="Blues", mincnt=1)
-        plt.colorbar(hb, ax=ax, label="count")
-        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
-        ax.set_xlabel("True MCES")
+        ax.set_xlabel("GT MCES (binned; self-pairs kept separate at 0)")
         ax.set_ylabel("Predicted MCES")
-        ax.grid(True, alpha=0.2)
-
-        fig.suptitle(
-            f"MCES hexbin [{val_name}] — step {step:,}   Spearman ρ = {r:.3f}",
-            fontsize=11,
-        )
-        plt.tight_layout()
+        ax.set_title(f"Predicted MCES by GT bin [{val_name}] — step {step:,}")
+        fig.tight_layout()
         path = os.path.join(
-            self.output_dir, f"mces_hexbin_{val_name}_step{step:06d}.png"
+            self.output_dir, f"mces_binned_box_{val_name}_step{step:06d}.png"
         )
-        plt.savefig(path, dpi=130)
+        fig.savefig(path, dpi=130)
         plt.close(fig)

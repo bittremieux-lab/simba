@@ -124,6 +124,12 @@ class TestEmbedderMultitask:
             "ion_method_1": torch.zeros(batch_size, 1),
             "similarity": torch.tensor([0.8, 0.6]),
             "similarity_2": torch.tensor([0.7, 0.5]),
+            "mol_idx_0": torch.tensor([0, 1]),
+            "mol_idx_1": torch.tensor([1, 2]),
+            "spec_idx_0": torch.tensor([0, 1]),
+            "spec_idx_1": torch.tensor([1, 2]),
+            "smiles_0": ["CCO", "CCN"],
+            "smiles_1": ["CCN", "CCC"],
         }
 
     def test_init_basic(self, embedder_config):
@@ -341,8 +347,20 @@ class TestEmbedderMultitask:
             loss = embedder.validation_step(sample_batch, batch_idx=0)
 
         assert isinstance(loss, dict)
-        assert "loss" in loss and "ed_pred" in loss and "ed_target" in loss
+        assert "loss" in loss
         assert "mces_pred" in loss and "mces_target" in loss
+        # No ED outputs -- the ED head isn't scored in validation_step anymore
+        assert "ed_pred" not in loss and "ed_target" not in loss
+        # Pair-identity fields needed downstream for the per-pair CSV dump
+        for key in (
+            "mol_idx_0",
+            "mol_idx_1",
+            "spec_idx_0",
+            "spec_idx_1",
+            "smiles_0",
+            "smiles_1",
+        ):
+            assert key in loss
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
         assert not torch.isnan(loss["loss"])
 
