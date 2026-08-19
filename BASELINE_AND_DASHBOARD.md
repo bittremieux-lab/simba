@@ -224,15 +224,42 @@ the current `ValMetricsCallback`) — right now that's just 009.
   and minimum-pairs-per-cell threshold.
 - **Compare runs** — one row per experiment under `experiments/training/`,
   each showing that run's most-recently-logged validation check: val loss,
-  overall MAE, identity (self-pair) MAE, overlap coefficient at skip 0/2, and
-  identity-vs-`(0,5]` overlap. Cells come straight from `metrics.csv` when
-  logged; runs that predate a given metric (e.g. 009 predates
-  `val_overlap*` logging) get it recomputed on demand from that check's
-  per-pair data instead of showing blank. An optional column adds MAE
-  restricted to pairs with molecule mass difference < 30 Da (always
-  recomputed, since it's never pre-logged). Metrics to display are
-  selectable; the table is color-graded (red→green, lower-is-better) with an
-  optional bar chart for any one selected metric.
+  overall MAE, identity (self-pair) MAE, overlap coefficient at skip 0/2,
+  identity-vs-neighbor overlap at skip 0/1/2 (self vs `(0,5]`/`(5,10]`/
+  `(10,15]`), and two mass-filtered overlap columns (mass diff < 30/100 Da).
+  Cells come straight from `metrics.csv` when logged; runs that predate a
+  given metric (e.g. 009 predates `val_overlap*` logging), plus anything
+  mass-filtered, get recomputed on demand from that check's per-pair data
+  instead of showing blank.
+  - **Custom metric builder**: pick MAE or Overlap, a molecule mass-
+    difference range, and (for overlap) a skip distance and optionally one
+    particular bin/pair instead of the average — "Add column" appends it
+    with an auto-generated label. Computation is cached and gated behind an
+    explicit **Build custom columns** button (not run automatically on
+    every widget interaction — it reads per-pair data and recomputes
+    molecule masses on any cache miss, across every run in the table, so it
+    isn't cheap). Columns are blank (`NaN`) until built.
+  - Metrics to display are selectable; the table is color-graded
+    (red→green, lower-is-better, **excluding any column that's entirely
+    NaN** — see the segfault note below) with an optional bar chart for any
+    one selected metric.
+  - **Fixed two crash-inducing bugs found while building this**: (1) the
+    sidebar's "Refresh" button was a literal no-op (`st.button("Refresh")`
+    with nothing attached) — its own comment claimed "any interaction
+    reloads data fresh," but that's false for anything using
+    `@st.cache_data` (e.g. `list_consolidated_steps`), which caches by
+    arguments for the server process's lifetime and is *not* invalidated by
+    a script rerun. A long-running experiment's newly-appended validation
+    checks stayed invisible (e.g. showing "3 of 3 available checks" for a
+    run that had logged 20+) until the whole dashboard process was
+    restarted. Fixed: `st.button("Refresh")` now calls `st.cache_data.clear()`.
+    (2) A custom column shows as all-`NaN` before it's built — passing an
+    all-NaN column to `Styler.background_gradient` triggers
+    `np.nanmax`/`np.nanmin` on an all-NaN slice, which segfaults the whole
+    process under this environment's pandas/numpy/matplotlib versions
+    (confirmed via the `RuntimeWarning: All-NaN slice encountered` printed
+    immediately before the crash) rather than just warning. Fixed by
+    excluding all-NaN columns from the gradient subset.
 
 **Design note on cost**: everywhere that reads per-pair data prefers the
 consolidated parquet file when the experiment has one (`load_pair_data_for_step`
@@ -251,6 +278,10 @@ try to read the whole run's history on every widget tweak.
 | `tools/slurm/prepare_msg_gaetan_split_max_lb_hdf5_v2.slurm.sh` | SLURM wrapper for the above |
 | `tools/slurm/009_msg_gaetan_split_v2_cosine_no_head_1gpu.slurm.sh` | Trains the 009 baseline |
 | `tools/slurm/010_msg_gaetan_split_v2_theoretical_precursor_mist_cf_1gpu.slurm.sh` | Trains 010 — same as 009 but theoretical precursor mass + MIST-CF/BUDDY noise (section 7) |
+| `tools/slurm/011_msg_gaetan_split_v2_theoretical_precursor_mist_cf_resampling_1gpu.slurm.sh` | Trains 011 — same as 010 plus MCES-weighted resampling for training only (section 8) |
+| `tools/slurm/012_msg_gaetan_split_v2_theoretical_precursor_mist_cf_resampling_bucket_weights_1gpu.slurm.sh` | Trains 012 — same as 011 plus self/near-self bucket multipliers and within-bucket mass-tier reweighting (section 8) |
+| `tools/mass_diff_by_mces_bucket.py` + its `.slurm.sh` | Diagnostic: mass-difference distribution per MCES sampling bucket, for calibrating the weights in section 8 |
+| `tools/dry_test_resampling_weights.py` + its `.slurm.sh` | Diagnostic: simulates drawing from the real training sampler to verify per-bucket weight shares and per-pair repetition before spending a training run on it |
 | `tools/dashboard_app.py` | Streamlit monitoring/analysis dashboard (section 5) |
 
 ## 7. Precursor mass: theoretical base + MIST-CF/BUDDY noise (experiment 010)
@@ -324,3 +355,93 @@ same `head_mode=cosine_no_head`) plus `sampling.precursor_mass_mode=theoretical
 sampling.precursor_noise_mode=mist_cf`. Submitted as job 1326533; reached
 training/validation without error, loss and MCES-MAE improving normally
 (`val_loss` 0.097→0.032, `mces_mae` 10.15→5.48 by step 22000).
+
+## 8. MCES-bucket weighted resampling: self-pair bucket, extra multipliers, mass-tier reweighting (experiments 011/012)
+
+Motivation: 009/010 (and every experiment before them) trained on plain
+uniformly-shuffled batches (`sampling.use_resampling=false`) — every pair
+seen exactly once per epoch, at whatever frequency it naturally occurs.
+`CustomWeightedRandomSampler` (inverse-MCES-bin-frequency resampling) exists
+in the code and was used in 005 and earlier, but had been off since.
+
+**Experiment 011** (`sampling.use_resampling=true`, otherwise identical to
+010): turns training-time resampling back on, plus one new thing —
+`MCES_SAMPLING_EDGES`/`MCES_SAMPLING_BIN_LABELS` in
+`simba/workflows/training.py` split the old combined `[0,2.5)` bucket into
+`{0}` (raw MCES exactly 0 — self-pairs from `sampling.add_identity_pairs`,
+and any other exactly-identical-structure pair) and `(0,2.5)`, so self-pairs
+get their own inverse-frequency weight instead of being averaged together
+with the far more common near-but-not-identical pairs (10 buckets → 11).
+
+**Found and fixed while wiring this up**: the *old* code, when
+`use_resampling=true`, also built a weighted-with-replacement sampler for
+*validation* (`val_sampler`/`val_official_sampler`) — meaning turning
+resampling back on would have silently turned every validation check back
+into a partial, non-deterministic slice of the val set, undoing this
+session's earlier shuffle=False/consolidated-parquet work and breaking the
+per-bin MAE / overlap-coefficient / parquet-alignment pipeline's assumption
+that every check scores the same full set in the same row order.
+`val_sampler`/`val_official_sampler` are now unconditionally `None` in
+`prepare_data` — `sampling.use_resampling` only ever affects training
+batches now, regardless of setting.
+
+**Experiment 012** (identical CLI config to 011 — the change is entirely in
+`prepare_data`'s weighting code, not a new override): two more layers on
+top of 011's per-bucket inverse-frequency weight, per user-specified
+values, both in `simba/workflows/training.py`:
+- `MCES_SAMPLING_BUCKET_MULTIPLIERS`: self ×4, the 4 buckets covering all of
+  MCES<10 (excluding exactly 0) ×2 each, everything MCES>10 unchanged (×1).
+- Within each non-self bucket, mass-tier reweighting: pairs at/below that
+  bucket's own 10th-percentile molecule mass difference (RDKit `ExactMolWt`,
+  via `mass_lookup_from_df_smiles` in `simba/core/chemistry/chem_utils.py`)
+  collectively get half that bucket's sampling probability mass, the rest of
+  the bucket gets the other half — regardless of how lopsided the actual
+  pair-count split is. Skipped for the self bucket (mass_diff is always 0
+  there by construction).
+- `tools/mass_diff_by_mces_bucket.py`: one-off diagnostic plot (multi-
+  subplot histogram) of `|mass_0 - mass_1|` per MCES sampling bucket, built
+  from the real training pair pool (same `load_dataset`+`prepare_data` path
+  `simba train` uses) — this is what the mass-tier thresholds above were
+  chosen against. Saved to
+  `experiments/mass_diff_by_mces_bucket_gaetan_split_v2.png`.
+
+**A real bug, caught before wasting a training run**: the first version of
+the mass-tier step used `low_weight = MASS_TIER_LOW_SHARE / n_low` (and the
+symmetric `high_weight`). This divides a bucket's *total* contribution to
+the sampler's weight vector down by that bucket's own pair count — because
+every pair in a bucket already carried the *un-divided* bucket-level scalar
+weight (`weights_ed[bucket]`), not a value already spread over the bucket's
+members. The self bucket, left untouched by this step, kept its correct
+scale while every other bucket's total contribution got divided by its own
+size (up to ~66M for the biggest bucket) — so after final normalization,
+self ended up at ~100% of all sampling weight and everything else ~0%.
+First symptom: job 1327099 (012, unfixed) showed step-1000 `val_loss=0.545,
+mces_mae=28.1` (vs. 011's `0.053/7.2` at the same step) and, per direct
+user observation of the loss plot, `train_loss` pinned at ~0 — the
+signature of a training distribution collapsed onto a tiny, endlessly-
+repeated pool of pairs. Cancelled immediately.
+
+Root-caused (not just re-tuned) via `tools/dry_test_resampling_weights.py`:
+builds the *real* `train_sampler` (same `load_dataset`+`prepare_data` call,
+same weights) and simulates 2M draws from it, reporting per-bucket
+draw-share (theory vs. empirical) and, critically, how many *distinct*
+pairs a given number of draws actually touches per bucket vs. how many
+times each gets repeated. Before the fix this showed self at 100.00% share
+(confirming the bug directly, not just its downstream symptom) with every
+other bucket at 0.00%. Fix: scale the mass-tier multiplier by the bucket's
+own pair count (`(MASS_TIER_LOW_SHARE * n_in_bucket) / n_low`, so a
+multiplier of 1.0 means "unchanged," matching the self bucket's implicit
+1.0) — re-running the same dry test after the fix gave empirical shares
+matching theory exactly (self 22.25%, each MCES<10 bucket ~11.1%, MCES>10
+combined 33.3%), with big buckets showing ~1.0 repeats/pair (real
+diversity intact) and only the deliberately-boosted small buckets/tiers
+showing meaningful repetition (self ~17.5×, the tightest mass-tier ~30× per
+2M-draw sample). Job 012 was then resubmitted (1327177) and tracked 011
+closely from step 1000 onward with no sign of the earlier collapse.
+
+**Lesson embedded in both scripts**: verify a resampling/reweighting scheme
+against the real pair pool (bucket shares, repetition/distinct-pair counts)
+*before* spending a training run on it, the same way `mass_diff_by_mces_bucket.py`
+was used to choose the mass-tier thresholds in the first place — both are
+meant to be reused for any future change to this weighting scheme, not
+one-off scripts.

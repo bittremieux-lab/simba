@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 
 import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
+from simba.core.chemistry.chem_utils import mass_lookup_from_df_smiles
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
@@ -46,6 +47,44 @@ sys.modules["simba.spectrum_ext"] = simba.core.data.spectrum
 
 
 _MCES_DIAG_EDGES = np.array([0, 2.5, 5, 7.5, 10, 15, 20, 25, 30, 35, 40], dtype=float)
+
+# Bucket scheme for prepare_data's use_mces_sampling inverse-frequency
+# weighting: fine resolution in [0,10], width-5 above, plus a dedicated
+# bucket for raw MCES exactly 0 (self-pairs, and any other exactly-
+# identical-structure pair) split out from the old combined [0,2.5) bucket
+# -- see prepare_data's use_mces_sampling branch for why. Exposed as module
+# constants (rather than a local var) so other tools (e.g.
+# tools/mass_diff_by_mces_bucket.py) can bucket pairs the same way without
+# duplicating/drifting from the actual sampling scheme.
+MCES_SAMPLING_EDGES = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0])
+MCES_SAMPLING_BIN_LABELS = [
+    "self (MCES=0)",
+    "(0,2.5]",
+    "(2.5,5]",
+    "(5,7.5]",
+    "(7.5,10]",
+    "(10,15]",
+    "(15,20]",
+    "(20,25]",
+    "(25,30]",
+    "(30,35]",
+    "(35,40]",
+]
+
+# Extra per-bucket sampling multiplier, applied on top of the inverse-bin-
+# frequency weight above: self-pairs 4x, the 4 buckets just above them (all
+# of MCES<10 excluding exactly 0) 2x, everything MCES>10 left at 1x.
+MCES_SAMPLING_BUCKET_MULTIPLIERS = np.array(
+    [4.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+)
+
+# Within each MCES bucket (except self, which is always mass_diff==0 and has
+# nothing to differentiate), the fraction of that bucket's own pairs at or
+# below its 10th-percentile mass difference that should collectively receive
+# half the bucket's sampling probability mass -- see prepare_data's
+# use_mces_sampling branch.
+MASS_TIER_QUANTILE = 0.1
+MASS_TIER_LOW_SHARE = 0.5
 
 
 def _log_mces_dist(name: str, mces_sim: np.ndarray) -> None:
@@ -256,7 +295,12 @@ def prepare_data(
     Returns:
         Tuple of (dataset_train, train_sampler, dataset_val, val_sampler,
                   dataset_val_official, val_official_sampler, weights_ed, bins_ed).
-        dataset_val_official and val_official_sampler are None when not provided.
+        val_sampler and val_official_sampler are always None -- validation
+        always scores the full set once, unweighted (see cfg.sampling.
+        use_resampling's handling below); train_sampler is a
+        CustomWeightedRandomSampler when use_resampling is true, else None.
+        dataset_val_official is None when molecule_pairs_val_official isn't
+        provided.
     """
     logger.info("Loading pairs data ...")
 
@@ -480,37 +524,75 @@ def prepare_data(
         and molecule_pairs_train.extra_distances is not None
     )
     if use_mces_sampling:
-        # Non-uniform bins: fine resolution in [0,10], width-5 above.
-        # Edges: [0,2.5), [2.5,5), [5,7.5), [7.5,10), [10,15), [15,20),
-        #        [20,25), [25,30), [30,35), [35,40]  → 10 bins (n_classes=11)
-        _mces_edges = np.array([2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0])
+        # Non-uniform bins: fine resolution in [0,10], width-5 above, plus a
+        # dedicated bucket for raw MCES exactly 0 -- self-pairs (from
+        # sampling.add_identity_pairs) and any other exactly-identical-
+        # structure pair -- split out from the old combined [0,2.5) bucket.
+        # Without this split, self-pairs' inverse-frequency weight got
+        # averaged together with the far more common near-but-not-identical
+        # (0,2.5) pairs, so they were never deliberately up- or down-weighted
+        # on their own.
+        # Edges: {0}, (0,2.5), [2.5,5), [5,7.5), [7.5,10), [10,15), [15,20),
+        #        [20,25), [25,30), [30,35), [35,40]  → 11 bins (was 10)
+        n_sampling_bins = len(MCES_SAMPLING_BIN_LABELS)
 
         mces_sim_tr = molecule_pairs_train.extra_distances  # similarity = 1 - MCES/40
         mces_raw_tr = (1.0 - mces_sim_tr) * 40.0
         bin_idx_tr = np.clip(
-            np.searchsorted(_mces_edges, mces_raw_tr).astype(int), 0, n_bins - 1
+            np.searchsorted(MCES_SAMPLING_EDGES, mces_raw_tr).astype(int),
+            0,
+            n_sampling_bins - 1,
         )
-        bin_counts = np.bincount(bin_idx_tr, minlength=n_bins)
+        bin_counts = np.bincount(bin_idx_tr, minlength=n_sampling_bins)
         total = bin_counts.sum()
         weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
+        weights_ed = weights_ed * MCES_SAMPLING_BUCKET_MULTIPLIERS
         weights_ed = weights_ed / weights_ed.sum()
-        bins_ed = np.arange(n_bins) / n_bins
+        bins_ed = np.arange(n_sampling_bins) / n_sampling_bins
         weights_tr = weights_ed[bin_idx_tr]
-        weights_tr = weights_tr / weights_tr.sum()
 
-        mces_sim_val = molecule_pairs_val.extra_distances
-        mces_raw_val = (1.0 - mces_sim_val) * 40.0
-        bin_idx_val = np.clip(
-            np.searchsorted(_mces_edges, mces_raw_val).astype(int), 0, n_bins - 1
+        # Within each non-self bucket, further upweight low mass-difference
+        # pairs: those at/below that bucket's own 10th-percentile mass
+        # difference collectively get half the bucket's sampling
+        # probability mass, the rest of the bucket gets the other half --
+        # regardless of how lopsided the actual pair-count split is. Skipped
+        # for the self bucket (index 0): mass_diff is always 0 there by
+        # construction, so there's nothing to differentiate.
+        mol_mass = mass_lookup_from_df_smiles(molecule_pairs_train.df_smiles)
+        mass_diff_tr = np.abs(
+            mol_mass[molecule_pairs_train.pair_distances[:, 0].astype(int)]
+            - mol_mass[molecule_pairs_train.pair_distances[:, 1].astype(int)]
         )
-        bin_counts_val = np.bincount(bin_idx_val, minlength=n_bins)
-        total_val = bin_counts_val.sum()
-        weights_ed_val = np.where(
-            bin_counts_val > 0, total_val / bin_counts_val.astype(float), 0.0
-        )
-        weights_ed_val = weights_ed_val / weights_ed_val.sum()
-        weights_val = weights_ed_val[bin_idx_val]
-        weights_val = weights_val / weights_val.sum()
+        mass_tier_weight = np.ones(len(bin_idx_tr))
+        for b in range(1, n_sampling_bins):
+            in_bucket = bin_idx_tr == b
+            diffs = mass_diff_tr[in_bucket]
+            n_in_bucket = diffs.size
+            if n_in_bucket == 0:
+                continue
+            q_low = np.nanquantile(diffs, MASS_TIER_QUANTILE)
+            low_mask = diffs <= q_low
+            n_low = int(low_mask.sum())
+            n_high = int(n_in_bucket - n_low)
+            # Multipliers relative to "uniform within this bucket" (a
+            # mass_tier_weight of 1.0 == unchanged, matching the untouched
+            # self bucket's implicit 1.0 above) -- weighted by n_in_bucket so
+            # a bucket's TOTAL contribution to weights_tr is preserved and
+            # only redistributed 50/50 between the two mass tiers, rather
+            # than shrunk by the bucket's own pair count. (A first version of
+            # this used a plain MASS_TIER_LOW_SHARE/n_low, which divided every
+            # non-self bucket's total contribution down by its own pair
+            # count -- self, left untouched, then dominated ~100% of the
+            # final normalized weights. Caught via tools/
+            # dry_test_resampling_weights.py before relaunching.)
+            low_weight = (MASS_TIER_LOW_SHARE * n_in_bucket) / n_low if n_low else 0.0
+            high_weight = (
+                ((1.0 - MASS_TIER_LOW_SHARE) * n_in_bucket) / n_high if n_high else 0.0
+            )
+            mass_tier_weight[in_bucket] = np.where(low_mask, low_weight, high_weight)
+
+        weights_tr = weights_tr * mass_tier_weight
+        weights_tr = weights_tr / weights_tr.sum()
 
     else:
         train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
@@ -521,9 +603,6 @@ def prepare_data(
         weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
         weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
             molecule_pairs_train, weights_ed
-        )
-        weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
-            molecule_pairs_val, weights_ed
         )
 
     # Create datasets from molecule pairs
@@ -551,22 +630,26 @@ def prepare_data(
         precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
     )
 
-    # Create samplers. When resampling is disabled, pass sampler=None through to
-    # create_dataloaders -- it already falls back to a plain shuffled DataLoader
-    # over every pair exactly once (no inverse-MCES-bin weighting, no replacement),
-    # which is what "disable weighted sampling" + a full, unweighted val pass means.
+    # Create the train sampler. Validation ALWAYS uses a plain, full,
+    # unweighted, sequential pass -- val_sampler/val_official_sampler stay
+    # None regardless of cfg.sampling.use_resampling. Weighted-with-
+    # replacement resampling only ever helps decorrelate SGD training
+    # updates; applying it to validation would silently turn each check back
+    # into a partial, non-deterministic slice of the val set, breaking the
+    # per-bin MAE / overlap-coefficient / consolidated-parquet pipeline's
+    # assumption that every check scores the same full set in the same row
+    # order (see create_dataloaders' shuffle=False rationale). So
+    # use_resampling only ever affects training batches.
     if cfg.sampling.use_resampling:
         train_sampler = CustomWeightedRandomSampler(
             weights=weights_tr, num_samples=len(dataset_train), replacement=True
         )
-        val_sampler = CustomWeightedRandomSampler(
-            weights=weights_val, num_samples=len(dataset_val), replacement=True, seed=0
-        )
     else:
         train_sampler = None
-        val_sampler = None
+    val_sampler = None
 
-    # Build optional official val dataset + sampler using the same train weights
+    # Build optional official val dataset, using the same feature flags as
+    # train/val -- no official-val sampler either, same reasoning as above.
     dataset_val_official = None
     val_official_sampler = None
     if molecule_pairs_val_official is not None:
@@ -580,33 +663,6 @@ def prepare_data(
             use_ion_mode=cfg.model.features.use_ion_mode,
             precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
         )
-        if cfg.sampling.use_resampling:
-            if use_mces_sampling:
-                mces_sim_off = molecule_pairs_val_official.extra_distances
-                mces_raw_off = (1.0 - mces_sim_off) * 40.0
-                bin_idx_off = np.clip(
-                    np.searchsorted(_mces_edges, mces_raw_off).astype(int),
-                    0,
-                    n_bins - 1,
-                )
-                bin_counts_off = np.bincount(bin_idx_off, minlength=n_bins)
-                total_off = bin_counts_off.sum()
-                weights_ed_off = np.where(
-                    bin_counts_off > 0, total_off / bin_counts_off.astype(float), 0.0
-                )
-                weights_ed_off = weights_ed_off / weights_ed_off.sum()
-                weights_off = weights_ed_off[bin_idx_off]
-                weights_off = weights_off / weights_off.sum()
-            else:
-                weights_off = SimilarityWeightSampler.compute_sample_weights_categories(
-                    molecule_pairs_val_official, weights_ed
-                )
-            val_official_sampler = CustomWeightedRandomSampler(
-                weights=weights_off,
-                num_samples=len(dataset_val_official),
-                replacement=True,
-                seed=0,
-            )
 
     return (
         dataset_train,

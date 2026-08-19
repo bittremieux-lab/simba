@@ -1,5 +1,7 @@
 import re
 
+import numpy as np
+
 
 ADDUCT_TO_MASS = {
     "[M+3H]3+": 1.007276 * 3,
@@ -167,3 +169,24 @@ def resample_precursor_mz(theoretical_mz: float, instrument: str | None, rng) ->
     )
     std_ppm = tol_ppm / 5
     return theoretical_mz + rng.normal(0, theoretical_mz * std_ppm / 1e6)
+
+
+def mass_lookup_from_df_smiles(df_smiles) -> np.ndarray:
+    """mol_idx -> RDKit ExactMolWt, indexed by df_smiles' own 0-based index
+    (the same molecule-index space pair_distances' columns 0/1 use).
+    Cached by SMILES string so repeated molecules are only computed once.
+    `df_smiles` needs an index plus a "canon_smiles" column -- the same
+    shape as MoleculePairsOpt.df_smiles. RDKit is imported lazily since not
+    every chem_utils consumer needs it.
+    """
+    from rdkit import Chem
+    from rdkit.Chem.Descriptors import ExactMolWt
+
+    masses = np.full(int(df_smiles.index.max()) + 1, np.nan, dtype=np.float64)
+    cache: dict[str, float] = {}
+    for idx, smi in zip(df_smiles.index, df_smiles["canon_smiles"]):
+        if smi not in cache:
+            mol = Chem.MolFromSmiles(smi)
+            cache[smi] = ExactMolWt(mol) if mol is not None else float("nan")
+        masses[idx] = cache[smi]
+    return masses

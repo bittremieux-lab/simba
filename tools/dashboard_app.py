@@ -1176,11 +1176,37 @@ def _overlap_avg_skip_from_pairs(pred_by_bin: dict, skip: int) -> float | None:
     return float(np.mean(vals)) if vals else None
 
 
-def _mass_diff_lt30_mae(exp_dir: Path, val_name: str) -> float | None:
-    """Overall MAE restricted to pairs whose molecule mass difference is
-    < 30 Da, at this run's most recent validation check. Needs per-pair data
-    (reads the consolidated parquet/CSV for one step, RDKit mass lookup) --
-    reuses the same helpers as the Mass heatmap tab's heavy path."""
+def _identity_overlap_at_skip(
+    df: pd.DataFrame, val_name: str, skip: int, pred_by_bin_getter
+) -> float | None:
+    """Overlap between the self (MCES=0) bin and the bin `skip` steps further
+    out (skip=0 -> (0,5], skip=1 -> (5,10], skip=2 -> (10,15]), unfiltered by
+    mass. Prefers the pre-logged metrics.csv column; falls back to this run's
+    most recent per-pair check for experiments that predate that logging."""
+    if skip + 1 >= len(_BIN_ORDER):
+        return None
+    anchor, partner = _BIN_ORDER[0], _BIN_ORDER[skip + 1]
+    val = _last_non_null(df, f"val_overlap/{anchor}_vs_{partner}_skip{skip}/{val_name}")
+    if val is None:
+        pb = pred_by_bin_getter()
+        if anchor in pb and partner in pb:
+            val = _overlap_coefficient(pb[anchor], pb[partner])
+    return val
+
+
+@st.cache_data(show_spinner=False)
+def _mae_for_bin(
+    exp_dir: Path,
+    val_name: str,
+    mass_lo: float,
+    mass_hi: float,
+    bin_label: str | None,
+) -> float | None:
+    """MAE at this run's most recent validation check, restricted to molecule
+    mass difference in [mass_lo, mass_hi] -- overall (bin_label=None) or one
+    specific GT-MCES bin. Always a per-pair recompute: no pre-logged
+    mass-filtered metric exists in metrics.csv. Reuses the same helpers as
+    the Mass heatmap tab's heavy path."""
     steps = list_available_steps(exp_dir, val_name)
     if not steps:
         return None
@@ -1192,13 +1218,50 @@ def _mass_diff_lt30_mae(exp_dir: Path, val_name: str) -> float | None:
         ("mol_idx_0", "mol_idx_1", "gt_mces", "pred_mces", "mces_bin"),
     )
     mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
-    overall = _mass_diff_masked_bin_stats(pair_df, mol_mass, 0.0, 30.0).get(
-        "__overall__"
+    stats = _mass_diff_masked_bin_stats(pair_df, mol_mass, mass_lo, mass_hi)
+    entry = stats.get("__overall__" if bin_label is None else bin_label)
+    return entry[0] if entry else None
+
+
+@st.cache_data(show_spinner=False)
+def _overlap_for_spec(
+    exp_dir: Path,
+    val_name: str,
+    mass_lo: float,
+    mass_hi: float,
+    skip: int,
+    anchor_bin: str | None,
+) -> float | None:
+    """Overlap coefficient at this run's most recent validation check,
+    restricted to molecule mass difference in [mass_lo, mass_hi]: the average
+    over every adjacent bin-pair at this skip distance (anchor_bin=None), or
+    one specific pair anchored at anchor_bin (paired with the bin `skip`
+    further out). Always a per-pair recompute, same reason as `_mae_for_bin`."""
+    steps = list_available_steps(exp_dir, val_name)
+    if not steps:
+        return None
+    step = steps[-1]
+    pair_df = load_pair_data_for_step(
+        str(exp_dir),
+        val_name,
+        step,
+        ("mol_idx_0", "mol_idx_1", "pred_mces", "mces_bin"),
     )
-    return overall[0] if overall else None
+    mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
+    pred_by_bin = _mass_diff_masked_pred_by_bin(pair_df, mol_mass, mass_lo, mass_hi)
+    pairs = list(zip(_BIN_ORDER, _BIN_ORDER[skip + 1 :]))
+    if anchor_bin is not None:
+        pairs = [(a, b) for a, b in pairs if a == anchor_bin]
+    vals = [
+        _overlap_coefficient(pred_by_bin[a], pred_by_bin[b])
+        for a, b in pairs
+        if a in pred_by_bin and b in pred_by_bin
+    ]
+    vals = [v for v in vals if not np.isnan(v)]
+    return float(np.mean(vals)) if vals else None
 
 
-def _compare_runs_row(exp_dir: Path, include_mass_diff: bool) -> dict | None:
+def _compare_runs_row(exp_dir: Path, include_mass_filtered: bool) -> dict | None:
     """One comparison row for a single experiment. Returns None for
     experiments with no validation data logged yet."""
     df = load_metrics(exp_dir)
@@ -1231,19 +1294,43 @@ def _compare_runs_row(exp_dir: Path, include_mass_diff: bool) -> dict | None:
             val = _overlap_avg_skip_from_pairs(_pred_by_bin(), skip)
         row[f"Overlap (skip{skip})"] = val
 
-    identity_overlap = _last_non_null(
-        df, f"val_overlap/self (MCES=0)_vs_(0,5]_skip0/{val_name}"
-    )
-    if identity_overlap is None:
-        pb = _pred_by_bin()
-        if "self (MCES=0)" in pb and "(0,5]" in pb:
-            identity_overlap = _overlap_coefficient(pb["self (MCES=0)"], pb["(0,5]"])
-    row["Identity overlap (self vs 0-5)"] = identity_overlap
+    for skip in (0, 1, 2):
+        row[f"Identity overlap (skip{skip})"] = _identity_overlap_at_skip(
+            df, val_name, skip, _pred_by_bin
+        )
 
-    if include_mass_diff:
-        row["MAE (|mass diff|<30)"] = _mass_diff_lt30_mae(exp_dir, val_name)
+    if include_mass_filtered:
+        row["Overlap (mass diff<30)"] = _overlap_for_spec(
+            exp_dir, val_name, 0.0, 30.0, 0, None
+        )
+        row["Overlap (mass diff<100)"] = _overlap_for_spec(
+            exp_dir, val_name, 0.0, 100.0, 0, None
+        )
 
     return row
+
+
+def _custom_metric_label(spec: dict) -> str:
+    mass = f"[{spec['mass_lo']:g},{spec['mass_hi']:g}]"
+    if spec["kind"] == "MAE":
+        bin_part = "overall" if spec["bin"] is None else spec["bin"]
+        return f"MAE {bin_part} mass{mass}"
+    bin_part = "avg" if spec["bin"] is None else spec["bin"]
+    return f"Overlap skip{spec['skip']} {bin_part} mass{mass}"
+
+
+def _custom_metric_value(
+    exp_dir: Path, val_name: str | None, spec: dict
+) -> float | None:
+    if val_name is None:
+        return None
+    if spec["kind"] == "MAE":
+        return _mae_for_bin(
+            exp_dir, val_name, spec["mass_lo"], spec["mass_hi"], spec["bin"]
+        )
+    return _overlap_for_spec(
+        exp_dir, val_name, spec["mass_lo"], spec["mass_hi"], spec["skip"], spec["bin"]
+    )
 
 
 def render_compare_runs_tab():
@@ -1251,9 +1338,9 @@ def render_compare_runs_tab():
     st.caption(
         "Each run's most recently logged validation check. Loss/MAE/overlap "
         "come straight from metrics.csv when logged; overlap cells for older "
-        "runs that predate that logging (and the mass-diff column, always) "
-        "are recomputed on demand from that check's per-pair data. Overlap "
-        "and MAE/loss are all lower-is-better."
+        "runs that predate that logging, the mass-filtered columns, and any "
+        "custom columns added below are recomputed on demand from that "
+        "check's per-pair data. Overlap and MAE/loss are all lower-is-better."
     )
 
     experiments = list_experiments()
@@ -1261,8 +1348,9 @@ def render_compare_runs_tab():
         st.info("No compatible experiments found.")
         return
 
-    include_mass_diff = st.checkbox(
-        "Include MAE for |mass diff| < 30 Da (reads per-pair data, one step per run)",
+    include_mass_filtered = st.checkbox(
+        "Include mass-difference overlap columns (<30 Da, <100 Da) "
+        "(reads per-pair data, one step per run)",
         value=True,
         key="compare_include_mass_diff",
     )
@@ -1270,7 +1358,7 @@ def render_compare_runs_tab():
     rows = [
         r
         for r in (
-            _compare_runs_row(exp_dir, include_mass_diff) for exp_dir in experiments
+            _compare_runs_row(exp_dir, include_mass_filtered) for exp_dir in experiments
         )
         if r is not None
     ]
@@ -1279,6 +1367,107 @@ def render_compare_runs_tab():
         return
 
     table = pd.DataFrame(rows).set_index("Run")
+    surviving = {d.name: d for d in experiments if d.name in table.index}
+
+    st.markdown("###### Add a custom metric column")
+    st.caption(
+        "Pick a metric type, a molecule mass-difference range, and (for "
+        "overlap) a skip distance -- then either the average over all bins "
+        "at that skip, or one particular bin/pair."
+    )
+    with st.form("compare_custom_metric_form", clear_on_submit=False):
+        c1, c2, c3, c4 = st.columns(4)
+        kind = c1.selectbox("Metric", ["MAE", "Overlap"], key="cm_kind")
+        mass_lo = c2.number_input(
+            "Mass diff ≥ (Da)", min_value=0.0, value=0.0, step=5.0, key="cm_mass_lo"
+        )
+        mass_hi = c3.number_input(
+            "Mass diff ≤ (Da)", min_value=0.0, value=30.0, step=5.0, key="cm_mass_hi"
+        )
+        skip = None
+        if kind == "Overlap":
+            skip = c4.number_input(
+                "Skip",
+                min_value=0,
+                max_value=len(_BIN_ORDER) - 2,
+                value=0,
+                step=1,
+                key="cm_skip",
+            )
+
+        d1, d2 = st.columns(2)
+        particular = d1.checkbox(
+            "Show one particular bin/pair instead of the average",
+            key="cm_particular",
+        )
+        bin_choice = None
+        if particular:
+            if kind == "Overlap":
+                anchor_options = _BIN_ORDER[: len(_BIN_ORDER) - int(skip) - 1]
+                bin_choice = d2.selectbox(
+                    "Anchor bin (paired with the bin `skip` further out)",
+                    anchor_options,
+                    key="cm_bin_choice",
+                )
+            else:
+                bin_choice = d2.selectbox("Bin", _BIN_ORDER, key="cm_bin_choice")
+
+        submitted = st.form_submit_button("Add column")
+        if submitted:
+            spec = {
+                "kind": kind,
+                "mass_lo": float(mass_lo),
+                "mass_hi": float(mass_hi),
+                "skip": int(skip) if skip is not None else None,
+                "bin": bin_choice,
+            }
+            st.session_state.setdefault("compare_custom_metrics", []).append(spec)
+
+    custom_specs = st.session_state.get("compare_custom_metrics", [])
+    if custom_specs:
+        st.caption("Custom columns:")
+        for i, spec in enumerate(custom_specs):
+            rcol1, rcol2 = st.columns([6, 1])
+            rcol1.write(_custom_metric_label(spec))
+            if rcol2.button("Remove", key=f"cm_remove_{i}"):
+                custom_specs.pop(i)
+                st.rerun()
+
+    custom_labels = [_custom_metric_label(spec) for spec in custom_specs]
+    if custom_specs:
+        build_custom = st.button(
+            "Build custom columns",
+            key="compare_build_custom",
+            help="Computes each custom column for every run below -- reads "
+            "per-pair data and recomputes molecule masses on any cache miss, "
+            "so this can take a while with several runs/columns. Not "
+            "recomputed automatically on every interaction.",
+        )
+        cached = st.session_state.setdefault("compare_custom_metric_values", {})
+        if build_custom:
+            progress = st.progress(0.0, text="Computing custom columns ...")
+            total_work = max(len(custom_specs) * max(len(surviving), 1), 1)
+            done = 0
+            for spec, label in zip(custom_specs, custom_labels):
+                value_by_run = {}
+                for name, exp_dir in surviving.items():
+                    value_by_run[name] = _custom_metric_value(
+                        exp_dir, _pick_val_name(exp_dir), spec
+                    )
+                    done += 1
+                    progress.progress(min(done / total_work, 1.0))
+                cached[label] = value_by_run
+            progress.empty()
+        for label in custom_labels:
+            if label in cached:
+                table[label] = table.index.map(cached[label])
+            else:
+                table[label] = np.nan
+        if any(label not in cached for label in custom_labels):
+            st.info(
+                "Click **Build custom columns** to compute the new column(s) "
+                "-- showing blank until then."
+            )
 
     default_cols = [
         c
@@ -1289,8 +1478,12 @@ def render_compare_runs_tab():
             "Identity MAE",
             "Overlap (skip0)",
             "Overlap (skip2)",
-            "Identity overlap (self vs 0-5)",
-            "MAE (|mass diff|<30)",
+            "Identity overlap (skip0)",
+            "Identity overlap (skip1)",
+            "Identity overlap (skip2)",
+            "Overlap (mass diff<30)",
+            "Overlap (mass diff<100)",
+            *custom_labels,
         ]
         if c in table.columns
     ]
@@ -1302,7 +1495,11 @@ def render_compare_runs_tab():
         return
 
     shown = table[selected]
-    color_cols = [c for c in selected if c != "Last step"]
+    # Excludes all-NaN columns (e.g. a custom column added but not yet built)
+    # -- Styler.background_gradient's np.nanmax/np.nanmin on an all-NaN slice
+    # segfaults under this environment's pandas/numpy/matplotlib versions
+    # rather than raising, so this isn't just a cosmetic skip.
+    color_cols = [c for c in selected if c != "Last step" and shown[c].notna().any()]
     styled = shown.style.format(precision=4, na_rep="—")
     if color_cols:
         styled = styled.background_gradient(cmap="RdYlGn_r", axis=0, subset=color_cols)
@@ -1326,9 +1523,15 @@ def main():
 
     with st.sidebar:
         exp_name = st.selectbox("Experiment", [e.name for e in experiments])
-        st.button(
-            "Refresh"
-        )  # any interaction reloads data fresh; this is just an explicit no-op trigger
+        if st.button("Refresh"):
+            # Rerunning the script alone does NOT invalidate @st.cache_data
+            # (e.g. list_consolidated_steps, load_pair_data_for_step) --
+            # those cache by arguments for the server process's lifetime, so
+            # a long-running experiment's newly-appended validation checks
+            # would otherwise stay invisible until the dashboard is
+            # restarted. Explicitly drop all cached data so this button does
+            # what it says.
+            st.cache_data.clear()
     exp_dir = EXPERIMENTS_DIR / exp_name
 
     df = load_metrics(exp_dir)
