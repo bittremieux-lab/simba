@@ -45,6 +45,16 @@ sampling:
   # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
   add_identity_pairs: false
 
+  # Precursor mass base value: "measured" (read PEPMASS from the MGF, historical
+  # default) or "theoretical" (computed from SMILES via RDKit ExactMolWt + adduct
+  # arithmetic, ignoring the MGF's own value).
+  precursor_mass_mode: measured
+
+  # Training-time precursor-mass noise, applied on top of precursor_mass_mode:
+  # "legacy" (+/-1% uniform noise, historical default), "mist_cf" (MIST-CF/BUDDY-
+  # style Gaussian noise scaled by instrument ppm tolerance / 5), or "none".
+  precursor_noise_mode: legacy
+
 # Augmentation
 augmentation:
   enabled: false

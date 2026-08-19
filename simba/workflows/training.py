@@ -536,6 +536,8 @@ def prepare_data(
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
         use_ion_mode=cfg.model.features.use_ion_mode,
+        precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
+        precursor_noise_mode=cfg.sampling.get("precursor_noise_mode", "legacy"),
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -546,6 +548,7 @@ def prepare_data(
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
         use_ion_mode=cfg.model.features.use_ion_mode,
+        precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
     )
 
     # Create samplers. When resampling is disabled, pass sampler=None through to
@@ -575,6 +578,7 @@ def prepare_data(
             use_ion_activation=cfg.model.features.use_ion_activation,
             use_ion_method=cfg.model.features.use_ion_method,
             use_ion_mode=cfg.model.features.use_ion_mode,
+            precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
         )
         if cfg.sampling.use_resampling:
             if use_mces_sampling:

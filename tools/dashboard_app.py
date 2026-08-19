@@ -1126,6 +1126,195 @@ def render_mass_heatmap_tab(exp_dir: Path):
     st.plotly_chart(fig, width="stretch")
 
 
+def _last_non_null(df: pd.DataFrame, col: str) -> float | None:
+    """Last non-null value logged for `col`, or None if it's missing/all-NaN.
+    Train/val columns log at very different cadences (train every step, val
+    only at validation checks, some val columns only once per check vs. once
+    per val batch) so each metric needs its own last-logged value rather than
+    assuming one "last row" has everything."""
+    if col not in df.columns:
+        return None
+    s = df[col].dropna()
+    return float(s.iloc[-1]) if len(s) else None
+
+
+def _pick_val_name(exp_dir: Path) -> str | None:
+    """Prefer the scaffold "val" set when a run has more than one (e.g. an
+    official-split val too) -- it's the one every experiment so far has."""
+    names = list_val_names(exp_dir)
+    if not names:
+        return None
+    return "val" if "val" in names else names[0]
+
+
+def _pred_by_bin_last_step(exp_dir: Path, val_name: str) -> dict[str, np.ndarray]:
+    """Predicted-MCES values grouped by GT-MCES bin, from this run's most
+    recent validation check (unfiltered by mass) -- the raw material to
+    recompute overlap-coefficient cells for runs that predate that logging
+    (e.g. experiment 009, run before val_overlap* columns existed)."""
+    steps = list_available_steps(exp_dir, val_name)
+    if not steps:
+        return {}
+    pair_df = load_pair_data_for_step(
+        str(exp_dir), val_name, steps[-1], ("pred_mces", "mces_bin")
+    )
+    pred = pair_df["pred_mces"].to_numpy()
+    bins = pair_df["mces_bin"].to_numpy()
+    return {label: pred[bins == label] for label in _BIN_ORDER if (bins == label).any()}
+
+
+def _overlap_avg_skip_from_pairs(pred_by_bin: dict, skip: int) -> float | None:
+    """Same quantity as val_overlap_avg/skip{skip}, computed from per-pair
+    predictions instead of read from metrics.csv."""
+    adjacent_pairs = list(zip(_BIN_ORDER, _BIN_ORDER[skip + 1 :]))
+    vals = [
+        _overlap_coefficient(pred_by_bin[a], pred_by_bin[b])
+        for a, b in adjacent_pairs
+        if a in pred_by_bin and b in pred_by_bin
+    ]
+    vals = [v for v in vals if not np.isnan(v)]
+    return float(np.mean(vals)) if vals else None
+
+
+def _mass_diff_lt30_mae(exp_dir: Path, val_name: str) -> float | None:
+    """Overall MAE restricted to pairs whose molecule mass difference is
+    < 30 Da, at this run's most recent validation check. Needs per-pair data
+    (reads the consolidated parquet/CSV for one step, RDKit mass lookup) --
+    reuses the same helpers as the Mass heatmap tab's heavy path."""
+    steps = list_available_steps(exp_dir, val_name)
+    if not steps:
+        return None
+    step = steps[-1]
+    pair_df = load_pair_data_for_step(
+        str(exp_dir),
+        val_name,
+        step,
+        ("mol_idx_0", "mol_idx_1", "gt_mces", "pred_mces", "mces_bin"),
+    )
+    mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
+    overall = _mass_diff_masked_bin_stats(pair_df, mol_mass, 0.0, 30.0).get(
+        "__overall__"
+    )
+    return overall[0] if overall else None
+
+
+def _compare_runs_row(exp_dir: Path, include_mass_diff: bool) -> dict | None:
+    """One comparison row for a single experiment. Returns None for
+    experiments with no validation data logged yet."""
+    df = load_metrics(exp_dir)
+    if df.empty:
+        return None
+    val_name = _pick_val_name(exp_dir)
+    if val_name is None:
+        return None
+
+    row = {"Run": exp_dir.name, "Last step": int(df["step"].max())}
+    row["Val loss"] = _last_non_null(df, "validation_loss_epoch")
+    row["Overall MAE"] = _last_non_null(df, "val_mces_mae")
+    row["Identity MAE"] = _last_non_null(df, f"val_mae_mces/self (MCES=0)/{val_name}")
+    if row["Val loss"] is None and row["Overall MAE"] is None:
+        return None  # no validation check has landed for this run yet
+
+    # Older runs (e.g. 009) predate val_overlap* logging entirely -- recompute
+    # from per-pair data on demand rather than leaving those cells empty.
+    # Loaded at most once per row, only if actually needed.
+    pred_by_bin_cache = {}
+
+    def _pred_by_bin():
+        if not pred_by_bin_cache:
+            pred_by_bin_cache.update(_pred_by_bin_last_step(exp_dir, val_name))
+        return pred_by_bin_cache
+
+    for skip in (0, 2):
+        val = _last_non_null(df, f"val_overlap_avg/skip{skip}/{val_name}")
+        if val is None:
+            val = _overlap_avg_skip_from_pairs(_pred_by_bin(), skip)
+        row[f"Overlap (skip{skip})"] = val
+
+    identity_overlap = _last_non_null(
+        df, f"val_overlap/self (MCES=0)_vs_(0,5]_skip0/{val_name}"
+    )
+    if identity_overlap is None:
+        pb = _pred_by_bin()
+        if "self (MCES=0)" in pb and "(0,5]" in pb:
+            identity_overlap = _overlap_coefficient(pb["self (MCES=0)"], pb["(0,5]"])
+    row["Identity overlap (self vs 0-5)"] = identity_overlap
+
+    if include_mass_diff:
+        row["MAE (|mass diff|<30)"] = _mass_diff_lt30_mae(exp_dir, val_name)
+
+    return row
+
+
+def render_compare_runs_tab():
+    st.subheader("Compare runs")
+    st.caption(
+        "Each run's most recently logged validation check. Loss/MAE/overlap "
+        "come straight from metrics.csv when logged; overlap cells for older "
+        "runs that predate that logging (and the mass-diff column, always) "
+        "are recomputed on demand from that check's per-pair data. Overlap "
+        "and MAE/loss are all lower-is-better."
+    )
+
+    experiments = list_experiments()
+    if not experiments:
+        st.info("No compatible experiments found.")
+        return
+
+    include_mass_diff = st.checkbox(
+        "Include MAE for |mass diff| < 30 Da (reads per-pair data, one step per run)",
+        value=True,
+        key="compare_include_mass_diff",
+    )
+
+    rows = [
+        r
+        for r in (
+            _compare_runs_row(exp_dir, include_mass_diff) for exp_dir in experiments
+        )
+        if r is not None
+    ]
+    if not rows:
+        st.info("No run has a validation check logged yet.")
+        return
+
+    table = pd.DataFrame(rows).set_index("Run")
+
+    default_cols = [
+        c
+        for c in [
+            "Last step",
+            "Val loss",
+            "Overall MAE",
+            "Identity MAE",
+            "Overlap (skip0)",
+            "Overlap (skip2)",
+            "Identity overlap (self vs 0-5)",
+            "MAE (|mass diff|<30)",
+        ]
+        if c in table.columns
+    ]
+    selected = st.multiselect(
+        "Metrics to show", options=list(table.columns), default=default_cols
+    )
+    if not selected:
+        st.info("Pick at least one metric.")
+        return
+
+    shown = table[selected]
+    color_cols = [c for c in selected if c != "Last step"]
+    styled = shown.style.format(precision=4, na_rep="—")
+    if color_cols:
+        styled = styled.background_gradient(cmap="RdYlGn_r", axis=0, subset=color_cols)
+    st.dataframe(styled, use_container_width=True)
+
+    bar_options = [c for c in selected if c != "Last step"]
+    if bar_options:
+        st.markdown("###### Bar chart")
+        metric_for_bar = st.selectbox("Metric", bar_options, key="compare_bar_metric")
+        st.bar_chart(shown[metric_for_bar])
+
+
 def main():
     st.set_page_config(page_title="SIMBA training dashboard", layout="wide")
     st.title("SIMBA training dashboard")
@@ -1154,8 +1343,8 @@ def main():
     else:
         x_col, x_label = "step", "step"
 
-    tab_loss, tab_metrics, tab_box, tab_mass = st.tabs(
-        ["Loss", "Validation metrics", "Box plot", "Mass heatmap"]
+    tab_loss, tab_metrics, tab_box, tab_mass, tab_compare = st.tabs(
+        ["Loss", "Validation metrics", "Box plot", "Mass heatmap", "Compare runs"]
     )
     with tab_loss:
         render_loss_tab(df, x_col, x_label)
@@ -1165,6 +1354,8 @@ def main():
         render_box_plot_tab(exp_dir)
     with tab_mass:
         render_mass_heatmap_tab(exp_dir)
+    with tab_compare:
+        render_compare_runs_tab()
 
 
 if __name__ == "__main__":

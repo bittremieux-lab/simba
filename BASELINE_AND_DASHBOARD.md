@@ -222,6 +222,17 @@ the current `ValMetricsCallback`) — right now that's just 009.
   the Spearman column). Self-pairs included by default (land on the
   diagonal, mass_diff=0) with a toggle to exclude; adjustable mass-bin step
   and minimum-pairs-per-cell threshold.
+- **Compare runs** — one row per experiment under `experiments/training/`,
+  each showing that run's most-recently-logged validation check: val loss,
+  overall MAE, identity (self-pair) MAE, overlap coefficient at skip 0/2, and
+  identity-vs-`(0,5]` overlap. Cells come straight from `metrics.csv` when
+  logged; runs that predate a given metric (e.g. 009 predates
+  `val_overlap*` logging) get it recomputed on demand from that check's
+  per-pair data instead of showing blank. An optional column adds MAE
+  restricted to pairs with molecule mass difference < 30 Da (always
+  recomputed, since it's never pre-logged). Metrics to display are
+  selectable; the table is color-graded (red→green, lower-is-better) with an
+  optional bar chart for any one selected metric.
 
 **Design note on cost**: everywhere that reads per-pair data prefers the
 consolidated parquet file when the experiment has one (`load_pair_data_for_step`
@@ -239,4 +250,77 @@ try to read the whole run's history on every widget tweak.
 | `tools/prepare_msg_gaetan_split_max_lb_hdf5.py` | Builds Gaetan-split-v2 preprocessing data (fixed HDF5 canonicalization) |
 | `tools/slurm/prepare_msg_gaetan_split_max_lb_hdf5_v2.slurm.sh` | SLURM wrapper for the above |
 | `tools/slurm/009_msg_gaetan_split_v2_cosine_no_head_1gpu.slurm.sh` | Trains the 009 baseline |
+| `tools/slurm/010_msg_gaetan_split_v2_theoretical_precursor_mist_cf_1gpu.slurm.sh` | Trains 010 — same as 009 but theoretical precursor mass + MIST-CF/BUDDY noise (section 7) |
 | `tools/dashboard_app.py` | Streamlit monitoring/analysis dashboard (section 5) |
+
+## 7. Precursor mass: theoretical base + MIST-CF/BUDDY noise (experiment 010)
+
+Prompted by a Slack discussion with Wout and Gaetan De Waele about 009 (and
+every prior experiment) relying on precursor mass read straight from the
+MGF's `PEPMASS` field, perturbed only by Sebastian's original uniform
+±1%-noise augmentation. Two problems with that: MassSpecGym's own
+`PRECURSOR_MZ` is itself already a rounded *theoretical* value for the large
+majority of rows (confirmed against Gaetan's `spectrawl` extraction code and
+directly against the MGF: `PARENT_MASS + adduct_offset == PRECURSOR_MZ`
+exactly), so training on it directly is partly training on a noiseless,
+leakage-prone signal; and the ±1% noise scheme doesn't reflect any real
+instrument's actual precision.
+
+**New config** (`sampling.*` in `simba/configs/training/default.yaml`,
+defaults preserve all prior experiments' behavior unchanged):
+- `precursor_mass_mode`: `measured` (default, historical behavior — read
+  `spec.precursor_mz` from the MGF) or `theoretical` (compute from the
+  molecule's SMILES via RDKit `ExactMolWt` + adduct arithmetic, ignoring the
+  MGF's own value entirely).
+- `precursor_noise_mode`: `legacy` (default — Sebastian's original ±1%
+  uniform noise, bug-fixed, see below), `mist_cf` (new: MIST-CF/BUDDY-style
+  Gaussian noise, std = instrument-specific ppm tolerance / 5 — Orbitrap/
+  FTICR=5ppm, Q-ToF=10ppm, Ion Trap/Unknown=15ppm, matching BUDDY's table),
+  or `none`.
+
+**New code**:
+- `simba/core/chemistry/chem_utils.py`: `theoretical_precursor_mz(neutral_mass,
+  adduct)` (parses monomer count and charge magnitude straight from the
+  adduct string, e.g. `[2M+H]+`/`[M+2H]2+`, so it works for every adduct in
+  `ADDUCT_TO_MASS` without a second lookup table), `normalize_instrument_type`
+  + `INSTRUMENT_PPM_TOLERANCE` (raw MGF `INSTRUMENT_TYPE` → BUDDY's ppm
+  tolerance, falling back to the least-precise "unknown" tier), and
+  `resample_precursor_mz` (the Gaussian draw itself).
+- `simba/core/data/augmentation.py`: new
+  `Augmentation.resample_precursor_masses_mist_cf`, applied per side using
+  that side's own instrument type (falls back to "unknown" if absent);
+  `augment()` now takes `precursor_noise_mode` and dispatches to
+  legacy/mist_cf/none.
+- Instrument type threaded end-to-end for the first time (previously parsed
+  nowhere): MGF `INSTRUMENT_TYPE` → `SpectrumExt.instrument`
+  (`loaders.py`/`spectrum.py`) → per-spectrum `instrument` array
+  (`multitask_dataset_builder.py`) → `instrument_0`/`instrument_1` per
+  sample (`multitask_dataset.py`) → read by the augmentation above.
+- `precursor_mass_mode="theoretical"` is applied once per spectrum in
+  `MultitaskDataBuilder.from_molecule_pairs_to_dataset` (replacing
+  `precursor_mass[i] = spec.precursor_mz`), *not* per training sample — it's
+  the deterministic base value; `precursor_noise_mode` is the stochastic
+  augmentation applied on top, at `__getitem__` time, training-split only.
+
+**Bugs fixed along the way** (found while tracing this code path, folded
+into 010 since they sit on the same lines being touched):
+- `ADDUCT_TO_MASS["[3M-H]-"]` was `+1.007276`, sign-flipped vs. `[2M-H]-`/
+  `[M-H]-`'s consistent single-deprotonation convention (should be
+  `-1.007276`). Neither adduct in MassSpecGym's MGF (`[M+H]+`, `[M+Na]+`)
+  is affected, so this had no effect on 009, but would have silently
+  corrupted any future run using `[3M-H]-`.
+- `Augmentation.add_false_precursor_masses_positives` (the legacy noise
+  step, active in every experiment through 009) overwrote
+  `precursor_mass_1` with a *noised copy of `precursor_mass_0`* instead of
+  perturbing `precursor_mass_1`'s own value — i.e. every time this
+  augmentation fired (~10% of training samples: 50% augmentation-call rate
+  × 20% of those), both sides were silently forced to the same underlying
+  mass before independent noise was added. Fixed to perturb each side from
+  its own value.
+
+**Experiment 010** (`tools/slurm/010_msg_gaetan_split_v2_theoretical_precursor_mist_cf_1gpu.slurm.sh`):
+identical to 009 (same Gaetan-split-v2 data, same 1-GPU hyperparameters,
+same `head_mode=cosine_no_head`) plus `sampling.precursor_mass_mode=theoretical
+sampling.precursor_noise_mode=mist_cf`. Submitted as job 1326533; reached
+training/validation without error, loss and MCES-MAE improving normally
+(`val_loss` 0.097→0.032, `mces_mae` 10.15→5.48 by step 22000).

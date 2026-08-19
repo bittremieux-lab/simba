@@ -458,6 +458,8 @@ class LoadData:
         else:
             adduct = None
 
+        instrument = params.get("instrument_type")
+
         ce_raw = params.get("ce") or params.get("collision_energy")
         if ce_raw is not None:
             try:
@@ -514,6 +516,7 @@ class LoadData:
             inchi_key=inchi_key,
             spectrum_hash=spectrum_hash_result,
             fold=params.get("fold", None),
+            instrument=instrument,
         )
 
         # postprocessing

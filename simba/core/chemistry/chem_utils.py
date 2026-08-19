@@ -1,3 +1,6 @@
+import re
+
+
 ADDUCT_TO_MASS = {
     "[M+3H]3+": 1.007276 * 3,
     "[M+2H+Na]3+": 8.334590 * 3,
@@ -47,7 +50,7 @@ ADDUCT_TO_MASS = {
     "[2M-H]-": -1.007276,
     "[2M+FA-H]-": 44.998201,
     "[2M+Hac-H]-": 59.013851,
-    "[3M-H]-": 1.007276,
+    "[3M-H]-": -1.007276,  # was +1.007276 -- sign-flipped vs [2M-H]-/[M-H]- (same single deprotonation)
 }
 
 
@@ -66,3 +69,101 @@ def ion_to_mass(adduct: str) -> float:
         The mass corresponding to the adduct. Returns None if the adduct is not found.
     """
     return ADDUCT_TO_MASS.get(adduct)
+
+
+_ADDUCT_NMER_RE = re.compile(r"^\[(\d*)M")
+_ADDUCT_CHARGE_RE = re.compile(r"(\d*)[+-]$")
+
+
+def _adduct_nmer(adduct: str) -> int:
+    """'[2M+H]+' -> 2, '[M+H]+' -> 1 (no leading digit means a single monomer)."""
+    m = _ADDUCT_NMER_RE.match(adduct)
+    if not m:
+        raise ValueError(f"Cannot parse monomer count from adduct {adduct!r}")
+    digits = m.group(1)
+    return int(digits) if digits else 1
+
+
+def _adduct_charge(adduct: str) -> int:
+    """'[M+2H]2+' -> 2, '[M+H]+' -> 1 (magnitude only; sign doesn't matter -- m/z
+    divides by |charge| either way)."""
+    m = _ADDUCT_CHARGE_RE.search(adduct)
+    if not m:
+        raise ValueError(f"Cannot parse charge from adduct {adduct!r}")
+    digits = m.group(1)
+    return int(digits) if digits else 1
+
+
+def theoretical_precursor_mz(neutral_mass: float, adduct: str) -> float:
+    """Theoretical m/z for a neutral monoisotopic mass under a given adduct.
+
+    ADDUCT_TO_MASS's values are the adduct's own mass contribution (already
+    x charge magnitude, per how the table above was built -- e.g.
+    "[M+3H]3+": 1.007276 * 3) but NOT yet divided by charge, and NOT scaled
+    by monomer count for "nM" adducts (e.g. [2M+H]+) -- both depend on the
+    adduct string itself, parsed here:
+        precursor_mz = (nmer * neutral_mass + ADDUCT_TO_MASS[adduct]) / charge
+    """
+    offset = ADDUCT_TO_MASS.get(adduct)
+    if offset is None:
+        raise KeyError(f"Unknown adduct: {adduct!r}")
+    nmer = _adduct_nmer(adduct)
+    charge = _adduct_charge(adduct)
+    return (nmer * neutral_mass + offset) / charge
+
+
+# Per-instrument-type ppm tolerance (BUDDY's table, as used by MIST-CF's
+# precursor resampling -- see metabo_depthcharge.mist_cf.common.chem_utils
+# in the sibling spectrawl_project, and Wout/Gaetan's Slack discussion).
+INSTRUMENT_PPM_TOLERANCE = {
+    "orbitrap": 5,
+    "qtof": 10,
+    "iontrap": 15,
+    "fticr": 5,
+    "unknown": 15,
+}
+
+# Raw MGF INSTRUMENT_TYPE strings (case-insensitive) -> canonical
+# INSTRUMENT_PPM_TOLERANCE key. MassSpecGym's own MGF only ever has
+# "Orbitrap"/"QTOF", but a few common variants are included for robustness.
+_RAW_INSTRUMENT_TO_TYPE = {
+    "orbitrap": "orbitrap",
+    "qtof": "qtof",
+    "q-tof": "qtof",
+    "q tof": "qtof",
+    "iontrap": "iontrap",
+    "ion trap": "iontrap",
+    "fticr": "fticr",
+    "ft-icr": "fticr",
+}
+
+
+def normalize_instrument_type(raw: str | None) -> str:
+    """Raw MGF INSTRUMENT_TYPE value -> one of INSTRUMENT_PPM_TOLERANCE's
+    keys. Falls back to "unknown" (BUDDY's own least-precise tier) for
+    anything missing or unrecognized, rather than raising -- this only
+    affects how much noise gets added to a theoretical precursor mass, not
+    correctness."""
+    if not raw:
+        return "unknown"
+    return _RAW_INSTRUMENT_TO_TYPE.get(raw.strip().lower(), "unknown")
+
+
+def resample_precursor_mz(theoretical_mz: float, instrument: str | None, rng) -> float:
+    """MIST-CF/BUDDY-style precursor m/z resampling: Gaussian noise with std
+    = instrument-specific ppm tolerance / 5. The original MIST-CF formulation
+    redraws if the sample falls outside the instrument tolerance, but at this
+    std that's a >=5-sigma event (p ~ 6e-7), so it's a no-op and dropped here
+    -- a plain Gaussian is equivalent in practice.
+
+    `instrument` should already be normalized to one of
+    INSTRUMENT_PPM_TOLERANCE's keys (e.g. via a raw-string -> canonical-type
+    lookup at load time); unrecognized/missing falls back to "unknown".
+    `rng` is a numpy Generator (e.g. np.random.default_rng(seed)) -- passed
+    in rather than created here so callers control reproducibility.
+    """
+    tol_ppm = INSTRUMENT_PPM_TOLERANCE.get(
+        (instrument or "unknown").lower(), INSTRUMENT_PPM_TOLERANCE["unknown"]
+    )
+    std_ppm = tol_ppm / 5
+    return theoretical_mz + rng.normal(0, theoretical_mz * std_ppm / 1e6)
