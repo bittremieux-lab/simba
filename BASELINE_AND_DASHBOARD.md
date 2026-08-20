@@ -251,27 +251,49 @@ the current `ValMetricsCallback`) — right now that's just 009.
     bin labels — cosine only depends on which two spectra a pair uses, not
     on any model's predictions, so it's identical across every experiment
     built from the same preprocessing dir.
+  - **Hit@1/5/20 retrieval benchmark** — a checkbox (default **on**; see
+    crash note below for why) adds three more columns, computed by
+    `compute_hit_at_k_all` (a self-contained, in-dashboard duplicate of
+    `tools/benchmark_self_retrieval.py`'s logic — see section 10) for every
+    run plus the cosine baseline row if available. Hit@k is
+    higher-is-better, the opposite of every other column in this table, so
+    it gets its own (non-reversed) color-gradient direction
+    (`RdYlGn` vs. everything else's `RdYlGn_r`) rather than sharing one
+    gradient call.
   - Metrics to display are selectable; the table is color-graded
-    (red→green, lower-is-better, **excluding any column that's entirely
-    NaN** — see the segfault note below) with an optional bar chart for any
-    one selected metric.
-  - **Fixed two crash-inducing bugs found while building this**: (1) the
-    sidebar's "Refresh" button was a literal no-op (`st.button("Refresh")`
-    with nothing attached) — its own comment claimed "any interaction
-    reloads data fresh," but that's false for anything using
-    `@st.cache_data` (e.g. `list_consolidated_steps`), which caches by
-    arguments for the server process's lifetime and is *not* invalidated by
-    a script rerun. A long-running experiment's newly-appended validation
-    checks stayed invisible (e.g. showing "3 of 3 available checks" for a
-    run that had logged 20+) until the whole dashboard process was
-    restarted. Fixed: `st.button("Refresh")` now calls `st.cache_data.clear()`.
-    (2) A custom column shows as all-`NaN` before it's built — passing an
-    all-NaN column to `Styler.background_gradient` triggers
-    `np.nanmax`/`np.nanmin` on an all-NaN slice, which segfaults the whole
-    process under this environment's pandas/numpy/matplotlib versions
-    (confirmed via the `RuntimeWarning: All-NaN slice encountered` printed
-    immediately before the crash) rather than just warning. Fixed by
-    excluding all-NaN columns from the gradient subset.
+    (red→green, lower-is-better except Hit@k, **excluding any column that's
+    entirely NaN** — see the segfault note below) with an optional bar
+    chart for any one selected metric.
+  - **Fixed two crash-inducing bugs found while building this, and one
+    still-unexplained one**: (1) the sidebar's "Refresh" button was a
+    literal no-op (`st.button("Refresh")` with nothing attached) — its own
+    comment claimed "any interaction reloads data fresh," but that's false
+    for anything using `@st.cache_data` (e.g. `list_consolidated_steps`),
+    which caches by arguments for the server process's lifetime and is
+    *not* invalidated by a script rerun. A long-running experiment's
+    newly-appended validation checks stayed invisible (e.g. showing "3 of 3
+    available checks" for a run that had logged 20+) until the whole
+    dashboard process was restarted. Fixed: `st.button("Refresh")` now
+    calls `st.cache_data.clear()`. (2) A custom column shows as all-`NaN`
+    before it's built — passing an all-NaN column to
+    `Styler.background_gradient` triggers `np.nanmax`/`np.nanmin` on an
+    all-NaN slice, which segfaults the whole process under this
+    environment's pandas/numpy/matplotlib versions (confirmed via the
+    `RuntimeWarning: All-NaN slice encountered` printed immediately before
+    the crash) rather than just warning. Fixed by excluding all-NaN columns
+    from the gradient subset. (3) Enabling the Hit@k checkbox segfaulted
+    the dashboard twice, with no informative traceback either time (once
+    right after a `use_container_width` deprecation warning, which got
+    fixed -- `st.dataframe(..., width="stretch")` -- as a legitimate cleanup
+    but did **not** stop the crash on retry). The Hit@k *logic* was verified
+    correct and crash-free multiple times as a standalone script and via
+    direct non-Streamlit invocation of the same dashboard function — the
+    crash only ever happened when it ran live inside the Streamlit process,
+    matching this dashboard's earlier, still-unexplained segfault history.
+    Root cause unresolved; what actually made it stop crashing was simply
+    defaulting the checkbox to checked (`value=True`) instead of leaving it
+    off for on-demand triggering -- worth noting if a similar crash recurs
+    for a future on-demand-triggered heavy computation.
 
 **Design note on cost**: everywhere that reads per-pair data prefers the
 consolidated parquet file when the experiment has one (`load_pair_data_for_step`
@@ -296,6 +318,9 @@ try to read the whole run's history on every widget tweak.
 | `tools/dry_test_resampling_weights.py` + its `.slurm.sh` | Diagnostic: simulates drawing from the real training sampler to verify per-bucket weight shares and per-pair repetition before spending a training run on it |
 | `tools/compute_val_cosine.py` + its `.slurm.sh` | Computes the raw spectral cosine-similarity baseline for every validation pair, once per val set (section 9) |
 | `tools/plot_pred_mces_by_bin.py` | Diagnostic: predicted-MCES (or cosine) distribution per GT-MCES bin, with the self bucket split by same- vs different-spectrum (section 9) |
+| `tools/benchmark_self_retrieval.py` | Hit@1/5/20 retrieval benchmark among same-molecule near-neighbor queries, for any set of experiments + cosine (section 10) |
+| `tools/confusion_hit_simba_vs_cosine.py` | One run vs. cosine: 2×2 confusion matrix (n and %) of hit@k agreement/disagreement (section 10) |
+| `tools/dive_hit_disagreements.py` | For the two disagreement quadrants above: the losing method's rank for the true match, and the GT MCES of whatever it wrongly ranked #1 instead (section 10) |
 | `tools/dashboard_app.py` | Streamlit monitoring/analysis dashboard (section 5) |
 
 ## 7. Precursor mass: theoretical base + MIST-CF/BUDDY noise (experiment 010)
@@ -552,3 +577,99 @@ built (open per the last conversation):
    `(0,5]`'s typical range, instead of relying purely on regression/
    classification loss + sampling weight to teach the distinction
    indirectly.
+
+## 10. Hit@1/5/20 retrieval benchmark, and where SIMBA vs. cosine disagree
+
+Turns the "self, different spectrum" population from section 9 into an
+actual retrieval task: for every validation molecule with ≥2 spectra
+(2,010 of them), rank the true match (its own other spectrum) against 255
+decoys and see whether it lands in the top 1/5/20.
+
+**Feasibility, confirmed before building anything**: the 2,731-molecule
+self-bucket pool has *complete* pairwise GT-MCES coverage already sitting
+in the saved validation tables -- 3,727,815 cross-molecule pairs among this
+pool, exactly `C(2731,2)`. So both GT MCES (for decoy selection) and every
+experiment's own `pred_mces` (for scoring) are already logged for any
+query-vs-decoy comparison; no fresh MCES computation or GPU re-inference
+needed anywhere in this section.
+
+**`tools/benchmark_self_retrieval.py`**: for each query molecule, decoys are
+the 255 *other* pool molecules with the lowest GT MCES to it (decoy
+selection is GT-MCES-only, hence identical across every method -- only the
+ranking differs). Candidates = 255 decoys + the true match = 256. Rank by
+predicted MCES ascending (SIMBA) or cosine similarity descending. Uses one
+dense `(2731, 2731)` matrix per method (GT + one per experiment + cosine)
+for fast neighbor lookup/ranking, built once and reused across all 2,010
+queries. Results, most recent checkpoint of each:
+
+| Run | Hit@1 | Hit@5 | Hit@20 |
+|---|---|---|---|
+| 009 | 0.475 | 0.620 | 0.750 |
+| 010 | 0.540 | 0.695 | 0.805 |
+| 011 | 0.585 | 0.762 | 0.874 |
+| 012 | 0.585-0.593 | 0.762-0.775 | 0.874-0.879 |
+| cosine (raw spectral baseline) | 0.679 | 0.854 | 0.917 |
+
+(012's range reflects it still actively training between separate runs of
+the benchmark, not a bug -- each run uses whatever the latest checkpoint
+was at that moment.) Monotonic improvement 009→012, consistent with
+everything else found this session; cosine still ahead of every SIMBA
+checkpoint, consistent with section 9's finding.
+
+**Caveat, flagged but not fixed**: a query/decoy molecule's exact spectrum
+representation isn't perfectly pinned down for every comparison. Which
+spectrum of a multi-spectrum molecule gets used in a saved pair row depends
+on whether that molecule lands in the `mol_idx_0` or `mol_idx_1` column of
+that specific row (first spectrum vs. last spectrum respectively -- see
+`CustomDatasetMultitasking`'s val-time index selection, section 3). The
+query's own self-pair row is consistent (always spec_idx_0 vs spec_idx_1),
+but which of those two same spectra represents it in a given *decoy*
+comparison can silently switch depending on how the original pair-list
+generation happened to order the two molecules. Fixing this properly would
+need fresh inference for whichever comparisons use the "wrong" spectrum;
+left as-is (scored exactly as already logged) since the whole point of this
+benchmark was to use only what's already saved. Likely a minor, roughly
+unbiased noise source rather than something invalidating the results.
+
+**Dashboard integration**: `compute_hit_at_k_all` in `tools/dashboard_app.py`
+is a self-contained duplicate of the same logic (not a cross-script import,
+to keep the dashboard's only dependencies as installed packages / the simba
+package) -- see section 5's Compare Runs entry, including the crash and its
+resolution (checkbox defaulted to checked; root cause of the segfault
+itself was never confirmed).
+
+**`tools/confusion_hit_simba_vs_cosine.py`**: 2×2 confusion matrix (n and %)
+of hit@k agreement between one experiment and cosine. For 012 vs. cosine,
+hit@1, n=2,010:
+
+|  | cosine hit@1 | cosine miss@1 |
+|---|---|---|
+| **SIMBA hit@1** | n=1,048 (52.1%) | n=150 (7.5%) |
+| **SIMBA miss@1** | n=317 (15.8%) | n=495 (24.6%) |
+
+Both agree and succeed 52.1% of the time, both agree and fail together
+24.6% of the time. Where they disagree, cosine's unique-win group (317,
+15.8%) is about 2× the size of SIMBA's (150, 7.5%).
+
+**`tools/dive_hit_disagreements.py`**: for each disagreement group, the
+losing method's rank for the true match, and the GT MCES of whatever it
+wrongly ranked #1 instead (run against 012 vs. cosine):
+
+- **SIMBA wrong, cosine right (n=317)**: SIMBA's rank for the true match --
+  median 5, mean 21.8 (top-5 53.9%, top-10 67.8%, but a long tail out to
+  rank 249). What it ranked #1 instead has median GT MCES **12.5** to the
+  query -- only 17% of its wrong picks are genuinely close decoys
+  (GT MCES≤5); 58% are decoys that are actually quite structurally distant
+  (GT MCES>10).
+- **cosine wrong, SIMBA right (n=150)**: cosine's rank for the true match --
+  median 3, mean 8.9 (top-5 76.7%, top-10 86%, worst case rank 138). What
+  it ranked #1 instead has median GT MCES **6.0** -- 57% of its wrong picks
+  are genuinely close decoys (GT MCES≤10).
+
+**Reading**: it's not just that SIMBA is somewhat worse in these
+disagreement cases -- the two methods' errors are qualitatively different.
+Cosine's mistakes look "reasonable" (confusing the true match with
+something that really is structurally close). SIMBA's mistakes more often
+rank something genuinely dissimilar (MCES 10-20) above the actual match --
+a more concerning failure mode than a close call between similar
+candidates. Not yet investigated further or acted on.

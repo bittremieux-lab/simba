@@ -1384,6 +1384,172 @@ def _find_cosine_reference(surviving: dict) -> tuple[Path, str] | None:
     return None
 
 
+# Hit@k retrieval benchmark among same-molecule near-neighbors (see
+# tools/benchmark_self_retrieval.py, which this is adapted from -- kept as a
+# self-contained duplicate here rather than a cross-script import, since
+# dashboard_app.py otherwise depends only on installed packages / the simba
+# package, not sibling tools/*.py files).
+HIT_AT_K_VALUES = (1, 5, 20)
+N_DECOYS_DEFAULT = 255
+
+
+def _build_pool_and_queries(ref_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """(pool_mols, query_mols): every molecule in the "self (MCES=0)" bucket,
+    and the subset with >=2 spectra (spec_idx_0 != spec_idx_1 on their own
+    self-pair row) -- the queries for the retrieval benchmark."""
+    self_df = ref_df[ref_df["mces_bin"] == "self (MCES=0)"]
+    pool_mols = pd.unique(pd.concat([self_df["mol_idx_0"], self_df["mol_idx_1"]]))
+    same_spec = self_df["spec_idx_0"] == self_df["spec_idx_1"]
+    query_mols = self_df.loc[~same_spec, "mol_idx_0"].to_numpy()
+    return pool_mols, query_mols
+
+
+def _build_score_matrix(
+    ref_df: pd.DataFrame, pool_mols: np.ndarray, mol_to_local: dict, value_col: str
+) -> np.ndarray:
+    """Dense (n_pool, n_pool) matrix of `value_col` for every cross-molecule
+    pair within the pool, symmetric; NaN where absent (there shouldn't be
+    any within this pool -- confirmed it's a complete graph, 3,727,815
+    pairs == exactly C(2731,2))."""
+    n = len(pool_mols)
+    mat = np.full((n, n), np.nan, dtype=np.float64)
+    cross = ref_df[ref_df["mol_idx_0"] != ref_df["mol_idx_1"]]
+    pool_set = set(pool_mols.tolist())
+    within = cross[
+        cross["mol_idx_0"].isin(pool_set) & cross["mol_idx_1"].isin(pool_set)
+    ]
+    i = within["mol_idx_0"].map(mol_to_local).to_numpy()
+    j = within["mol_idx_1"].map(mol_to_local).to_numpy()
+    v = within[value_col].to_numpy()
+    mat[i, j] = v
+    mat[j, i] = v
+    return mat
+
+
+def _true_match_scores(ref_df: pd.DataFrame, value_col: str) -> dict:
+    """query_mol -> that method's score for the query's own "self, different
+    spectrum" row (its true match: the molecule's other spectrum)."""
+    self_df = ref_df[ref_df["mces_bin"] == "self (MCES=0)"]
+    diff_spec = self_df["spec_idx_0"] != self_df["spec_idx_1"]
+    rows = self_df.loc[diff_spec]
+    return dict(zip(rows["mol_idx_0"], rows[value_col]))
+
+
+def _hit_at_k(
+    gt_matrix,
+    score_matrix,
+    true_scores,
+    mol_to_local,
+    query_mols,
+    n_decoys,
+    ks,
+    higher_is_better,
+) -> dict:
+    hits = dict.fromkeys(ks, 0)
+    n_scored = 0
+    for q in query_mols:
+        qi = mol_to_local[q]
+        if q not in true_scores or np.isnan(true_scores[q]):
+            continue
+        gt_row = gt_matrix[qi].copy()
+        gt_row[qi] = np.inf  # never pick the query molecule itself as a decoy
+        decoy_local = np.argsort(gt_row)[:n_decoys]
+        decoy_scores = score_matrix[qi, decoy_local]
+        decoy_scores = decoy_scores[~np.isnan(decoy_scores)]
+        candidates = np.append(decoy_scores, true_scores[q])
+        true_idx = len(candidates) - 1
+        order = np.argsort(-candidates if higher_is_better else candidates)
+        rank = int(np.nonzero(order == true_idx)[0][0]) + 1
+        n_scored += 1
+        for k in ks:
+            hits[k] += int(rank <= k)
+    return {k: (hits[k] / n_scored if n_scored else float("nan")) for k in ks}
+
+
+@st.cache_data(show_spinner="Computing Hit@k retrieval benchmark ...")
+def compute_hit_at_k_all(
+    exp_dir_strs: tuple[str, ...],
+    val_name: str,
+    cosine_parquet_path: str | None,
+    n_decoys: int = N_DECOYS_DEFAULT,
+    ks: tuple[int, ...] = HIT_AT_K_VALUES,
+) -> dict[str, dict]:
+    """{run_label: {k: hit_rate}} for every exp_dir (keyed by exp_dir.name,
+    matching the Compare-runs table's index) plus, if cosine_parquet_path is
+    given, one extra entry keyed COSINE_ROW_LABEL. Decoy selection (255
+    nearest-GT-MCES pool molecules per query) is computed once from the
+    first exp_dir's data and reused for every method, so the comparison is
+    apples-to-apples -- only the ranking differs per method."""
+    exp_dirs = [Path(p) for p in exp_dir_strs]
+    ref_path = exp_dirs[0] / f"val_pairs_{val_name}_consolidated.parquet"
+    ref_df = pd.read_parquet(
+        ref_path,
+        columns=[
+            "mol_idx_0",
+            "mol_idx_1",
+            "gt_mces",
+            "mces_bin",
+            "spec_idx_0",
+            "spec_idx_1",
+        ],
+    )
+    pool_mols, query_mols = _build_pool_and_queries(ref_df)
+    mol_to_local = {m: i for i, m in enumerate(pool_mols)}
+    gt_matrix = _build_score_matrix(ref_df, pool_mols, mol_to_local, "gt_mces")
+
+    results = {}
+    for exp_dir in exp_dirs:
+        steps = list_available_steps(exp_dir, val_name)
+        if not steps:
+            continue
+        pred_col = f"pred_mces_step{steps[-1]:06d}"
+        path = exp_dir / f"val_pairs_{val_name}_consolidated.parquet"
+        df = pd.read_parquet(
+            path,
+            columns=[
+                "mol_idx_0",
+                "mol_idx_1",
+                "mces_bin",
+                "spec_idx_0",
+                "spec_idx_1",
+                pred_col,
+            ],
+        )
+        score_matrix = _build_score_matrix(df, pool_mols, mol_to_local, pred_col)
+        true_scores = _true_match_scores(df, pred_col)
+        results[exp_dir.name] = _hit_at_k(
+            gt_matrix,
+            score_matrix,
+            true_scores,
+            mol_to_local,
+            query_mols,
+            n_decoys,
+            ks,
+            higher_is_better=False,
+        )
+
+    if cosine_parquet_path:
+        cos = pd.read_parquet(cosine_parquet_path)
+        df = ref_df[
+            ["mol_idx_0", "mol_idx_1", "mces_bin", "spec_idx_0", "spec_idx_1"]
+        ].merge(
+            cos, on=["mol_idx_0", "mol_idx_1", "spec_idx_0", "spec_idx_1"], how="left"
+        )
+        score_matrix = _build_score_matrix(df, pool_mols, mol_to_local, "cosine")
+        true_scores = _true_match_scores(df, "cosine")
+        results[COSINE_ROW_LABEL] = _hit_at_k(
+            gt_matrix,
+            score_matrix,
+            true_scores,
+            mol_to_local,
+            query_mols,
+            n_decoys,
+            ks,
+            higher_is_better=True,
+        )
+    return results
+
+
 def _compare_runs_row(exp_dir: Path, include_mass_filtered: bool) -> dict | None:
     """One comparison row for a single experiment. Returns None for
     experiments with no validation data logged yet."""
@@ -1463,7 +1629,8 @@ def render_compare_runs_tab():
         "come straight from metrics.csv when logged; overlap cells for older "
         "runs that predate that logging, the mass-filtered columns, and any "
         "custom columns added below are recomputed on demand from that "
-        "check's per-pair data. Overlap and MAE/loss are all lower-is-better."
+        "check's per-pair data. Overlap and MAE/loss are all lower-is-better; "
+        "Hit@k (see below) is higher-is-better."
     )
 
     experiments = list_experiments()
@@ -1634,6 +1801,43 @@ def render_compare_runs_tab():
                 cosine_row[label] = cached[label].get(COSINE_ROW_LABEL, np.nan)
         table.loc[COSINE_ROW_LABEL] = cosine_row
 
+    st.markdown(
+        "###### Retrieval benchmark: Hit@1/5/20 among same-molecule near-neighbors"
+    )
+    st.caption(
+        "For every validation molecule with ≥2 spectra (2,010 of them), ranks "
+        "it against 255 decoys -- the pool's own lowest-GT-MCES neighbor "
+        "molecules -- plus its own other spectrum (the true match). "
+        "Hit@k = is the true match in the top k, sorted by predicted MCES "
+        "ascending (SIMBA) or cosine similarity descending. Fully computed "
+        "from existing per-pair data, no re-inference. See "
+        "tools/benchmark_self_retrieval.py."
+    )
+    include_hit_at_k = st.checkbox(
+        "Compute Hit@1/5/20 (reads full per-pair data, builds one "
+        "molecule×molecule matrix per run -- a few seconds per run)",
+        value=True,
+        key="compare_include_hit_at_k",
+    )
+    if include_hit_at_k and surviving:
+        hit_cosine_ref = _find_cosine_reference(surviving)
+        cosine_parquet_path = None
+        if hit_cosine_ref is not None:
+            ref_exp_dir, ref_val_name = hit_cosine_ref
+            preprocessing_dir = infer_preprocessing_dir(ref_exp_dir)
+            if preprocessing_dir is not None:
+                cosine_parquet_path = str(
+                    Path(preprocessing_dir) / f"val_cosine_{ref_val_name}.parquet"
+                )
+        exp_dir_strs = tuple(str(d) for d in surviving.values())
+        val_name_for_hitk = _pick_val_name(next(iter(surviving.values())))
+        hit_results = compute_hit_at_k_all(
+            exp_dir_strs, val_name_for_hitk, cosine_parquet_path
+        )
+        for run_label, ks_dict in hit_results.items():
+            for k, v in ks_dict.items():
+                table.loc[run_label, f"Hit@{k}"] = v
+
     default_cols = [
         c
         for c in [
@@ -1648,6 +1852,9 @@ def render_compare_runs_tab():
             "Identity overlap (skip2)",
             "Overlap (mass diff<30)",
             "Overlap (mass diff<100)",
+            "Hit@1",
+            "Hit@5",
+            "Hit@20",
             *custom_labels,
         ]
         if c in table.columns
@@ -1664,11 +1871,23 @@ def render_compare_runs_tab():
     # -- Styler.background_gradient's np.nanmax/np.nanmin on an all-NaN slice
     # segfaults under this environment's pandas/numpy/matplotlib versions
     # rather than raising, so this isn't just a cosmetic skip.
+    # Hit@k is higher-is-better, unlike everything else in this table
+    # (loss/MAE/overlap are all lower-is-better) -- needs the opposite
+    # color-gradient direction or it would show high hit rates as red.
+    higher_is_better_cols = {f"Hit@{k}" for k in HIT_AT_K_VALUES}
     color_cols = [c for c in selected if c != "Last step" and shown[c].notna().any()]
+    lower_better_cols = [c for c in color_cols if c not in higher_is_better_cols]
+    higher_better_cols = [c for c in color_cols if c in higher_is_better_cols]
     styled = shown.style.format(precision=4, na_rep="—")
-    if color_cols:
-        styled = styled.background_gradient(cmap="RdYlGn_r", axis=0, subset=color_cols)
-    st.dataframe(styled, use_container_width=True)
+    if lower_better_cols:
+        styled = styled.background_gradient(
+            cmap="RdYlGn_r", axis=0, subset=lower_better_cols
+        )
+    if higher_better_cols:
+        styled = styled.background_gradient(
+            cmap="RdYlGn", axis=0, subset=higher_better_cols
+        )
+    st.dataframe(styled, width="stretch")
 
     bar_options = [c for c in selected if c != "Last step"]
     if bar_options:
