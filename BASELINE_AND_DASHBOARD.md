@@ -239,6 +239,18 @@ the current `ValMetricsCallback`) — right now that's just 009.
     every widget interaction — it reads per-pair data and recomputes
     molecule masses on any cache miss, across every run in the table, so it
     isn't cheap). Columns are blank (`NaN`) until built.
+  - **Cosine-similarity baseline row** — a checkbox adds one synthetic
+    "run", `cosine (raw spectral baseline)`, computed from
+    `tools/compute_val_cosine.py`'s precomputed per-pair cosine similarity
+    (see section 9) instead of any experiment's `pred_mces`. This is a row,
+    not a column: it fills in every Overlap cell (fixed and custom) using
+    cosine, and leaves Val loss/Overall MAE/Identity MAE/Last step blank,
+    since cosine isn't a per-pair error against GT and isn't on a scale
+    comparable to MCES (MAE against it wouldn't mean anything). Any
+    experiment sharing the same val set works as the reference for GT-MCES
+    bin labels — cosine only depends on which two spectra a pair uses, not
+    on any model's predictions, so it's identical across every experiment
+    built from the same preprocessing dir.
   - Metrics to display are selectable; the table is color-graded
     (red→green, lower-is-better, **excluding any column that's entirely
     NaN** — see the segfault note below) with an optional bar chart for any
@@ -282,6 +294,8 @@ try to read the whole run's history on every widget tweak.
 | `tools/slurm/012_msg_gaetan_split_v2_theoretical_precursor_mist_cf_resampling_bucket_weights_1gpu.slurm.sh` | Trains 012 — same as 011 plus self/near-self bucket multipliers and within-bucket mass-tier reweighting (section 8) |
 | `tools/mass_diff_by_mces_bucket.py` + its `.slurm.sh` | Diagnostic: mass-difference distribution per MCES sampling bucket, for calibrating the weights in section 8 |
 | `tools/dry_test_resampling_weights.py` + its `.slurm.sh` | Diagnostic: simulates drawing from the real training sampler to verify per-bucket weight shares and per-pair repetition before spending a training run on it |
+| `tools/compute_val_cosine.py` + its `.slurm.sh` | Computes the raw spectral cosine-similarity baseline for every validation pair, once per val set (section 9) |
+| `tools/plot_pred_mces_by_bin.py` | Diagnostic: predicted-MCES (or cosine) distribution per GT-MCES bin, with the self bucket split by same- vs different-spectrum (section 9) |
 | `tools/dashboard_app.py` | Streamlit monitoring/analysis dashboard (section 5) |
 
 ## 7. Precursor mass: theoretical base + MIST-CF/BUDDY noise (experiment 010)
@@ -445,3 +459,96 @@ against the real pair pool (bucket shares, repetition/distinct-pair counts)
 was used to choose the mass-tier thresholds in the first place — both are
 meant to be reused for any future change to this weighting scheme, not
 one-off scripts.
+
+## 9. Cosine-similarity baseline, and why it separates self-pairs better than SIMBA
+
+Motivation: Gaetan's suggested sanity check (already used for retrieval in
+`tools/cosine_baseline_iceberg.py` etc.) — how much of SIMBA's separation
+ability is actually earned over plain binned spectral cosine similarity,
+with no learned model involved at all? Extended here to every *validation*
+pair, not just retrieval candidates, so it can sit alongside SIMBA's own
+predictions in every overlap-coefficient metric the dashboard already has.
+
+**`tools/compute_val_cosine.py`**: computed once per val set, not once per
+experiment or per training step. Reuses `bin_spectra` from
+`tools/cosine_baseline_iceberg.py` unchanged (bin_width=0.01 Da, max_mz=1100
+Da, sqrt-compress, L2-normalize -- cosine similarity is then a plain dot
+product) applied to each pair's *raw* spectra (`molecule_pairs_val.
+original_spectra[spec_idx]`, loaded via the same `load_dataset` path
+`simba train` uses -- before SIMBA's own `Preprocessor` runs), matched by
+`spec_idx_0`/`spec_idx_1` read from any one experiment's consolidated
+parquet (any experiment works interchangeably as this "reference" -- only
+its pair *identity*, not its predictions, is used). This is safe to treat
+as a one-time, experiment-independent artifact because 009-012 all build
+their validation pairs from the same preprocessing dir the same
+deterministic way (fixed pair list, `shuffle=False`, and
+`CustomDatasetMultitasking.__getitem__`'s val branch always resolves a
+molecule to the same spectrum index) -- confirmed directly: merging the
+saved `val_cosine_val.parquet` onto 011's consolidated parquet by
+`(mol_idx_0, mol_idx_1, spec_idx_0, spec_idx_1)` is lossless (3,730,546/
+3,730,546 rows). Saved to `{preprocessing_dir}/val_cosine_{val_name}.parquet`.
+
+Verified the spectrum-level (not just molecule-level) identity resolution
+is correct, since this was flagged as important: true same-spectrum pairs
+(`spec_idx_0==spec_idx_1`) come out at cosine exactly 1.0 for all 721 of
+them; same-molecule-*different*-spectrum pairs (2,010 of them, within the
+"self (MCES=0)" bin) range across the full 0-1 scale (mean 0.657) -- as
+expected, since two independently-measured spectra of the same molecule
+(different collision energy/instrument/noise) aren't guaranteed to look
+alike, even though they're chemically identical.
+
+**Dashboard integration**: cosine appears as an extra table *row* in
+Compare Runs (`cosine (raw spectral baseline)`), not a column -- see
+section 5. First attempt wrongly modeled it as a per-column "data source"
+choice in the custom-metric builder; corrected after feedback that cosine
+is "another way of predicting scores," i.e. it belongs alongside the
+experiments as a row, auto-filling every Overlap column (fixed and custom)
+and leaving MAE/loss blank.
+
+**Finding: cosine separates self-pairs from near-neighbors better than any
+of 009-012**, despite SIMBA winning most other overlap columns. Investigated
+with a new diagnostic, `tools/plot_pred_mces_by_bin.py` (reads one
+experiment's most recent check's per-pair data directly, no SIMBA
+re-inference; optionally overlays the cosine-scored version of the same
+bins for a side-by-side comparison -- lightweight, run directly, no SLURM
+needed). Splits the self bucket into true same-spectrum vs same-molecule-
+different-spectrum pairs (same distinction as above), since they behave
+very differently:
+
+- **Same-spectrum pairs (26% of the self bucket, 721/2,731 in run 012)**:
+  a wash between methods -- both are *mathematically* perfect here (an
+  embedding's cosine similarity with itself is always 1, so
+  `head_mode=cosine_no_head` predicts exactly 0 MCES with zero variance;
+  raw cosine is trivially 1.0 with zero variance too). Confirmed directly
+  in run 012's step-145000 data: `median=0.000, mean=0.000, std=0.000`.
+- **Different-spectrum pairs (74%, 2,010/2,731)**: this is where the whole
+  gap comes from. SIMBA's median (2.09) is in the right direction --
+  clearly below the `(0,5]` bin's own median (4.42) -- so there's no
+  systematic bias/miscalibration. But its spread (std≈4.9) is almost as
+  wide as its gap to `(0,5]`, so the two distributions sit almost on top of
+  each other. Cosine's version of the same subgroup (median 0.744 vs
+  `(0,5]`'s 0.272) has real density bunched up near 1.0 -- a region every
+  other GT-MCES bin's distribution has decayed to near-zero density in --
+  giving it a genuinely low-overlap "exclusive zone" that SIMBA's low-MCES
+  end doesn't have (SIMBA's near-0 region is heavily shared with `(0,5]`'s
+  own distribution, which also piles up there).
+
+Working conclusion: this looks more like an architectural/resolution
+limit -- SIMBA isn't confidently *wrong* about these pairs, it just lacks a
+sharp, low-variance "almost certainly the same structure" mode the way raw
+peak-matching has one built in -- rather than a training-time-augmentation
+bias, though that isn't fully ruled out. Candidate next steps, not yet
+built (open per the last conversation):
+1. Check whether the model's output resolution near MCES=0 is inherently
+   coarse (e.g. predictions clustering on a handful of discrete-ish values)
+   vs. genuinely continuous but merely high-variance.
+2. Reduce training-time augmentation (peak dropout / precursor noise)
+   specifically for low-GT-MCES pairs, so the model sees more "clean"
+   comparisons for exactly this range, rather than only adding sampler
+   weight (quantity, not signal quality -- which is what experiments 011/012
+   already did).
+3. A more invasive option: a margin/contrastive loss term specifically
+   penalizing same-molecule-different-spectrum predictions that land inside
+   `(0,5]`'s typical range, instead of relying purely on regression/
+   classification loss + sampling weight to teach the distinction
+   indirectly.

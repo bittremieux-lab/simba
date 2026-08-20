@@ -93,6 +93,21 @@ def infer_limit_train_batches(exp_dir: Path) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def infer_preprocessing_dir(exp_dir: Path) -> str | None:
+    """Best-effort: read the PREPRO_DIR shell variable from the matching
+    SLURM script (tools/slurm/{experiment_name}.slurm.sh) -- every
+    experiment script in this project sets `PREPRO_DIR=...` then passes
+    `paths.preprocessing_dir="${PREPRO_DIR}"`, so this is more reliable than
+    trying to regex the Hydra override itself. Used to locate
+    val_cosine_{val_name}.parquet (tools/compute_val_cosine.py), which lives
+    with the val set rather than any one experiment."""
+    script = SLURM_DIR / f"{exp_dir.name}.slurm.sh"
+    if not script.exists():
+        return None
+    m = re.search(r"^PREPRO_DIR=(\S+)$", script.read_text(), re.MULTILINE)
+    return m.group(1) if m else None
+
+
 def list_box_plot_steps(exp_dir: Path, val_name: str) -> list[int]:
     steps = []
     for p in exp_dir.glob(f"mces_binned_box_{val_name}_step*.png"):
@@ -254,6 +269,18 @@ def mol_idx_mass_lookup(exp_dir_str: str, val_name: str, step: int) -> dict[int,
     return {idx: smiles_to_mass[smi] for idx, smi in idx_to_smiles.items()}
 
 
+@st.cache_data(show_spinner="Loading cosine baseline ...")
+def load_val_cosine(preprocessing_dir: str, val_name: str) -> pd.DataFrame:
+    """Raw spectral cosine similarity per validation pair
+    (tools/compute_val_cosine.py) -- one file per val set, shared by every
+    experiment built from the same preprocessing dir (empty DataFrame if it
+    hasn't been computed yet)."""
+    path = Path(preprocessing_dir) / f"val_cosine_{val_name}.parquet"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_parquet(path)
+
+
 def _mass_diff_masked_bin_stats(
     pair_df: pd.DataFrame, mol_mass: dict, mass_lo: float, mass_hi: float
 ) -> dict:
@@ -396,20 +423,27 @@ def _active_bin_labels(
 
 
 def _mass_diff_masked_pred_by_bin(
-    pair_df: pd.DataFrame, mol_mass: dict, mass_lo: float, mass_hi: float
+    pair_df: pd.DataFrame,
+    mol_mass: dict,
+    mass_lo: float,
+    mass_hi: float,
+    value_col: str = "pred_mces",
 ) -> dict[str, np.ndarray]:
-    """{label: predicted-MCES array}, restricted to pairs whose
-    |mass_0 - mass_1| falls in [mass_lo, mass_hi] -- the raw material for
-    the overlap-coefficient metric (unlike MAE, this needs each bin's full
-    array, not just an aggregate, so there's no pre-logged fast path for it
-    at all)."""
+    """{label: score array}, restricted to pairs whose |mass_0 - mass_1|
+    falls in [mass_lo, mass_hi] -- the raw material for the overlap-
+    coefficient metric (unlike MAE, this needs each bin's full array, not
+    just an aggregate, so there's no pre-logged fast path for it at all).
+    `value_col` defaults to SIMBA's own `pred_mces` but also works for any
+    other per-pair score in `pair_df` sharing the same bin labels -- e.g.
+    `cosine`, the raw spectral-cosine baseline from
+    tools/compute_val_cosine.py."""
     mass_0 = pair_df["mol_idx_0"].map(mol_mass).to_numpy()
     mass_1 = pair_df["mol_idx_1"].map(mol_mass).to_numpy()
     diff = np.abs(mass_0 - mass_1)
     mask = (diff >= mass_lo) & (diff <= mass_hi) & ~np.isnan(diff)
     if not mask.any():
         return {}
-    pred = pair_df["pred_mces"].to_numpy()[mask]
+    pred = pair_df[value_col].to_numpy()[mask]
     bins = pair_df["mces_bin"].to_numpy()[mask]
     return {label: pred[bins == label] for label in _BIN_ORDER if (bins == label).any()}
 
@@ -1261,6 +1295,95 @@ def _overlap_for_spec(
     return float(np.mean(vals)) if vals else None
 
 
+@st.cache_data(show_spinner=False)
+def _overlap_for_spec_cosine(
+    exp_dir: Path,
+    val_name: str,
+    mass_lo: float,
+    mass_hi: float,
+    skip: int,
+    anchor_bin: str | None,
+) -> float | None:
+    """Same as `_overlap_for_spec`, but scored against raw spectral cosine
+    similarity (tools/compute_val_cosine.py) instead of SIMBA's own
+    pred_mces -- a classical, non-learned baseline. Cosine is experiment-
+    independent (same val set -> same spec_idx pairing -> same cosine for
+    every run), so this only depends on this run's most recent check for
+    its GT-MCES bin labels/mass lookup, not for the score itself. Restricted
+    to Overlap in the UI: cosine and MCES aren't on comparable scales, so an
+    MAE between them wouldn't mean anything."""
+    preprocessing_dir = infer_preprocessing_dir(exp_dir)
+    if preprocessing_dir is None:
+        return None
+    cosine_df = load_val_cosine(preprocessing_dir, val_name)
+    if cosine_df.empty:
+        return None
+
+    steps = list_available_steps(exp_dir, val_name)
+    if not steps:
+        return None
+    step = steps[-1]
+    pair_df = load_pair_data_for_step(
+        str(exp_dir),
+        val_name,
+        step,
+        ("mol_idx_0", "mol_idx_1", "spec_idx_0", "spec_idx_1", "mces_bin"),
+    )
+    merged = pair_df.merge(
+        cosine_df,
+        on=["mol_idx_0", "mol_idx_1", "spec_idx_0", "spec_idx_1"],
+        how="inner",
+    )
+    if merged.empty:
+        return None
+    mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
+    pred_by_bin = _mass_diff_masked_pred_by_bin(
+        merged, mol_mass, mass_lo, mass_hi, value_col="cosine"
+    )
+    pairs = list(zip(_BIN_ORDER, _BIN_ORDER[skip + 1 :]))
+    if anchor_bin is not None:
+        pairs = [(a, b) for a, b in pairs if a == anchor_bin]
+    vals = [
+        _overlap_coefficient(pred_by_bin[a], pred_by_bin[b])
+        for a, b in pairs
+        if a in pred_by_bin and b in pred_by_bin
+    ]
+    vals = [v for v in vals if not np.isnan(v)]
+    return float(np.mean(vals)) if vals else None
+
+
+# (mass_lo, mass_hi, skip, anchor_bin) matching each fixed Overlap column's
+# own SIMBA-based definition -- used to fill the cosine-baseline row's
+# equivalent cells with the same skip/mass-range semantics.
+COSINE_ROW_LABEL = "cosine (raw spectral baseline)"
+_FIXED_OVERLAP_COSINE_SPECS = {
+    "Overlap (skip0)": (0.0, np.inf, 0, None),
+    "Overlap (skip2)": (0.0, np.inf, 2, None),
+    "Identity overlap (skip0)": (0.0, np.inf, 0, "self (MCES=0)"),
+    "Identity overlap (skip1)": (0.0, np.inf, 1, "self (MCES=0)"),
+    "Identity overlap (skip2)": (0.0, np.inf, 2, "self (MCES=0)"),
+    "Overlap (mass diff<30)": (0.0, 30.0, 0, None),
+    "Overlap (mass diff<100)": (0.0, 100.0, 0, None),
+}
+
+
+def _find_cosine_reference(surviving: dict) -> tuple[Path, str] | None:
+    """First (exp_dir, val_name) in `surviving` whose val_cosine_*.parquet
+    already exists -- cosine is experiment-independent (same val set -> same
+    spec_idx pairing -> same cosine everywhere), so any one experiment's
+    per-pair mces_bin/mol_idx labeling works as the reference."""
+    for exp_dir in surviving.values():
+        val_name = _pick_val_name(exp_dir)
+        if val_name is None:
+            continue
+        preprocessing_dir = infer_preprocessing_dir(exp_dir)
+        if preprocessing_dir is None:
+            continue
+        if not load_val_cosine(preprocessing_dir, val_name).empty:
+            return exp_dir, val_name
+    return None
+
+
 def _compare_runs_row(exp_dir: Path, include_mass_filtered: bool) -> dict | None:
     """One comparison row for a single experiment. Returns None for
     experiments with no validation data logged yet."""
@@ -1369,6 +1492,21 @@ def render_compare_runs_tab():
     table = pd.DataFrame(rows).set_index("Run")
     surviving = {d.name: d for d in experiments if d.name in table.index}
 
+    include_cosine = st.checkbox(
+        "Include cosine-similarity baseline row (raw spectral cosine, "
+        "non-learned -- an extra row, not a column; only Overlap cells are "
+        "filled in, MAE/loss are left blank since cosine isn't on a "
+        "comparable scale to MCES)",
+        value=True,
+        key="compare_include_cosine",
+    )
+    cosine_ref = _find_cosine_reference(surviving) if include_cosine else None
+    if include_cosine and cosine_ref is None:
+        st.caption(
+            "Cosine baseline not available yet for this val set -- run "
+            "tools/compute_val_cosine.py first."
+        )
+
     st.markdown("###### Add a custom metric column")
     st.caption(
         "Pick a metric type, a molecule mass-difference range, and (for "
@@ -1445,14 +1583,27 @@ def render_compare_runs_tab():
         )
         cached = st.session_state.setdefault("compare_custom_metric_values", {})
         if build_custom:
+            n_runs = max(len(surviving), 1) + (1 if cosine_ref is not None else 0)
             progress = st.progress(0.0, text="Computing custom columns ...")
-            total_work = max(len(custom_specs) * max(len(surviving), 1), 1)
+            total_work = max(len(custom_specs) * n_runs, 1)
             done = 0
             for spec, label in zip(custom_specs, custom_labels):
                 value_by_run = {}
                 for name, exp_dir in surviving.items():
                     value_by_run[name] = _custom_metric_value(
                         exp_dir, _pick_val_name(exp_dir), spec
+                    )
+                    done += 1
+                    progress.progress(min(done / total_work, 1.0))
+                if cosine_ref is not None and spec["kind"] == "Overlap":
+                    ref_exp_dir, ref_val_name = cosine_ref
+                    value_by_run[COSINE_ROW_LABEL] = _overlap_for_spec_cosine(
+                        ref_exp_dir,
+                        ref_val_name,
+                        spec["mass_lo"],
+                        spec["mass_hi"],
+                        spec["skip"],
+                        spec["bin"],
                     )
                     done += 1
                     progress.progress(min(done / total_work, 1.0))
@@ -1468,6 +1619,20 @@ def render_compare_runs_tab():
                 "Click **Build custom columns** to compute the new column(s) "
                 "-- showing blank until then."
             )
+
+    if cosine_ref is not None:
+        ref_exp_dir, ref_val_name = cosine_ref
+        cosine_row = dict.fromkeys(table.columns, np.nan)
+        for col, (mlo, mhi, skip, anchor) in _FIXED_OVERLAP_COSINE_SPECS.items():
+            if col in cosine_row:
+                cosine_row[col] = _overlap_for_spec_cosine(
+                    ref_exp_dir, ref_val_name, mlo, mhi, skip, anchor
+                )
+        cached = st.session_state.get("compare_custom_metric_values", {})
+        for label in custom_labels:
+            if label in cosine_row and label in cached:
+                cosine_row[label] = cached[label].get(COSINE_ROW_LABEL, np.nan)
+        table.loc[COSINE_ROW_LABEL] = cosine_row
 
     default_cols = [
         c
