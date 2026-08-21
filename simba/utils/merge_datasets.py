@@ -290,10 +290,10 @@ def merge_lightweight_datasets_all_splits(
 
 
 merge_lightweight_datasets_all_splits(
-    dataset_a_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_ref/mapping_unique_smiles.pkl",
-    dataset_b_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_auto/mapping_unique_smiles.pkl",
-    preprocessing_dir_a="/data/simba_files/distance_files/tfs_ms2_ms3_ref/",
-    preprocessing_dir_b="/data/simba_files/distance_files/tfs_ms2_ms3_auto/",
-    output_dir="/data/simba_files/tfs_ms2_ms3_merged_ref_auto/",
+    dataset_a_pkl="/data/simba_files/distance_files/tfs_msn_ref/mapping_unique_smiles.pkl",
+    dataset_b_pkl="/data/simba_files/distance_files/tfs_msn_auto/mapping_unique_smiles.pkl",
+    preprocessing_dir_a="/data/simba_files/distance_files/tfs_msn_ref/",
+    preprocessing_dir_b="/data/simba_files/distance_files/tfs_msn_auto/",
+    output_dir="/data/simba_files_/tfs_msn_merged_ref_auto/",
     skip_corrupted=True,
 )
