@@ -1,20 +1,36 @@
 #!/usr/bin/env python3
-"""Analog discovery using only SIMBA and modified cosine.
+"""Analog discovery using SIMBA, modified cosine, and ground-truth MCES distances.
+
+
+
 
 Generated from run_analog_discovery_all_algorithms_incremental.ipynb.
 """
+
+
+
+
+
+
 
 
 import copy
 import os
 import pickle
 
+
+
+
 import matplotlib.pyplot as plt
 import numpy as np
 import spectrum_utils.plot as sup
-from rdkit import Chem
+from rdkit import Chem, DataStructs
+from functools import lru_cache
 from tqdm.auto import tqdm
 from hydra import compose, initialize_config_dir
+
+
+
 
 import simba
 from simba.analog_discovery.simba_analog_discovery import AnalogDiscovery
@@ -25,6 +41,9 @@ from simba.core.models.simba_model import Simba
 from simba.utils.config_utils import get_config_path
 from simba.core.data.preprocessor import Preprocessor
 
+
+
+
 try:
     from matchms import Spectrum as MatchmsSpectrum
     from matchms.similarity import ModifiedCosine
@@ -34,30 +53,69 @@ except ImportError:
 
 
 
+
+
+
+
+
+
+
+
+
 # ## Analog discovery using SIMBA and modified cosine sequentially
 
 
+
+
+
+
+
+
 # This notebook runs the analog-discovery workflow sequentially with two retrieval backends:
-# 
+#
 # 1. **SIMBA**, using MCES/edit-distance predictions and SIMBA ranking.
 # 2. **Modified cosine**, using `matchms.similarity.ModifiedCosine`.
-# 
+#
 # The notebook stores the outputs for all methods in a single pickle file: `analog_discovery_simba_modified_cosine_results.pkl`.
-# 
+#
 # **Important:** results are now written incrementally after each algorithm finishes. For example, once SIMBA completes, the pickle is immediately updated before modified cosine starts. This avoids losing completed results if a later algorithm fails. The write is done atomically through a temporary `.tmp` file followed by `os.replace`.
-# 
+#
 # For the original downstream inspection/plotting cells, set `PLOT_SCORING_METHOD` to choose which method is loaded as the active `ranking`.
-# 
+#
 # The script also computes and plots normalized MCES distances for both algorithms using violin + boxplot overlays.
+
+
+
+
+
+
 
 
 # ## Libraries
 
 
+
+
+
+
+
+
 # ## Defining parameters
 
 
+
+
+
+
+
+
 # Define the default configuration variables
+
+
+
+
+
+
 
 
 # %% Cell 10
@@ -65,19 +123,29 @@ import os
 written_spectra_file = '/home/spiedrahita/simba/all_spectrums_reference.pkl'
 OPEN_REFERENCE_SPECTRA = False
 WRITE_REFERENCE_SPECTRA = False
+REMOVE_REDUNDANT_SPECTRA=True
 
-# Run both retrieval backends sequentially.
-SCORING_METHODS = ["simba", "modified_cosine"]
-VALID_SCORING_METHODS = {"simba", "modified_cosine"}
+
+
+# Run all retrieval/scoring backends sequentially.
+# ground_truth_mces computes exact MCES similarities/distances from SMILES.
+SCORING_METHODS = [ "ground_truth_mces"]
+VALID_SCORING_METHODS = {"ground_truth_mces"}
 invalid_methods = set(SCORING_METHODS) - VALID_SCORING_METHODS
 if invalid_methods:
     raise ValueError(f"Invalid scoring methods: {invalid_methods}. Valid methods: {VALID_SCORING_METHODS}")
 
+
+
+
 # Method used by the downstream visualization/inspection cells after all algorithms finish.
 # The pickle file always contains all methods, regardless of this value.
-PLOT_SCORING_METHOD = "modified_cosine"
+PLOT_SCORING_METHOD = "ground_truth_mces"
 if PLOT_SCORING_METHOD not in SCORING_METHODS:
     raise ValueError(f"PLOT_SCORING_METHOD must be one of {SCORING_METHODS}, got {PLOT_SCORING_METHOD!r}")
+
+
+
 
 USE_POSITIVE_DATA=True
 USE_NEGATIVE_DATA=True
@@ -92,18 +160,38 @@ PRECURSOR_TOLERANCE = 1.0  # kept explicit for reproducibility; matchms Modified
 MIN_MATCHED_PEAKS = 1
 
 
-TOP_K = 10
+
+
+
+
+
+
+TOP_K = 1
 RANDOM_SEED = 42
-OUTPUT_DIR = "/data/simba_files/"
-OUTPUT_PICKLE_FILE = os.path.join(OUTPUT_DIR, "analog_discovery_simba_modified_cosine_results_tf.pkl")
+OUTPUT_DIR = "/data/simba_files_/"
+OUTPUT_PICKLE_FILE = os.path.join(OUTPUT_DIR, "analog_discovery_ground_truth.pkl")
+GROUND_TRUTH_MCES_DISTANCE_NPY_FILE = os.path.join(OUTPUT_DIR, "ground_truth_mces_distance_matrix_tf.npy")
+GROUND_TRUTH_MCES_SIMILARITY_NPY_FILE = os.path.join(OUTPUT_DIR, "ground_truth_mces_similarity_matrix_tf.npy")
+
+
+
 
 # Incremental persistence options.
 # If True, already-finished methods found in OUTPUT_PICKLE_FILE are reused instead of recomputed.
 RESUME_FROM_EXISTING_PICKLE = False
 
+
+
+
 print(f"Will run scoring methods sequentially: {SCORING_METHODS}")
 print(f"Combined results pickle: {OUTPUT_PICKLE_FILE}")
 print(f"Downstream plots will use: {PLOT_SCORING_METHOD}")
+
+
+
+
+
+
 
 
 # %% Cell 11
@@ -112,11 +200,23 @@ if USE_SIMBA_ORIGINAL:
     USE_METADATA = False
 
 
+
+
+
+
+
+
 # %% Cell 12
 # Initialize Hydra config
 config_path = get_config_path()
 with initialize_config_dir(config_dir=str(config_path), version_base=None):
     cfg = compose(config_name="config")
+
+
+
+
+
+
 
 
 # %% Cell 13
@@ -146,14 +246,38 @@ cfg.preprocessing="tfs_auto"
 cfg.hardware.accelerator="cpu"
 
 
-# 
+
+
+
+
+
+
+#
+
+
+
+
+
+
 
 
 # %% Cell 16
 cfg.model.features.use_ce
 
 
+
+
+
+
+
+
 # Location of model saved, reference spectra in mgf file (MASSSPECGYM), an query spectra (CASMI)
+
+
+
+
+
+
 
 
 # %% Cell 19
@@ -163,36 +287,76 @@ if USE_SIMBA_ORIGINAL:
     )
 else:
     model_location = (
-        "/data/simba_files/training_files_new_encoding/ms2_merged_ref_auto_20260629/best_model.ckpt"
-        #"/data/simba_files/training_files_new_encoding/msn_reference_fixed_split_20260629/best_model.ckpt"
+        "/data/simba_files_/training_files_new_encoding/ms2_merged_ref_auto/best_model.ckpt"
     )
-   
+    #model_location = (
+    #    "/data/simba_files_/training_files_new_encoding/ms2_reference_fixed_split_from_pretrained/best_model.ckpt"
+    #)
+
+
+
 
 #reference_file = "/data/tutorial_files/MassSpecGym.mgf"
 #reference_file = "/data/tutorial_files/ALL_GNPS_NO_PROPOGATED_wb.mgf
 if USE_TFS_SPECTRA:
-    reference_file = "/data/simba_files/tfs_ms2_ref.mgf" 
+    reference_file = "/data/simba_files/tfs_ms2_ref.mgf"
 else:
-    reference_file = "/data/simba_files/msnlib_filtered.mgf" 
-#reference_file = "/data/simba_files/nist_spectra_protonized.mgf" 
+    reference_file = "/data/simba_files_/msnlib_filtered.mgf"
+#reference_file = "/data/simba_files/nist_spectra_protonized.mgf"
+
+
+
 
 casmi_file = (
     "/data/tutorial_files/casmi_all_spectra.mgf"
 )
 
 
+
+
+
+
+
+
 # %% Cell 20
 model_location
+
+
+
+
+
+
 
 
 # ## Load spectra
 
 
+
+
+
+
+
+
 # Let's load the reference spectra and query spectra. This code already carries out a preprocessing of the files obtaining only protonized adducts and spectra with at least more than 6 peaks.
+
+
+
+
+
+
 
 
 # %% Cell 23
 cfg.model.features.use_only_protonized_adducts
+
+
+
+
+
+
+
+
+
 
 
 
@@ -209,8 +373,20 @@ else:
     )
 
 
+
+
+
+
+
+
 # %% Cell 26
 len(all_spectrums_reference)
+
+
+
+
+
+
 
 
 # %% Cell 27
@@ -219,19 +395,43 @@ print(
 )
 
 
+
+
+
+
+
+
 # %% Cell 28
 all_spectrums_query = load_spectra(
     casmi_file, cfg, use_gnps_format=False, use_only_protonized_adducts=cfg.model.features.use_only_protonized_adducts
 )
 
 
+
+
+
+
+
+
 # %% Cell 29
 print(f"Number of spectra loaded from query: {len(all_spectrums_query)}")
+
+
+
+
+
+
 
 
 # %% Cell 30
 from simba.core.data.preprocessor import Preprocessor
 pp=Preprocessor()
+
+
+
+
+
+
 
 
 # %% Cell 31
@@ -246,9 +446,12 @@ all_spectrums_reference_processed = [pp.preprocess_spectrum(
             max_num_peaks=1000,
             scale_intensity='root',
         ) for s in all_spectrums_reference_processed]
-    
+   
 all_spectrums_reference = [s_original for s_original, s_processed in zip(all_spectrums_reference,all_spectrums_reference_processed) if len(s_processed.mz)>=6]
 #only ms2
+
+
+
 
 all_spectrums_reference_new=[]
 for i,s in enumerate(all_spectrums_reference):
@@ -261,8 +464,20 @@ for i,s in enumerate(all_spectrums_reference):
 all_spectrums_reference =all_spectrums_reference_new
 
 
+
+
+
+
+
+
 # %% Cell 32
 len(all_spectrums_reference)
+
+
+
+
+
+
 
 
 # %% Cell 33
@@ -274,17 +489,38 @@ if WRITE_REFERENCE_SPECTRA:
         pickle.dump(data,f)
 
 
+
+
+
+
+
+
 # %% Cell 34
 len(all_spectrums_reference)
+
+
+
+
+
+
 
 
 # %% Cell 35
 all_spectrums_query[0].params['ce']
 
 
+
+
+
+
+
+
 # %% Cell 37
-## Refinement of 
+## Refinement of
 metadata_fields= ['ce','ion_activation','ionization_method', 'adduct','ionmode',]
+
+
+
 
 if USE_METADATA:
     if PUT_METADATA_TO_ZEROS_REFERENCE:
@@ -300,7 +536,6 @@ if USE_METADATA:
             all_spectrums_reference[j].params['ionmode']='positive'
             setattr(all_spectrums_reference[j], 'ionmode', 'positive' )
     else:
-
         if not(USE_TFS_SPECTRA):
           for j,s in enumerate(all_spectrums_reference):
             if '[' in (s.params['collision_energy']):
@@ -308,18 +543,30 @@ if USE_METADATA:
                 ce = str(int(float(ce.strip('[]'))))
             else:
                 ce= s.params['collision_energy']
-            
+           
             all_spectrums_reference[j].params['ce']=str(int(float(ce)))
             setattr(all_spectrums_reference[j], 'ce', str(int(float(ce))))
+
+
+
 
             all_spectrums_reference[j].params['ionization_method']=s.params['ion_source']
             setattr(all_spectrums_reference[j], 'ionization_method', s.params['ion_source'])
 
+
+
+
             all_spectrums_reference[j].params['ion_activation']=s.params['fragmentation_method']
             setattr(all_spectrums_reference[j], 'ion_activation', s.params['fragmentation_method'])
 
+
+
+
             all_spectrums_reference[j].params['adduct']=s.params['adduct']
             setattr(all_spectrums_reference[j], 'adduct', s.params['adduct'])
+
+
+
 
             all_spectrums_reference[j].params['ionmode']=s.params['ionmode'].lower()
             setattr(all_spectrums_reference[j], 'ionmode', s.params['ionmode'])
@@ -330,6 +577,12 @@ else:
             if k not in metadata_fields:
                 new_params[k]=s.params[k]
         all_spectrums_reference[j].params = new_params
+
+
+
+
+
+
 
 
 # %% Cell 38
@@ -348,15 +601,39 @@ if USE_METADATA:
             setattr(all_spectrums_query[j], 'ionmode', 'positive' )
 
 
+
+
+
+
+
+
 # %% Cell 40
 all_spectrums_reference[0].ionization_method
+
+
+
+
+
+
 
 
 # ## Remove smiles present in reference
 
 
+
+
+
+
+
+
 # %% Cell 42
 len(all_spectrums_query)
+
+
+
+
+
+
 
 
 # %% Cell 43
@@ -371,11 +648,17 @@ def canonicalize_smiles(smiles):
     except Exception:
         return None
 
+
+
+
 # Canonicalize query smiles
 reference_smiles = [
     canonicalize_smiles(s.params["smiles"])
     for s in all_spectrums_reference
 ]
+
+
+
 
 # Filter reference spectra whose canonical SMILES are NOT in the query set
 all_spectrums_query = [
@@ -385,18 +668,48 @@ all_spectrums_query = [
 ]
 
 
+
+
+
+
+
+
 # %% Cell 44
 len(all_spectrums_query)
 
 
+
+
+
+
+
+
 # ##  Let's check some spectra visually
+
+
+
+
+
+
 
 
 # %% Cell 46
 sup.spectrum(all_spectrums_query[2])
 
 
+
+
+
+
+
+
 # ## Initialize model
+
+
+
+
+
+
 
 
 # %% Cell 48
@@ -417,6 +730,18 @@ sup.spectrum(all_spectrums_query[2])
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 ### FITLER BY ION TYPE
 if not(USE_POSITIVE_DATA):
      all_spectrums_reference = [s for s in all_spectrums_reference if s.params['ionmode']!= 'positive' ]
@@ -425,11 +750,26 @@ if not(USE_NEGATIVE_DATA):
     all_spectrums_reference = [s for s in all_spectrums_reference if s.params['ionmode']!= 'negative' ]
     all_spectrums_query = [s for s in all_spectrums_query if s.params['ionmode']!= 'negative' ]
 
+
+
+
 # Here we load a simba model based on path specified in 'model_location'. The device to be used is set to 'cpu' unless you have access to a configures GPU. The argument cache_embeddings, allows to reuse embeddings already computed to accelerate future library searchs.
+
+
+
+
+
+
 
 
 # %% Cell 50
 cfg.model.use_ce
+
+
+
+
+
+
 
 
 # %% Cell 51
@@ -442,11 +782,40 @@ else:
     print("Skipping SIMBA model initialization because 'simba' is not in SCORING_METHODS.")
 
 
+if REMOVE_REDUNDANT_SPECTRA:
+    print(f'Redundant spectra: Lets remove redundant spectra')
+    added_spectra= []
+    all_spectrums_no_redundant=[]
+    for s, canon_s in zip(all_spectrums_reference,reference_smiles):
+        if canon_s not in added_spectra:
+            added_spectra.append(canon_s)
+            all_spectrums_no_redundant.append(s)
+
+    all_spectrums_reference = all_spectrums_no_redundant
+    print(f'After removing redundant spectra we get {len(all_spectrums_reference)} spectra')
+
+
+
+
+
+
 # %% Cell 52
 cfg.model.use_ce
 
 
+
+
+
+
+
+
 # ## Predictions
+
+
+
+
+
+
 
 
 # %% Cell 54
@@ -456,7 +825,19 @@ else:
     print("SIMBA model not used.")
 
 
+
+
+
+
+
+
 # Based on the simba model created let's predict the substructure edit distance (sim_ed) and MCES distance (sim_mces)
+
+
+
+
+
+
 
 
 # %% Cell 56
@@ -467,6 +848,12 @@ def _get_first_existing(obj, names, default=None):
             if value is not None:
                 return value
     return default
+
+
+
+
+
+
 
 
 def _get_param_first(spectrum, names, default=None):
@@ -480,24 +867,48 @@ def _get_param_first(spectrum, names, default=None):
     return default
 
 
+
+
+
+
+
+
 def _extract_peaks(spectrum):
     mz = _get_first_existing(spectrum, ["mz", "m/z", "mzs"])
     intensities = _get_first_existing(spectrum, ["intensity", "intensities"])
+
+
+
 
     if mz is None and hasattr(spectrum, "peaks"):
         mz = _get_first_existing(spectrum.peaks, ["mz", "mzs"])
     if intensities is None and hasattr(spectrum, "peaks"):
         intensities = _get_first_existing(spectrum.peaks, ["intensities", "intensity"])
 
+
+
+
     mz = np.asarray(mz, dtype=float)
     intensities = np.asarray(intensities, dtype=float)
+
+
+
 
     keep = np.isfinite(mz) & np.isfinite(intensities) & (intensities > 0)
     mz = mz[keep]
     intensities = intensities[keep]
 
+
+
+
     order = np.argsort(mz)
     return mz[order], intensities[order]
+
+
+
+
+
+
 
 
 def _extract_precursor_mz(spectrum):
@@ -508,13 +919,25 @@ def _extract_precursor_mz(spectrum):
             ["precursor_mz", "precursor", "pepmass", "parent_mass", "precursor_mass"],
         )
 
+
+
+
     if isinstance(precursor, (list, tuple, np.ndarray)):
         precursor = precursor[0] if len(precursor) > 0 else None
+
+
+
 
     try:
         return float(precursor)
     except Exception:
         return None
+
+
+
+
+
+
 
 
 def to_matchms_spectrum(spectrum):
@@ -524,19 +947,37 @@ def to_matchms_spectrum(spectrum):
             "Install with: pip install matchms"
         )
 
+
+
+
     mz, intensities = _extract_peaks(spectrum)
     metadata = dict(getattr(spectrum, "params", {}) or {})
     metadata.update(dict(getattr(spectrum, "metadata", {}) or {}))
     precursor_mz = _extract_precursor_mz(spectrum)
 
+
+
+
     if precursor_mz is not None:
         metadata["precursor_mz"] = precursor_mz
+
+
+
 
     return MatchmsSpectrum(mz=mz, intensities=intensities, metadata=metadata)
 
 
+
+
+
+
+
+
 def score_modified_cosine(query_spectrum, reference_spectrum, modified_cosine):
     score = modified_cosine.pair(query_spectrum, reference_spectrum)
+
+
+
 
     # matchms versions may return either a tuple-like score or a structured object.
     if isinstance(score, tuple):
@@ -553,10 +994,25 @@ def score_modified_cosine(query_spectrum, reference_spectrum, modified_cosine):
             cosine = float(score)
             n_matches = np.nan
 
+
+
+
     if np.isnan(cosine) or (not np.isnan(n_matches) and n_matches < MIN_MATCHED_PEAKS):
         return 0.0, int(0 if np.isnan(n_matches) else n_matches)
 
+
+
+
     return float(cosine), int(0 if np.isnan(n_matches) else n_matches)
+
+
+
+
+
+
+
+
+
 
 
 
@@ -567,25 +1023,49 @@ def get_top_k_candidates(ranking, reference_spectra, k=10):
     return top_spectra, top_scores, top_indices
 
 
+
+
+
+
+
+
 def get_spectrum_smiles(spectrum, default=None):
     """Safely extract a SMILES string from a spectrum object."""
     params = getattr(spectrum, "params", {}) or {}
     metadata = getattr(spectrum, "metadata", {}) or {}
+
+
+
 
     for key in ("smiles", "SMILES", "canonical_smiles", "canonicalsmiles"):
         value = params.get(key, metadata.get(key, None))
         if value is not None:
             return str(value)
 
+
+
+
     value = getattr(spectrum, "smiles", None)
     if value is not None:
         return str(value)
 
+
+
+
     return default
+
+
+
+
+
+
 
 
 def build_top_k_smiles_matches(query_spectra, top_spectra, top_scores, top_indices):
     """Create a serializable list with query SMILES and its top-k match SMILES.
+
+
+
 
     Output format:
     [
@@ -602,6 +1082,9 @@ def build_top_k_smiles_matches(query_spectra, top_spectra, top_scores, top_indic
     """
     rows = []
 
+
+
+
     for query_index, (query_spectrum, retrieved_group, score_group, index_group) in enumerate(
         zip(query_spectra, top_spectra, top_scores, top_indices)
     ):
@@ -617,23 +1100,39 @@ def build_top_k_smiles_matches(query_spectra, top_spectra, top_scores, top_indic
                 "score": float(score) if np.isfinite(score) else np.nan,
             })
 
+
+
+
         rows.append({
             "query_index": int(query_index),
             "query_smiles": get_spectrum_smiles(query_spectrum),
             "matches": matches,
         })
 
+
+
+
     return rows
 
 
-def save_simba_top10_smiles_tsv(simba_top10_smiles_matches, output_pickle_file=OUTPUT_PICKLE_FILE):
-    """Also save SIMBA top-10 query/match SMILES as a TSV next to the pickle."""
-    output_tsv_file = os.path.splitext(output_pickle_file)[0] + "_simba_top10_smiles_matches.tsv"
+
+
+
+
+
+
+def save_top10_smiles_tsv(top10_smiles_matches, method, output_pickle_file=OUTPUT_PICKLE_FILE):
+    """Save top-k query/match SMILES as a TSV next to the pickle."""
+    output_tsv_file = os.path.splitext(output_pickle_file)[0] + f"_{method}_top{TOP_K}_smiles_matches.tsv"
     os.makedirs(os.path.dirname(output_tsv_file) or ".", exist_ok=True)
 
+
+
+
+    score_column = f"{method}_score"
     with open(output_tsv_file, "w") as f:
-        f.write("query_index\tquery_smiles\trank\treference_index\tmatch_smiles\tsimba_score\n")
-        for row in simba_top10_smiles_matches:
+        f.write(f"query_index\tquery_smiles\trank\treference_index\tmatch_smiles\t{score_column}\n")
+        for row in top10_smiles_matches:
             query_index = row["query_index"]
             query_smiles = row["query_smiles"]
             for match in row["matches"]:
@@ -642,12 +1141,224 @@ def save_simba_top10_smiles_tsv(simba_top10_smiles_matches, output_pickle_file=O
                     f"{match['reference_index']}\t{match['match_smiles']}\t{match['score']}\n"
                 )
 
+
+
+
     return output_tsv_file
+
+
+
+
+
+
+
+
+def save_simba_top10_smiles_tsv(simba_top10_smiles_matches, output_pickle_file=OUTPUT_PICKLE_FILE):
+    """Backward-compatible wrapper for the previous SIMBA-only TSV helper."""
+    return save_top10_smiles_tsv(
+        simba_top10_smiles_matches,
+        method="simba",
+        output_pickle_file=output_pickle_file,
+    )
+
+
+
+
+
+
+
+
+# MCES ground-truth scoring ----------------------------------------------------
+# The legacy SIMBA MCES implementation is used because your downstream cells
+# already use MCES.calculate_mces_sim(smiles1, smiles2). The value returned is a
+# normalized MCES similarity in [0, 1], so the normalized distance is 1 - sim.
+os.chdir('/home/spiedrahita/simba/')
+import sys
+sys.path.insert(0, "/home/spiedrahita/simba")
+from legacy.old_scripts.simba.analog_discovery.mces import MCES
+
+
+
+
+
+
+
+
+TANIMOTO_MCES_THRESHOLD = 0.2
+
+
+
+
+@lru_cache(maxsize=None)
+def _cached_rdk_fingerprint(smiles):
+    """Return a cached RDKit fingerprint for a canonicalized SMILES string."""
+    if smiles is None:
+        return None
+
+
+    mol = Chem.MolFromSmiles(str(smiles))
+    if mol is None:
+        return None
+
+
+    canonical_smiles = Chem.MolToSmiles(mol, canonical=True)
+    canonical_mol = Chem.MolFromSmiles(canonical_smiles)
+    return Chem.RDKFingerprint(canonical_mol)
+
+
+
+
+def safe_tanimoto_sim(smiles1, smiles2, default=np.nan):
+    """Compute inexpensive fingerprint Tanimoto similarity."""
+    fp1 = _cached_rdk_fingerprint(smiles1)
+    fp2 = _cached_rdk_fingerprint(smiles2)
+
+
+    if fp1 is None or fp2 is None:
+        return default
+
+
+    return float(DataStructs.TanimotoSimilarity(fp1, fp2))
+
+
+
+
+def safe_mces_sim(smiles1, smiles2, default=np.nan, threshold=TANIMOTO_MCES_THRESHOLD):
+    """Compute MCES only when fingerprint Tanimoto is strictly above threshold.
+
+
+    Pairs failing the inexpensive prefilter receive an MCES similarity of 0.0,
+    which corresponds to a normalized MCES distance of 1.0.
+    """
+    high_threshold=0.7
+    mol0 =Chem.MolFromSmiles(smiles1)
+    mol1= Chem.MolFromSmiles(smiles2)
+
+    if (mol0 is None) or (mol1 is None):
+        return 0.0
+
+    #if (mol0.GetNumAtoms() > 40) or (mol1.GetNumAtoms() > 40):
+    #    return 0.0
+
+    tanimoto = safe_tanimoto_sim(smiles1, smiles2, default=default)
+
+    if not np.isfinite(tanimoto):
+        return 0.0
+    if tanimoto <= threshold:
+        return 0.0
+    else:
+        if  (mol0.GetNumAtoms() > 40) or (mol1.GetNumAtoms() > 40):
+            print(f'High number of atoms: {smiles1},{smiles2}')
+            if tanimoto >= high_threshold:
+                try:
+                        return float(MCES.calculate_mces_sim(str(smiles1), str(smiles2), similarity_threshold=0.7 ))
+                except Exception as e:
+                        print("MCES failed:", smiles1, smiles2, e)
+                        return default
+            else:
+                return 0.0
+        else:
+            try:
+                    return float(MCES.calculate_mces_sim(str(smiles1), str(smiles2), similarity_threshold=0.7 ))
+            except Exception as e:
+                    print("MCES failed:", smiles1, smiles2, e)
+                    return default
+
+
+   
+
+
+
+
+
+
+
+
+def score_ground_truth_mces_matrix(query_spectra, reference_spectra):
+    """Compute query x reference MCES matrices after a Tanimoto prefilter.
+
+
+
+
+    Returns both:
+      - ground_truth_mces_similarity: normalized MCES similarity, higher is better.
+      - ground_truth_mces_distance: normalized MCES distance = 1 - similarity, lower is better.
+
+
+
+
+    For compatibility with get_top_k_candidates(), `ranking` is set to the
+    similarity matrix, because that helper selects the largest scores.
+    """
+    n_query = len(query_spectra)
+    n_reference = len(reference_spectra)
+
+
+
+
+    similarity = np.full((n_query, n_reference), np.nan, dtype=np.float32)
+    distance = np.full((n_query, n_reference), np.nan, dtype=np.float32)
+
+
+
+
+    query_smiles = [get_spectrum_smiles(s) for s in query_spectra]
+    reference_smiles = [get_spectrum_smiles(s) for s in reference_spectra]
+
+
+
+
+    for i, q_smiles in enumerate(tqdm(query_smiles, desc="Ground-truth MCES query spectra")):
+        print(f'Processing query smiles index: {i}')
+        for j, r_smiles in enumerate(reference_smiles):
+            sim = safe_mces_sim(q_smiles, r_smiles)
+            similarity[i, j] = sim
+            if np.isfinite(sim):
+                distance[i, j] = 1.0 - sim
+
+
+
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    np.save(GROUND_TRUTH_MCES_DISTANCE_NPY_FILE, distance)
+    np.save(GROUND_TRUTH_MCES_SIMILARITY_NPY_FILE, similarity)
+    print(f"Saved ground-truth MCES distance matrix: {GROUND_TRUTH_MCES_DISTANCE_NPY_FILE}")
+    print(f"Saved ground-truth MCES similarity matrix: {GROUND_TRUTH_MCES_SIMILARITY_NPY_FILE}")
+
+
+
+
+    # Replace invalid similarities by -inf only for ranking/top-k extraction,
+    # while preserving NaNs in the saved ground-truth matrices.
+    ranking = np.where(np.isfinite(similarity), similarity, -np.inf).astype(np.float32)
+
+
+
+
+    return {
+        "ranking": ranking,
+        "ground_truth_mces_similarity": similarity,
+        "ground_truth_mces_distance": distance,
+        "ground_truth_mces_distance_npy_file": GROUND_TRUTH_MCES_DISTANCE_NPY_FILE,
+        "ground_truth_mces_similarity_npy_file": GROUND_TRUTH_MCES_SIMILARITY_NPY_FILE,
+        "distance_definition": "1 - MCES similarity when Tanimoto > 0.3; otherwise 1.0",
+        "tanimoto_mces_threshold": TANIMOTO_MCES_THRESHOLD,
+        "ranking_definition": "ground_truth_mces_similarity; higher is better",
+    }
+
+
+
+
+
+
 
 
 def score_simba(query_spectra, reference_spectra):
     if simba_model is None:
         raise RuntimeError("SIMBA model was not initialized. Include 'simba' in SCORING_METHODS and rerun the notebook.")
+
+
+
 
     sim_ed, sim_mces = simba_model.predict(query_spectra, reference_spectra)
     ranking = AnalogDiscovery.compute_ranking(sim_mces, sim_ed)
@@ -658,9 +1369,18 @@ def score_simba(query_spectra, reference_spectra):
     }
 
 
+
+
+
+
+
+
 def score_modified_cosine_matrix(query_spectra, reference_spectra):
     if ModifiedCosine is None:
         raise ImportError("matchms is required for modified_cosine. Install with: pip install matchms")
+
+
+
 
     modified_cosine = ModifiedCosine(
         tolerance=FRAGMENT_TOLERANCE,
@@ -668,17 +1388,29 @@ def score_modified_cosine_matrix(query_spectra, reference_spectra):
         intensity_power=0.5,
     )
 
+
+
+
     query_matchms = [to_matchms_spectrum(s) for s in tqdm(query_spectra, desc="Converting query spectra")]
     reference_matchms = [to_matchms_spectrum(s) for s in tqdm(reference_spectra, desc="Converting reference spectra")]
+
+
+
 
     n_query = len(query_matchms)
     n_reference = len(reference_matchms)
     ranking = np.zeros((n_query, n_reference), dtype=np.float32)
     n_matching_peaks = np.zeros((n_query, n_reference), dtype=np.int16)
 
+
+
+
     for i, q in enumerate(tqdm(query_matchms, desc="Modified cosine scoring query spectra")):
         for j, r in enumerate(reference_matchms):
             ranking[i, j], n_matching_peaks[i, j] = score_modified_cosine(q, r, modified_cosine)
+
+
+
 
     return {
         "ranking": ranking,
@@ -689,20 +1421,37 @@ def score_modified_cosine_matrix(query_spectra, reference_spectra):
     }
 
 
+
+
+
+
+
+
 def run_scoring_method(method, query_spectra, reference_spectra):
     print("=" * 80)
     print(f"Running scoring method: {method}")
     print("=" * 80)
 
+
+
+
     if method == "simba":
         result = score_simba(query_spectra, reference_spectra)
     elif method == "modified_cosine":
         result = score_modified_cosine_matrix(query_spectra, reference_spectra)
+    elif method == "ground_truth_mces":
+        result = score_ground_truth_mces_matrix(query_spectra, reference_spectra)
     else:
         raise ValueError(f"Unknown scoring method: {method}")
 
+
+
+
     ranking = result["ranking"]
     top_spectra, top_scores, top_indices = get_top_k_candidates(ranking, reference_spectra, k=TOP_K)
+
+
+
 
     result.update({
         "scoring_method": method,
@@ -713,33 +1462,44 @@ def run_scoring_method(method, query_spectra, reference_spectra):
         "arg_max_k10": top_indices,
     })
 
-    # Save, for SIMBA only, a compact serializable structure containing
-    # each query SMILES and the SMILES of its top-10 retrieved matches.
-    # This is stored inside the same output pickle under:
-    # combined_results["results_by_method"]["simba"]["top10_smiles_matches"]
-    if method == "simba":
-        simba_top10_smiles_matches = build_top_k_smiles_matches(
-            query_spectra=query_spectra,
-            top_spectra=top_spectra,
-            top_scores=top_scores,
-            top_indices=top_indices,
-        )
-        simba_top10_smiles_tsv_file = save_simba_top10_smiles_tsv(
-            simba_top10_smiles_matches,
-            output_pickle_file=OUTPUT_PICKLE_FILE,
-        )
-        result["top10_smiles_matches"] = simba_top10_smiles_matches
-        result["top10_smiles_matches_tsv_file"] = simba_top10_smiles_tsv_file
-        print(f"Saved SIMBA top-{TOP_K} SMILES matches TSV: {simba_top10_smiles_tsv_file}")
+
+
+
+    # Save a compact serializable structure containing each query SMILES and
+    # the SMILES of its top-k retrieved matches for every method, including
+    # ground_truth_mces. This is stored inside the same output pickle under:
+    # combined_results["results_by_method"][method]["top10_smiles_matches"]
+    top10_smiles_matches = build_top_k_smiles_matches(
+        query_spectra=query_spectra,
+        top_spectra=top_spectra,
+        top_scores=top_scores,
+        top_indices=top_indices,
+    )
+    top10_smiles_tsv_file = save_top10_smiles_tsv(
+        top10_smiles_matches,
+        method=method,
+        output_pickle_file=OUTPUT_PICKLE_FILE,
+    )
+    result["top10_smiles_matches"] = top10_smiles_matches
+    result["top10_smiles_matches_tsv_file"] = top10_smiles_tsv_file
+    print(f"Saved {method} top-{TOP_K} SMILES matches TSV: {top10_smiles_tsv_file}")
+
+
+
 
     print(f"Finished {method}. ranking shape: {ranking.shape}")
     return result
 
 
+
+
+
+
+
+
 def make_combined_results(results_by_method):
     """Build the combined results dictionary from the current method results."""
     return {
-        "query_spectra": all_spectrums_query,
         "scoring_methods": SCORING_METHODS,
         "completed_methods": list(results_by_method.keys()),
         "top_k": TOP_K,
@@ -750,8 +1510,17 @@ def make_combined_results(results_by_method):
     }
 
 
+
+
+
+
+
+
 def save_combined_results_incremental(results_by_method, output_pickle_file=OUTPUT_PICKLE_FILE):
     """Atomically save all method results available so far.
+
+
+
 
     This is called immediately after each algorithm finishes, so completed
     algorithms are preserved even if a later algorithm fails.
@@ -760,8 +1529,14 @@ def save_combined_results_incremental(results_by_method, output_pickle_file=OUTP
     combined_results = make_combined_results(results_by_method)
     tmp_file = f"{output_pickle_file}.tmp"
 
+
+
+
     with open(tmp_file, "wb") as f:
         pickle.dump(combined_results, f)
+
+
+
 
     os.replace(tmp_file, output_pickle_file)
     print(
@@ -772,13 +1547,25 @@ def save_combined_results_incremental(results_by_method, output_pickle_file=OUTP
     return combined_results
 
 
+
+
+
+
+
+
 def load_existing_results_if_available(output_pickle_file=OUTPUT_PICKLE_FILE):
     """Optionally load already completed methods to avoid recomputation."""
     if not RESUME_FROM_EXISTING_PICKLE or not os.path.exists(output_pickle_file):
         return {}
 
+
+
+
     with open(output_pickle_file, "rb") as f:
         previous_results = pickle.load(f)
+
+
+
 
     loaded_results = previous_results.get("results_by_method", {})
     loaded_results = {
@@ -786,6 +1573,9 @@ def load_existing_results_if_available(output_pickle_file=OUTPUT_PICKLE_FILE):
         for method, result in loaded_results.items()
         if method in SCORING_METHODS
     }
+
+
+
 
     if loaded_results:
         print(
@@ -795,12 +1585,24 @@ def load_existing_results_if_available(output_pickle_file=OUTPUT_PICKLE_FILE):
     return loaded_results
 
 
+
+
+
+
+
+
 all_method_results = load_existing_results_if_available()
+
+
+
 
 for method in SCORING_METHODS:
     if method in all_method_results:
         print(f"Skipping {method}; already present in {OUTPUT_PICKLE_FILE}.")
         continue
+
+
+
 
     all_method_results[method] = run_scoring_method(
         method,
@@ -808,11 +1610,20 @@ for method in SCORING_METHODS:
         all_spectrums_reference,
     )
 
+
+
+
     # Save immediately after this algorithm completes.
     combined_results = save_combined_results_incremental(all_method_results)
 
+
+
+
 # Ensure combined_results exists even if every method was loaded from an existing pickle.
 combined_results = make_combined_results(all_method_results)
+
+
+
 
 if all_method_results:
     # Re-save once at the end to refresh metadata such as SCORING_METHODS/TOP_K if needed.
@@ -821,8 +1632,14 @@ if all_method_results:
         pickle.dump(combined_results, f)
     os.replace(tmp_file, OUTPUT_PICKLE_FILE)
 
+
+
+
 print(f"Final combined pickle results: {OUTPUT_PICKLE_FILE}")
 print("Available methods in pickle:", list(combined_results["results_by_method"].keys()))
+
+
+
 
 # Load one selected method into the original variable names for the downstream exploration cells.
 SCORING_METHOD = PLOT_SCORING_METHOD
@@ -836,11 +1653,26 @@ sim_k_retrieved = _active_result["sim_k_retrieved"]
 arg_max_k10 = _active_result["arg_max_k10"]
 tanimoto_k_retrieved = sim_k_retrieved
 
+
+
+
 print(f"Active method for downstream cells: {SCORING_METHOD}")
 print("ranking shape:", ranking.shape)
 
 
-# 
+
+
+
+
+
+
+#
+
+
+
+
+
+
 
 
 # %% Cell 60
@@ -850,7 +1682,19 @@ else:
     print(f"sim_mces is not computed for {SCORING_METHOD}; ranking contains {SCORING_METHOD} scores.")
 
 
+
+
+
+
+
+
 # The predictions of substructure edit distance are discretized between 0 and 5, being 5 having five or more modifications and 0 having zero modifications. Let's take 10,000 random predictions and check the distribution of the results. Higher substructure edit distances are more common since related molecules are scarse normally.
+
+
+
+
+
+
 
 
 # %% Cell 62
@@ -867,7 +1711,19 @@ else:
     print(f"Skipping sim_ed histogram for {SCORING_METHOD}.")
 
 
+
+
+
+
+
+
 # The predictions of MCES distance are constrained to 0 to 40 edges. Let's take 10,000 random predictions and check the distribution of the results. Higher MCES distances are more common since related molecules are scarse normally.
+
+
+
+
+
+
 
 
 # %% Cell 64
@@ -884,10 +1740,28 @@ else:
     print(f"Skipping sim_mces histogram for {SCORING_METHOD}.")
 
 
+
+
+
+
+
+
 # ## Reranking
 
 
+
+
+
+
+
+
 # Based on the predictions of MCES and Edit distance we can rerank the results. Lower MCES distance and lower edit distances are higher in the rank. The MCES distance is used as primary metric to rank the predictions given its finer granularity. If 2 predictions have the same MCES distance, the one with the lower substructure edit distance is ranked higher.
+
+
+
+
+
+
 
 
 # %% Cell 67
@@ -897,11 +1771,29 @@ else:
 ranking.shape
 
 
+
+
+
+
+
+
 # The rank is scaled to 0-1 (normalized to the number of comparisons with the reference library), where 1 means the highest ranking and 0 the lowest ranking.
+
+
+
+
+
+
 
 
 # %% Cell 69
 ranking.shape
+
+
+
+
+
+
 
 
 # %% Cell 70
@@ -915,22 +1807,58 @@ plt.xlabel("SIMBA ranking score" if SCORING_METHOD == "simba" else SCORING_METHO
 plt.ylabel("Frequency")
 
 
+
+
+
+
+
+
 # ## What is the matched spectra in the reference library for each query spectra?
 
 
+
+
+
+
+
+
 # If we want to find this answer, we have to first select the query spectra we are interested. We can define a variable 'target_index' which indicates the position of the spectrum in the spectra loaded. From there, we can select the 10 highest SIMBA scores and filtering the match with the lowest MCES distance
+
+
+
+
+
+
 
 
 # %% Cell 73
 target_index = 4
 
 
+
+
+
+
+
+
 # %% Cell 74
 spectra_query = all_spectrums_query[target_index]
 
 
+
+
+
+
+
+
 # %% Cell 75
 Chem.MolFromSmiles(spectra_query.params["smiles"])
+
+
+
+
+
+
 
 
 # %% Cell 109
@@ -938,11 +1866,23 @@ import os
 os.chdir('/home/spiedrahita/simba/')
 
 
+
+
+
+
+
+
 # %% Cell 110
 # Top-k candidates were already computed for every method in the sequential scoring cell.
 # The active method for downstream cells is selected by PLOT_SCORING_METHOD.
 print(f"Using precomputed top-{TOP_K} candidates for {SCORING_METHOD}.")
 print("sim_k_retrieved shape:", sim_k_retrieved.shape)
+
+
+
+
+
+
 
 
 # %% Cell 111
@@ -954,22 +1894,19 @@ from rdkit import Chem
 import numpy as np
 
 
-def safe_mces_sim(smiles1, smiles2, default=np.nan):
-    if smiles1 is None or smiles2 is None:
-        return default
 
-    mol1 = Chem.MolFromSmiles(str(smiles1))
-    mol2 = Chem.MolFromSmiles(str(smiles2))
 
-    if mol1 is None or mol2 is None:
-        print("Invalid SMILES:", smiles1, smiles2)
-        return default
 
-    try:
-        return MCES.calculate_mces_sim(smiles1, smiles2)
-    except Exception as e:
-        print("MCES failed:", smiles1, smiles2, e)
-        return default
+
+
+
+# Reuse the Tanimoto-prefiltered safe_mces_sim defined above.
+
+
+
+
+
+
 
 
 mces_k_retrieved = [
@@ -987,9 +1924,21 @@ mces_k_retrieved = [
 ]
 
 
+
+
+
+
+
+
 # ### Compare normalized MCES distances across both algorithms
-# 
+#
 # This section evaluates the top-k retrieved candidates from each algorithm. For every query spectrum and every method, it computes the MCES similarity against the retrieved candidates, keeps the best retrieved candidate, converts it to normalized MCES distance (`1 - MCES similarity`), and plots the two algorithms together with violin + boxplot overlays.
+
+
+
+
+
+
 
 
 # %% Cell 113
@@ -1000,11 +1949,17 @@ def compute_norm_mces_distances_for_method(
 ):
     """Compute best normalized MCES distance per query for one retrieval method.
 
+
+
+
     For each query, we evaluate the method's top-k retrieved spectra using MCES
     similarity, select the retrieved candidate with the highest MCES similarity,
     and convert it to a normalized distance as 1 - similarity.
     """
     top_retrieved_spectra = method_result["spectrums_k_retrieved"]
+
+
+
 
     mces_k_retrieved = [
         [
@@ -1021,13 +1976,22 @@ def compute_norm_mces_distances_for_method(
         )
     ]
 
+
+
+
     best_indexes = []
     best_mces_sims = []
     norm_mces_distances = []
 
+
+
+
     for mces_group in mces_k_retrieved:
         values = np.asarray(mces_group, dtype=float)
         valid = np.isfinite(values)
+
+
+
 
         if not np.any(valid):
             best_indexes.append(None)
@@ -1035,15 +1999,27 @@ def compute_norm_mces_distances_for_method(
             norm_mces_distances.append(np.nan)
             continue
 
+
+
+
         valid_positions = np.where(valid)[0]
         best_position = valid_positions[np.argmax(values[valid])]
         best_sim = float(values[best_position])
+
+
+
 
         best_indexes.append(int(best_position))
         best_mces_sims.append(best_sim)
         norm_mces_distances.append(1.0 - best_sim)
 
+
+
+
     norm_mces_distances = np.asarray(norm_mces_distances, dtype=float)
+
+
+
 
     return {
         "mces_k_retrieved": mces_k_retrieved,
@@ -1054,8 +2030,17 @@ def compute_norm_mces_distances_for_method(
     }
 
 
+
+
+
+
+
+
 mces_evaluation_by_method = {}
 norm_mces_distances_by_method = {}
+
+
+
 
 for method_name in SCORING_METHODS:
     method_result = combined_results["results_by_method"][method_name]
@@ -1067,12 +2052,21 @@ for method_name in SCORING_METHODS:
     mces_evaluation_by_method[method_name] = evaluation
     norm_mces_distances_by_method[method_name] = evaluation["norm_mces_distances"]
 
+
+
+
     finite_distances = evaluation["norm_mces_distances"][np.isfinite(evaluation["norm_mces_distances"])]
     print(
         f"{method_name}: n={len(finite_distances)}, "
         f"median={np.nanmedian(finite_distances):.4f}, "
         f"mean={np.nanmean(finite_distances):.4f}"
     )
+
+
+
+
+
+
 
 
 # %% Cell 114
@@ -1085,10 +2079,19 @@ plot_data = [
     for method in methods_with_data
 ]
 
+
+
+
 if len(plot_data) == 0:
     raise ValueError("No valid normalized MCES distances were computed for any method.")
 
+
+
+
 fig, ax = plt.subplots(figsize=(max(6, 1.8 * len(methods_with_data)), 5))
+
+
+
 
 violin = ax.violinplot(
     plot_data,
@@ -1098,6 +2101,9 @@ violin = ax.violinplot(
     showextrema=False,
 )
 
+
+
+
 # Overlay compact boxplots to show median and IQR on top of each violin.
 ax.boxplot(
     plot_data,
@@ -1105,6 +2111,9 @@ ax.boxplot(
     widths=0.18,
     showfliers=False,
 )
+
+
+
 
 ax.set_xticks(np.arange(1, len(methods_with_data) + 1))
 ax.set_xticklabels(methods_with_data, rotation=20, ha="right")
@@ -1114,12 +2123,21 @@ ax.grid(axis="y", alpha=0.3)
 ax.set_ylim(bottom=0)
 plt.tight_layout()
 
+
+
+
 NORM_MCES_VIOLIN_PLOT_FILE = os.path.join(
     OUTPUT_DIR,
-    "norm_mces_distances_simba_modified_cosine_violin_boxplot.png",
+    "norm_mces_distances_simba_modified_cosine_ground_truth_mces_violin_boxplot.png",
 )
 fig.savefig(NORM_MCES_VIOLIN_PLOT_FILE, dpi=300, bbox_inches="tight")
 print(f"Saved plot to: {NORM_MCES_VIOLIN_PLOT_FILE}")
+
+
+
+
+
+
 
 
 # %% Cell 115
@@ -1128,16 +2146,34 @@ combined_results["norm_mces_evaluation_by_method"] = mces_evaluation_by_method
 combined_results["norm_mces_distances_by_method"] = norm_mces_distances_by_method
 combined_results["norm_mces_violin_boxplot_file"] = NORM_MCES_VIOLIN_PLOT_FILE
 
+
+
+
 tmp_file = f"{OUTPUT_PICKLE_FILE}.tmp"
 with open(tmp_file, "wb") as f:
     pickle.dump(combined_results, f)
 os.replace(tmp_file, OUTPUT_PICKLE_FILE)
 
+
+
+
 print(f"Updated combined pickle results with all-method norm MCES distances: {OUTPUT_PICKLE_FILE}")
+
+
+
+
+
+
 
 
 # %% Cell 116
 best_indexes = [np.argmax([m for m in mces_group]) if len(mces_group)>=0 else 0 for mces_group in mces_k_retrieved ]
+
+
+
+
+
+
 
 
 # %% Cell 117
@@ -1146,11 +2182,26 @@ spectrums_retrieved = [spectrums_k_retrieved[index_spectrum][best_index]  for in
 tanimoto_retrieved = [tanimoto_k_retrieved[index_spectrum][best_index]  for index_spectrum, best_index in enumerate(best_indexes) if best_index is not None]
 mces_sims = [mces_k_retrieved[index_spectrum][best_index]  for index_spectrum, best_index in enumerate(best_indexes) if best_index is not None]
 
+
+
+
 max_sim = [sim_k_retrieved[index_spectrum][best_index]  for index_spectrum, best_index in enumerate(best_indexes) if best_index is not None]
+
+
+
+
+
+
 
 
 # %% Cell 118
 len(spectrums_retrieved)
+
+
+
+
+
+
 
 
 # %% Cell 119
@@ -1171,8 +2222,20 @@ else:
     print(f"SIMBA prediction arrays are not available for {SCORING_METHOD}.")
 
 
+
+
+
+
+
+
 # %% Cell 120
 smiles_retrieved= [s.smiles for s in spectrums_retrieved]
+
+
+
+
+
+
 
 
 # %% Cell 121
@@ -1183,39 +2246,87 @@ plt.ylabel("freq")
 plt.grid()
 
 
+
+
+
+
+
+
 # %% Cell 122
 plt.boxplot(tanimoto_retrieved)
 plt.grid()
+
+
+
+
+
+
 
 
 # %% Cell 123
 all_smiles= [s.smiles for s in all_spectrums_query]
 
 
+
+
+
+
+
+
 # %% Cell 124
 from tqdm import tqdm
+
+
+
+
+
+
 
 
 # %% Cell 125
 sim_k_retrieved.shape
 
 
+
+
+
+
+
+
 # %% Cell 126
 sim_k_retrieved
+
+
+
+
+
+
 
 
 # %% Cell 127
 mces_sims=[]
 for s0,s1 in tqdm(zip(all_smiles, smiles_retrieved)):
     try:
-        similarity= MCES.calculate_mces_sim(s0, s1)
+        similarity = safe_mces_sim(s0, s1)
         mces_sims.append(similarity)
     except:
         print(f'Error processing smiles{s0, s1}')
 
 
+
+
+
+
+
+
 # %% Cell 128
 mces_sims
+
+
+
+
+
+
 
 
 # %% Cell 129
@@ -1225,11 +2336,23 @@ plt.grid()
 #plt.ylim([0,1.1])
 
 
+
+
+
+
+
+
 # %% Cell 130
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+
+
 norm_mces_sims = [1 - m for m in mces_sims if m is not None and np.isfinite(m)]
+
+
+
 
 plt.figure(figsize=(2, 5))
 plt.boxplot(norm_mces_sims, showfliers=False)
@@ -1239,12 +2362,30 @@ plt.ylabel("Normalized MCES distance")
 plt.grid(alpha=0.3)
 
 
+
+
+
+
+
+
 # %% Cell 131
 all_spectrums_query[0].params
 
 
+
+
+
+
+
+
 # %% Cell 132
 all_spectrums_reference[0].params['ce']
+
+
+
+
+
+
 
 
 # %% Cell 133
@@ -1255,10 +2396,27 @@ combined_results["active_downstream_metrics"] = {
     "norm_mces_sims": norm_mces_sims,
 }
 
+
+
+
 tmp_file = f"{OUTPUT_PICKLE_FILE}.tmp"
 with open(tmp_file, "wb") as f:
     pickle.dump(combined_results, f)
 os.replace(tmp_file, OUTPUT_PICKLE_FILE)
 
+
+
+
 print(f"Updated combined pickle results: {OUTPUT_PICKLE_FILE}")
 print("Saved methods:", list(combined_results["results_by_method"].keys()))
+
+
+
+
+
+
+
+
+
+
+
