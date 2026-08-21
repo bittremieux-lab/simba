@@ -39,26 +39,28 @@ simba analog-discovery \
   --query-spectra /path/to/query.mgf \
   --reference-spectra /path/to/reference_library.mgf \
   --output-dir /path/to/output \
-  --query-index 0 \
-  --top-k 10 \
-  --device cpu \
-  --compute-ground-truth
+  analog_discovery.query_index=0 \
+  analog_discovery.top_k=10 \
+  analog_discovery.device=cpu \
+  analog_discovery.compute_ground_truth=true
 ```
 
-**Parameters:**
+**CLI flags** (required):
 
 - `--model-path`: Path to trained SIMBA model checkpoint (.ckpt file)
-- `--query-spectra`: Path to query spectra file (.mgf or .pkl format)
-- `--reference-spectra`: Path to reference library spectra file (.mgf or .pkl format)
+- `--query-spectra`: Path to query spectra file (.mgf format)
+- `--reference-spectra`: Path to reference library spectra file (.mgf format)
 - `--output-dir`: Directory where results will be saved
-- `--query-index`: Index of the query spectrum to analyze (default: 0)
-- `--top-k`: Number of top matches to return (default: 10)
-- `--device`: Hardware device: `cpu` or `gpu` (default: cpu)
-- `--batch-size`: Batch size for processing (default: 32)
-- `--cache-embeddings` / `--no-cache-embeddings`: Cache embeddings for faster repeated searches (default: True)
-- `--use-gnps-format` / `--no-use-gnps-format`: Whether spectra files use GNPS format (default: False)
-- `--compute-ground-truth`: Compute ground truth edit distance and MCES for validation
-- `--save-rankings`: Save complete ranking matrix to file
+
+**Hydra overrides** (optional, with defaults):
+
+- `analog_discovery.query_index=0`: Index of the query spectrum to analyze (default: null = all)
+- `analog_discovery.top_k=10`: Number of top matches to return
+- `analog_discovery.device=cpu`: Hardware device: `cpu` or `gpu`
+- `analog_discovery.batch_size=32`: Batch size for processing
+- `analog_discovery.cache_embeddings=true`: Cache embeddings for faster repeated searches
+- `analog_discovery.compute_ground_truth=false`: Compute ground truth edit distance and MCES
+- `analog_discovery.save_rankings=true`: Save complete ranking matrix to file
 
 **Output:**
 
@@ -79,32 +81,31 @@ For interactive exploration, use the [Run Analog Discovery Notebook](https://git
 
 ```bash
 simba preprocess \
-  --spectra-path /path/to/your/spectra.mgf \
-  --workspace /path/to/preprocessed_data \
-  --max-spectra-train 10000 \
-  --mapping-file-name mapping_unique_smiles.pkl \
-  --num-workers 0
+  paths.spectra_path=/path/to/your/spectra.mgf \
+  paths.preprocessing_dir=/path/to/preprocessed_data \
+  preprocessing.max_spectra_train=10000 \
+  preprocessing.num_workers=60
 ```
+
+Output: `mapping_unique_smiles.pkl` (default name, override with `paths.preprocessing_pickle_file=...`).
 
 ### Step 2: Train Model
 
 ```bash
 simba train \
-  --checkpoint-dir checkpoints/ \
-  --preprocessing-dir preprocessing/ \
-  --preprocessing-pickle preprocessed_data.pkl \
-  --epochs 50 \
-  --accelerator gpu \
-  --batch-size 64
+  paths.preprocessing_dir=/path/to/preprocessed_data \
+  paths.checkpoint_dir=checkpoints/ \
+  training.epochs=50 \
+  hardware.accelerator=gpu \
+  training.batch_size=64
 ```
 
 ### Step 3: Run Inference
 
 ```bash
 simba inference \
-  --checkpoint-dir checkpoints/ \
-  --preprocessing-dir preprocessing/ \
-  --preprocessing-pickle test_data.pkl \
-  --batch-size 128 \
-  --accelerator gpu
+  paths.checkpoint_dir=checkpoints/ \
+  paths.preprocessing_dir=/path/to/preprocessed_data \
+  inference.batch_size=128 \
+  hardware.accelerator=gpu
 ```

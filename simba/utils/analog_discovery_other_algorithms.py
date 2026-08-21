@@ -14,23 +14,36 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import spectrum_utils.plot as sup
+from hydra import compose, initialize_config_dir
 from rdkit import Chem
 from tqdm.auto import tqdm
 
-from hydra import compose, initialize_config_dir
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
+<<<<<<< HEAD
 from legacy.old_scripts.simba.analog_discovery.mces import MCES
 from simba.workflows.utils import load_spectra
 from simba.utils.config_utils import get_config_path
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.chemistry.similarity_metrics import MolecularSimilarityMetrics as GroundTruth
+=======
+from legacy.old_scripts.simba.analog_discovery.mces import MCES  # noqa: E402
+from simba.core.chemistry.similarity_metrics import (  # noqa: E402
+    MolecularSimilarityMetrics as GroundTruth,
+)
+from simba.core.data.preprocessor import Preprocessor  # noqa: E402
+from simba.utils.config_utils import get_config_path  # noqa: E402
+from simba.workflows.utils import load_spectra  # noqa: E402
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 try:
     from matchms import Spectrum as MatchmsSpectrum
@@ -43,7 +56,11 @@ except ImportError as e:
 # Parameters
 # =============================================================================
 
+<<<<<<< HEAD
 #SCORING_METHOD = "modified_cosine"
+=======
+# SCORING_METHOD = "modified_cosine"
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 SCORING_METHOD = "spec2vec"
 
 written_spectra_file = "/home/spiedrahita/simba/all_spectrums_reference.pkl"
@@ -68,7 +85,13 @@ FRAGMENT_TOLERANCE = 0.1
 MIN_MATCHED_PEAKS = 1
 
 # Spec2Vec parameters
+<<<<<<< HEAD
 SPEC2VEC_MODEL_FILE = "/data/simba_files/spec2vec_AllPositive_ratio05_filtered_201101_iter_15.model"
+=======
+SPEC2VEC_MODEL_FILE = (
+    "/data/simba_files/spec2vec_AllPositive_ratio05_filtered_201101_iter_15.model"
+)
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 SPEC2VEC_INTENSITY_WEIGHTING_POWER = 0.5
 SPEC2VEC_ALLOWED_MISSING_PERCENTAGE = 100.0
 SPEC2VEC_N_DECIMALS = 2
@@ -78,6 +101,10 @@ SPEC2VEC_N_DECIMALS = 2
 # Helpers
 # =============================================================================
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def save_current_figure(filename: str, dpi: int = 300):
     path = FIGURE_DIR / filename
     plt.tight_layout()
@@ -126,10 +153,21 @@ def normalize_metadata(spectra):
                 _set_param_and_attr(
                     s,
                     "ion_activation",
+<<<<<<< HEAD
                     s.params.get("fragmentation_method", s.params.get("ion_activation", "")),
                 )
                 _set_param_and_attr(s, "adduct", s.params.get("adduct", ""))
                 _set_param_and_attr(s, "ionmode", str(s.params.get("ionmode", "")).lower())
+=======
+                    s.params.get(
+                        "fragmentation_method", s.params.get("ion_activation", "")
+                    ),
+                )
+                _set_param_and_attr(s, "adduct", s.params.get("adduct", ""))
+                _set_param_and_attr(
+                    s, "ionmode", str(s.params.get("ionmode", "")).lower()
+                )
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
     else:
         for s in spectra:
             s.params = {k: v for k, v in s.params.items() if k not in metadata_fields}
@@ -234,6 +272,10 @@ def safe_mces_sim(smiles1, smiles2, default=np.nan):
 # Scoring methods
 # =============================================================================
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def compute_modified_cosine_ranking(query_matchms, reference_matchms):
     modified_cosine = ModifiedCosine(
         tolerance=FRAGMENT_TOLERANCE,
@@ -281,8 +323,12 @@ def compute_modified_cosine_ranking(query_matchms, reference_matchms):
 def compute_spec2vec_ranking(query_matchms, reference_matchms):
     try:
         from gensim.models import Word2Vec
+<<<<<<< HEAD
         from spec2vec import SpectrumDocument
         from spec2vec import Spec2Vec
+=======
+        from spec2vec import Spec2Vec, SpectrumDocument
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
     except ImportError as e:
         raise ImportError(
             "Install Spec2Vec dependencies with: pip install spec2vec gensim"
@@ -335,6 +381,10 @@ def compute_spec2vec_ranking(query_matchms, reference_matchms):
 # Main
 # =============================================================================
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def main():
     if SCORING_METHOD not in {"modified_cosine", "spec2vec"}:
         raise ValueError(
@@ -420,8 +470,12 @@ def main():
     ]
 
     all_spectrums_reference = [
+<<<<<<< HEAD
         s for s in all_spectrums_reference
         if str(s.params.get("mslevel", "2")) == "2"
+=======
+        s for s in all_spectrums_reference if str(s.params.get("mslevel", "2")) == "2"
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
     ]
 
     print(f"Reference spectra after filtering: {len(all_spectrums_reference)}")
@@ -516,7 +570,13 @@ def main():
     save_current_figure(f"{SCORING_METHOD}_best_match_mirror.png")
 
     ground_truth_mces = GroundTruth.compute_mces([spectra_query], [spectra_match])
+<<<<<<< HEAD
     ground_truth_ed = GroundTruth.compute_edit_distance([spectra_query], [spectra_match])
+=======
+    ground_truth_ed = GroundTruth.compute_edit_distance(
+        [spectra_query], [spectra_match]
+    )
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
     print(f"{score_label}: {ranking[target_index, best_match_index]:.4f}")
     print(f"Real MCES distance: {ground_truth_mces[0, 0]}")
@@ -538,9 +598,13 @@ def main():
     ]
 
     best_indexes = [
+<<<<<<< HEAD
         int(np.nanargmax(mces_group))
         if np.any(np.isfinite(mces_group))
         else None
+=======
+        int(np.nanargmax(mces_group)) if np.any(np.isfinite(mces_group)) else None
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
         for mces_group in mces_k_retrieved
     ]
 
@@ -649,4 +713,8 @@ def main():
 
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     main()
+=======
+    main()
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5

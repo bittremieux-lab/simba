@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 
 
@@ -7,6 +8,15 @@ from matchms.exporting import save_as_mgf
 
 input_mgf = "/data/simba_files/msnlib_filtered_original.mgf" 
 output_mgf = "/data/simba_files/msnlib_filtered_cleaned.mgf" 
+=======
+from matchms.exporting import save_as_mgf
+from matchms.importing import load_from_mgf
+
+
+input_mgf = "/data/simba_files/msnlib_filtered_original.mgf"
+output_mgf = "/data/simba_files/msnlib_filtered_cleaned.mgf"
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 def clean_ce(value):
     """
@@ -47,4 +57,8 @@ for spectrum in load_from_mgf(input_mgf):
 
 
 save_as_mgf(spectra_out, output_mgf)
+<<<<<<< HEAD
 print('Writing finished succesfully')
+=======
+print("Writing finished succesfully")
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5

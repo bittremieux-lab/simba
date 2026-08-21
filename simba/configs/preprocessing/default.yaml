@@ -1,8 +1,5 @@
 # Preprocessing configuration
 
-# Storage format options
-use_lightweight_format: false
-
 # Preprocessing batch processing
 batch_size: 1000
 num_workers: 60
@@ -16,13 +13,35 @@ max_spectra_train: 10000  # Maximum training spectra to preprocess
 max_spectra_val: 1000000  # Maximum validation spectra to preprocess
 max_spectra_test: 1000000  # Maximum test spectra to preprocess
 
-# Data splits
-val_split: 0.1  # Validation split fraction (0.0-1.0)
-test_split: 0.1  # Test split fraction (0.0-1.0)
+# Data splits (hash-bucket based — dataset-independent)
+# Scaffolds are assigned to buckets by SHA-256(scaffold) % n_buckets.
+n_buckets: 10
+train_buckets: [0, 1, 2, 3, 4, 5, 6, 7]
+val_buckets:   [8]
+test_buckets:  [9]
 
 # Sampling
 random_mces_sampling: false
 use_only_protonized_adducts: true
+
+# Precomputed distances - reuse distances from previous preprocessing runs
+# Just list preprocessing directories - auto-discovers all distance files
+precomputed_distances:
+  # Examples:
+  # - "./test_precomputed_cache/dataset1/"
+  # - "./ms2_preprocessing/"
+  # - "./ms3_preprocessing/"
+
+# HDF5 MCES cache - precomputed MCES from an external HDF5 file (e.g. MassSpecGym)
+# Only pairs with MCES strictly < hdf5_mces_threshold are taken from the cache;
+# values equal to the threshold are capped and will be recomputed from scratch.
+hdf5_mces_cache_path: null  # Path to HDF5 file with 'mces' and 'mces_smiles_order' datasets
+hdf5_mces_threshold: 10.0
+
+# Split strategy
+# force_scaffold_split: if true, ignore predefined fold labels (e.g. MassSpecGym)
+# and always use Murcko scaffold hashing for train/val/test assignment.
+force_scaffold_split: false
 
 # Subsampling
 subsample_preprocessing: false

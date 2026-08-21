@@ -1,9 +1,11 @@
 import torch
+import torch.nn as nn
 from depthcharge.transformers import (
     SpectrumTransformerEncoder,
 )  # PeptideTransformerEncoder,
-from depthcharge.encoders import FloatEncoder
-import torch.nn as nn
+
+from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+
 
 class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
     def __init__(
@@ -13,7 +15,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ce: bool = False,
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
-        use_ion_mode:  bool =False,
+        use_ion_mode: bool = False,
         **kwargs,
     ):
         """
@@ -30,11 +32,13 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         use_ion_method: bool
             Whether to include ionization method in the encoding (default: False).
         """
-        self.use_metadata = use_adduct or use_ce or use_ion_activation or use_ion_method or use_ion_mode
+        self.use_metadata = (
+            use_adduct or use_ce or use_ion_activation or use_ion_method or use_ion_mode
+        )
         if self.use_metadata:
-            self.use_encoders=True
+            self.use_encoders = True
         else:
-            self.use_encoders=False
+            self.use_encoders = False
         super().__init__(*args, **kwargs)
         self.use_adduct = use_adduct
         self.use_ce = use_ce
@@ -44,9 +48,9 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
 
         # Only used when self.use_encoders = True
         if self.use_encoders:
-            metadata_hidden_dim= 32
-            adduct_num_embeddings=32
-            adduct_embedding_dim=8
+            metadata_hidden_dim = 32
+            adduct_num_embeddings = len(ADDUCT_TO_MASS)
+            adduct_embedding_dim = 8
             self.adduct_embedding = nn.Embedding(
                 num_embeddings=adduct_num_embeddings,
                 embedding_dim=adduct_embedding_dim,
@@ -93,10 +97,14 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
                 (batch_size, self.d_model), dtype=dtype, device=device
             )
 
-            precursor_mass = kwargs["precursor_mass"].float().to(device).view(batch_size)
+            precursor_mass = (
+                kwargs["precursor_mass"].float().to(device).view(batch_size)
+            )
             placeholder[:, 0] = precursor_mass
 
-            precursor_charge = kwargs["precursor_charge"].float().to(device).view(batch_size)
+            precursor_charge = (
+                kwargs["precursor_charge"].float().to(device).view(batch_size)
+            )
 
             # original logic preserved
             if self.use_ion_mode:
@@ -104,37 +112,35 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
 
             current_idx = 2
 
-            ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
             if self.use_ion_mode:
+                ionmode = kwargs["ionmode"].float().to(device).view(batch_size)
                 placeholder[:, current_idx] = ionmode
             current_idx += 1
 
-            adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
-            stop_idx = current_idx + adduct.shape[1]
             if self.use_adduct:
+                adduct = kwargs["adduct"].float().to(device).view(batch_size, -1)
+                stop_idx = current_idx + adduct.shape[1]
                 placeholder[:, current_idx:stop_idx] = adduct
-            current_idx = stop_idx
+                current_idx = stop_idx
 
-            ce = kwargs["ce"].float().to(device).view(batch_size)
             if self.use_ce:
+                ce = kwargs["ce"].float().to(device).view(batch_size)
                 placeholder[:, current_idx] = ce
             current_idx += 1
 
-            ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
-            stop_idx = current_idx + ia.shape[1]
             if self.use_ion_activation:
+                ia = kwargs["ion_activation"].float().to(device).view(batch_size, -1)
+                stop_idx = current_idx + ia.shape[1]
                 placeholder[:, current_idx:stop_idx] = ia
-            current_idx = stop_idx
+                current_idx = stop_idx
 
-            im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
-            stop_idx = current_idx + im.shape[1]
             if self.use_ion_method:
+                im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
+                stop_idx = current_idx + im.shape[1]
                 placeholder[:, current_idx:stop_idx] = im
-            current_idx = stop_idx
+                current_idx = stop_idx
 
-            placeholder = torch.nan_to_num(
-                placeholder, nan=0.0, posinf=0.0, neginf=0.0
-            )
+            placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0)
             return placeholder
 
         # ============================================================
@@ -145,11 +151,15 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
 
         # precursor_mass is always included
         precursor_mass = kwargs["precursor_mass"].float().to(device).view(batch_size, 1)
-        precursor_mass = torch.nan_to_num(precursor_mass, nan=0.0, posinf=0.0, neginf=0.0)
+        precursor_mass = torch.nan_to_num(
+            precursor_mass, nan=0.0, posinf=0.0, neginf=0.0
+        )
         features.append(precursor_mass)
 
         if self.use_ion_mode:
-            precursor_charge = kwargs["precursor_charge"].float().to(device).view(batch_size, 1)
+            precursor_charge = (
+                kwargs["precursor_charge"].float().to(device).view(batch_size, 1)
+            )
             precursor_charge = torch.nan_to_num(
                 precursor_charge, nan=0.0, posinf=0.0, neginf=0.0
             )
@@ -175,7 +185,7 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
                 adduct_idx = adduct_raw.view(batch_size).long()
 
             adduct_idx = torch.clamp(
-              adduct_idx,
+                adduct_idx,
                 min=0,
                 max=self.adduct_embedding.num_embeddings - 1,
             )
@@ -183,8 +193,6 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             adduct_emb = self.adduct_embedding(adduct_idx)
             adduct_emb = torch.nan_to_num(adduct_emb, nan=0.0, posinf=0.0, neginf=0.0)
             features.append(adduct_emb)
-
-            #print(f'Adduct embedding:{adduct_emb}')
         if self.use_ce:
             ce = kwargs["ce"].float().to(device).view(batch_size, 1)
             ce = torch.nan_to_num(ce, nan=0.0, posinf=0.0, neginf=0.0)
@@ -199,7 +207,6 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
             im = kwargs["ion_method"].float().to(device).view(batch_size, -1)
             im = torch.nan_to_num(im, nan=0.0, posinf=0.0, neginf=0.0)
             features.append(im)
-        
 
         metadata_input = torch.cat(features, dim=1)  # (batch_size, total_metadata_dim)
         metadata_input = metadata_input.to(dtype)
@@ -208,8 +215,8 @@ class SpectrumTransformerEncoderCustom(SpectrumTransformerEncoder):
         placeholder = self.metadata_activation(placeholder)
         placeholder = self.metadata_fc2(placeholder)
 
-        placeholder = torch.nan_to_num(
-            placeholder, nan=0.0, posinf=0.0, neginf=0.0
-        ).to(dtype)
+        placeholder = torch.nan_to_num(placeholder, nan=0.0, posinf=0.0, neginf=0.0).to(
+            dtype
+        )
 
         return placeholder

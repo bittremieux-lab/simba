@@ -47,9 +47,12 @@ def separate_msn_levels(overrides: tuple[str, ...]) -> None:
 
     from simba.utils.config_utils import get_config_path
     from simba.utils.logger_setup import logger
-    #from simba.workflows.inference import inference as run_inference
-    from simba.workflows.separate_msn_levels import separate_msn_levels  as separate_msn_levels
-    
+
+    # from simba.workflows.inference import inference as run_inference
+    from simba.workflows.separate_msn_levels import (
+        separate_msn_levels as separate_msn_levels,
+    )
+
     # Enable MPS fallback on macOS for unsupported ops
     if platform.system() == "Darwin":
         os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -132,7 +135,6 @@ def separate_msn_levels(overrides: tuple[str, ...]) -> None:
     try:
         # Run inference workflow
         separate_msn_levels(cfg)
-
 
     except Exception as e:
         logger.error(f"Separa msn levels failed: {e}")

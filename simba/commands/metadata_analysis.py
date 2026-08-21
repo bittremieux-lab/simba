@@ -47,8 +47,12 @@ def metadata_analysis(overrides: tuple[str, ...]) -> None:
 
     from simba.utils.config_utils import get_config_path
     from simba.utils.logger_setup import logger
-    #from simba.workflows.inference import inference as run_inference
-    from simba.workflows.inference_metadata_analysis import run_metadata_sensitivity_analysis  as run_inference
+
+    # from simba.workflows.inference import inference as run_inference
+    from simba.workflows.inference_metadata_analysis import (
+        run_metadata_sensitivity_analysis as run_inference,
+    )
+
     # Enable MPS fallback on macOS for unsupported ops
     if platform.system() == "Darwin":
         os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")

@@ -67,7 +67,14 @@ class LoadData:
                         yield scan_nr, spectrum_dict
 
             total_results = []
+            spectra_processed = 0
+            spectra_yielded = 0
+            spectra_failed_validation = 0
+            spectra_failed_parsing = 0
+            spectra_failed_nan_check = 0
+
             for mgf_index, spectrum in spectrum_it():
+                spectra_processed += 1
                 # try:
                 if use_only_protonized_adducts:
                     if use_gnps_format:
@@ -87,7 +94,9 @@ class LoadData:
                         compute_classes=compute_classes,
                         use_gnps_format=use_gnps_format,
                     )
-                    if spec and (
+                    if spec is None:
+                        spectra_failed_parsing += 1
+                    elif (
                         np.isnan(spec.mz).any()
                         or np.isnan(spec.intensity).any()
                         or not np.isfinite(spec.mz).all()
@@ -95,11 +104,63 @@ class LoadData:
                         or not np.all(spec.mz >= 0)
                         or not np.all(spec.intensity >= 0)
                     ):
+                        spectra_failed_nan_check += 1
                         spec = None
+
                     if spec is not None:
                         # Assign the original MGF index before filtering
                         spec.mgf_index = mgf_index
+                        spectra_yielded += 1
                         yield spec
+                else:
+                    spectra_failed_validation += 1
+
+            logger.info(
+                f"MGF Loading Summary: Processed {spectra_processed} spectra - "
+                f"Passed validation: {spectra_yielded + spectra_failed_parsing + spectra_failed_nan_check}, "
+                f"Failed validation: {spectra_failed_validation}, "
+                f"Failed parsing: {spectra_failed_parsing}, "
+                f"Failed NaN check: {spectra_failed_nan_check}, "
+                f"Final yielded: {spectra_yielded}"
+            )
+
+            # Aggregate condition breakdown from all processed spectra
+            if total_results and len(total_results) > 0:
+                condition_fails = {
+                    "library_quality": 0,
+                    "charge": 0,
+                    "pepmass": 0,
+                    "mz_array": 0,
+                    "ion_mode": 0,
+                    "name_format": 0,
+                    "centroid": 0,
+                    "inchi_smiles": 0,
+                }
+
+                for res in total_results:
+                    if not res.get("cond_library", True):
+                        condition_fails["library_quality"] += 1
+                    if not res.get("cond_charge", True):
+                        condition_fails["charge"] += 1
+                    if not res.get("cond_pepmass", True):
+                        condition_fails["pepmass"] += 1
+                    if not res.get("cond_mz_array", True):
+                        condition_fails["mz_array"] += 1
+                    if not res.get("cond_ion_mode", True):
+                        condition_fails["ion_mode"] += 1
+                    if not res.get("cond_name", True):
+                        condition_fails["name_format"] += 1
+                    if not res.get("cond_centroid", True):
+                        condition_fails["centroid"] += 1
+                    if not res.get("cond_inchi_smiles", True):
+                        condition_fails["inchi_smiles"] += 1
+
+                # Log conditions causing most failures
+                logger.info("Validation condition failures (spectra rejected for each condition):")
+                for condition, count in sorted(condition_fails.items(), key=lambda x: x[1], reverse=True):
+                    if count > 0:
+                        pct = 100.0 * count / spectra_processed
+                        logger.info(f"  {condition}: {count} spectra ({pct:.1f}%)")
             # except ValueError as e:
             #    pass
 
@@ -250,6 +311,8 @@ class LoadData:
             spectrum: Spectrum to validate
             cfg: DictConfig (Hydra configuration object)
         """
+        spectrum_name = spectrum["params"].get("name", "UNKNOWN")
+
         if "libraryquality" in spectrum["params"].keys():
             cond_library = int(spectrum["params"]["libraryquality"]) <= 3
         else:
@@ -304,6 +367,33 @@ class LoadData:
             and cond_centroid
             and cond_inchi_smiles
         )
+
+        # Log failures for debugging
+        if not total_condition:
+            failed_conditions = []
+            if not cond_library:
+                failed_conditions.append("library_quality")
+            if not cond_charge:
+                failed_conditions.append("charge")
+            if not cond_pepmass:
+                failed_conditions.append("pepmass")
+            if not cond_mz_array:
+                failed_conditions.append("mz_array_size")
+            if not cond_ion_mode:
+                failed_conditions.append("ion_mode")
+            if not cond_name:
+                failed_conditions.append("name_format")
+            if not cond_centroid:
+                failed_conditions.append("centroid")
+            if not cond_inchi_smiles:
+                failed_conditions.append("inchi_smiles")
+
+            # Log rejected spectra with failed conditions
+            logger.debug(
+                f"Spectrum rejected - Name: {spectrum_name}, SMILES: {spectrum['params'].get('smiles', 'N/A')}, "
+                f"Failed: {', '.join(failed_conditions)}"
+            )
+
         return total_condition, dict_results
 
     def _parse_spectrum(
@@ -416,6 +506,7 @@ class LoadData:
             subclass=subclass,
             inchi_key=inchi_key,
             spectrum_hash=spectrum_hash_result,
+            fold=params.get("fold", None),
         )
 
         # postprocessing
@@ -484,10 +575,13 @@ class LoadData:
                 # spectrum = pp.preprocess_spectrum(spectrum)
                 spectra.append(spectrum)
             except StopIteration:  # in case it is not possible to get more samples
-                logger.info(f"Only {i} spectra found.")
+                logger.info(f"Only {i} spectra found in MGF file.")
                 break
             # go to next iteration
 
+        logger.info(f"Loaded {len(spectra)} spectra from MGF file (with filtering applied)")
+        unique_molecules = len(set(s.params["smiles"] for s in spectra if "smiles" in s.params))
+        logger.info(f"Unique molecules in loaded spectra: {unique_molecules}")
         return spectra
 
     def get_all_spectra_nist(

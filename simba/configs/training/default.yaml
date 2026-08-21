@@ -13,9 +13,12 @@ training:
   epochs: 1000
   batch_size: 128
   val_check_interval: 10000
+  limit_val_batches: 1.0  # float (fraction) or int (num batches); 1.0 = full val set
+  limit_train_batches: 1.0  # float (fraction) or int (num batches); 1.0 = full train set
   validate_after_ratio: 0.001
   gradient_clip_val: 1.0
   accumulate_grad_batches: 1
+  early_stopping_patience: 0  # 0 = disabled; set e.g. 5 to stop when val_loss stops improving
 
 # Data splits
 data:

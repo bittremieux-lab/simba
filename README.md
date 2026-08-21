@@ -200,6 +200,56 @@ The notebook demonstrates:
 
 ---
 
+## Molecular Networking Using SIMBA
+
+Molecular networking computes all-vs-all pairwise structural similarity across a single set of spectra, producing a graph where nodes are spectra and edges connect structurally related compounds. This is analogous to GNPS molecular networking but uses SIMBA's learned structural distance predictions instead of cosine similarity.
+
+> **Note:** Input spectra are assumed to be deduplicated — one representative spectrum per compound. If your dataset contains multiple spectra per compound (e.g. from replicate injections), remove redundant entries before running molecular networking to avoid spurious high-similarity edges between duplicates.
+
+### Usage Example
+
+```bash
+simba molecular-network \
+  --model-path /path/to/model.ckpt \
+  --input-spectra /path/to/spectra.mgf \
+  --output-dir /path/to/output
+```
+
+**Common Parameters:**
+* `--model-path`: Path to trained SIMBA model checkpoint (.ckpt file) — **REQUIRED**
+* `--input-spectra`: Path to spectra file (.mgf format) — **REQUIRED**
+* `--output-dir`: Directory where results will be saved — **REQUIRED**
+* `molecular_network.score_cutoff`: Minimum similarity to create an edge (default: 0.5)
+* `molecular_network.top_n`: Top-N candidates considered per node (default: 20)
+* `molecular_network.max_links`: Maximum edges per node (default: 10)
+* `molecular_network.link_method`: Edge selection strategy — `single` (either end qualifies) or `mutual` (both ends must qualify) (default: single)
+* `molecular_network.keep_unconnected_nodes`: Include isolated spectra as singleton nodes (default: true)
+* `molecular_network.graph_format`: Output format — `graphml`, `gexf`, `cyjs`, `gml`, `json` (default: graphml)
+* `molecular_network.device`: Hardware device: `cpu` or `gpu` (default: cpu)
+* `molecular_network.use_gnps_format`: Set true if the input MGF uses GNPS-style headers (default: false)
+* `molecular_network.filter_spectra`: Apply quality filters (min 6 peaks, protonated adducts only). Default false — every spectrum becomes a node (default: false)
+* `molecular_network.precomputed_mces`: Path to a `similarity_mces.npy` from a previous run — skips model inference (default: null)
+* `molecular_network.plot`: Save a `network_plot.png` visualisation alongside the graph file (default: false)
+* `molecular_network.plot_label_key`: MGF metadata field to use as node labels in the plot (e.g. `formula`, `inchikey`). When null, MGF order index is used (default: null)
+
+**Output Files:**
+- `molecular_network.<format>`: Spectral network in the chosen format (default: `molecular_network.graphml`), loadable in Cytoscape or any NetworkX-compatible tool
+- `similarity_mces.npy`: Raw `[N×N]` predicted MCES distance matrix (can be reused with `precomputed_mces`)
+
+**Score Normalization:**
+
+MCES distances are converted to similarity scores as `sim = 1 - mces / max_mces`, where `max_mces` is the model's training cap (40). A score of 1.0 means identical structures; 0.0 means MCES ≥ 40 (no significant shared substructure).
+
+**Loading the network in Python:**
+
+```python
+import networkx as nx
+G = nx.read_graphml("output/molecular_network.graphml")
+print(f"{G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+```
+
+---
+
 ## 📚 Training Your Custom SIMBA Model
 
 SIMBA supports training custom models using your own MS/MS datasets in `.mgf` format.
@@ -208,23 +258,32 @@ SIMBA supports training custom models using your own MS/MS datasets in `.mgf` fo
 
 Preprocess your MS/MS spectral data:
 
+The input `.mgf` file must contain a `smiles=` field in each spectrum header. Spectra missing a valid SMILES are skipped automatically.
+
 ```bash
 simba preprocess \
   paths.spectra_path=/path/to/your/spectra.mgf \
   paths.preprocessing_dir=/path/to/preprocessed_data \
-  preprocessing.max_spectra_train=10000
+  paths.preprocessing_pickle_file=/path/to/preprocessed_data/mapping.pkl \
+  preprocessing.max_spectra_train=10000 \
+  preprocessing.num_workers=8
 ```
 
 **Common Parameters:**
-* `paths.spectra_path`: Path to input spectra file (.mgf format) - **REQUIRED**
+* `paths.spectra_path`: Path to input spectra file (.mgf with `smiles=` headers) - **REQUIRED**
 * `paths.preprocessing_dir`: Directory where preprocessed data will be saved - **REQUIRED**
+* `paths.preprocessing_pickle_file`: Output pickle file path - **REQUIRED**
 * `preprocessing.max_spectra_train`: Maximum number of spectra to process for training (default: 1000)
 * `preprocessing.max_spectra_val`: Maximum number of spectra for validation (default: 1000)
 * `preprocessing.max_spectra_test`: Maximum number of spectra for testing (default: 1000)
-* `preprocessing.val_split`: Fraction of data for validation (default: 0.1)
-* `preprocessing.test_split`: Fraction of data for testing (default: 0.1)
+* `preprocessing.n_buckets`: Total hash buckets / modulus (default: 10)
+* `preprocessing.train_buckets`: Bucket numbers assigned to train (default: [0,1,2,3,4,5,6,7], ~80%)
+* `preprocessing.val_buckets`: Bucket numbers assigned to validation (default: [8], ~10%)
+* `preprocessing.test_buckets`: Bucket numbers assigned to test (default: [9], ~10%)
 * `preprocessing.overwrite`: Overwrite existing preprocessing files (default: false)
 * `preprocessing.num_workers`: Number of worker processes for parallel computation (default: 0)
+* `preprocessing.hdf5_mces_cache_path`: Path to an HDF5 file with precomputed MCES values (optional); matching pairs skip ILP
+* `preprocessing.hdf5_mces_threshold`: Only use cached MCES values ≤ this threshold (default: 10.0)
 
 **Multi-Node Preprocessing:**
 
@@ -275,6 +334,38 @@ simba preprocess \
 
 ---
 
+**Reusing Precomputed Distances:**
+
+To speed up preprocessing when working with related datasets (e.g., MS2-only, MS3-only, and joint MS2+MS3), you can reuse previously computed molecular distances:
+
+```bash
+# First: preprocess MS2-only data
+simba preprocess \
+  paths.spectra_path=ms2_spectra.mgf \
+  paths.preprocessing_dir=./ms2_preprocessing/
+
+# Then: preprocess MS3-only data
+simba preprocess \
+  paths.spectra_path=ms3_spectra.mgf \
+  paths.preprocessing_dir=./ms3_preprocessing/
+
+# Finally: preprocess joint dataset, reusing distances from both
+simba preprocess \
+  paths.spectra_path=joint_spectra.mgf \
+  paths.preprocessing_dir=./joint_preprocessing/ \
+  'preprocessing.precomputed_distances=[./ms2_preprocessing/, ./ms3_preprocessing/]'
+```
+
+The cache automatically:
+- Finds all distance files (`edit_distance_*.npy`, `mces_*.npy`) in each directory
+- Loads SMILES mappings from `mapping_unique_smiles.pkl`
+- Matches molecules by SMILES strings (robust to different splits/filters)
+- Logs cache hit/miss statistics during computation
+
+**Cache hit rate = % of molecule pairs that were reused instead of recomputed!**
+
+---
+
 **Quick Testing (Fast Dev Mode):**
 
 ```bash
@@ -294,38 +385,40 @@ simba preprocess \
   preprocessing.max_spectra_train=1000000 \
   preprocessing.num_workers=4
 
-# Custom splits and overwrite existing data
+# Custom splits: 2/10 val, 2/10 test (20% each) and overwrite existing data
 simba preprocess \
   paths.spectra_path=data/spectra.mgf \
   paths.preprocessing_dir=./preprocessed_data \
-  preprocessing.val_split=0.15 \
-  preprocessing.test_split=0.15 \
+  'preprocessing.train_buckets=[0,1,2,3,4,5]' \
+  'preprocessing.val_buckets=[6,7]' \
+  'preprocessing.test_buckets=[8,9]' \
   preprocessing.overwrite=true
 ```
 
 ---
 
-**What preprocessing computes:**
-- Edit distance between molecular structures
-- MCES (Maximum Common Edge Substructure) distance
-- Train/validation/test splits
-- A pickle file `mapping_unique_smiles.pkl` with mapping information between unique compounds and corresponding spectra
-
 ### Output
-- Numpy arrays with indexes and structural similarity metrics
-- Pickle file (`mapping_unique_smiles.pkl`) mapping spectra indexes to SMILES structures
 
-### Accessing Data Mapping
+Preprocessing produces:
+
+- **`.npy` files** — pairwise distances between unique molecules, one set per split:
+  - `edit_distance_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, edit_distance)`
+  - `mces_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, mces_distance)`
+  - `ed_mces_indexes_tani_incremental_{train|val|test}_*.npy` — columns: `(idx_i, idx_j, ed, mces)` combined
+  - Indices are row numbers in the unique-SMILES table: multiple spectra with the same SMILES map to one index. Distance `666` = trivially dissimilar pair (Tanimoto < 0.2 or > 40 heavy atoms); `NaN` = ILP timed out.
+
+- **`mapping.pkl`** (or the filename you set) — a dict with keys `molecule_pairs_train`, `molecule_pairs_val`, `molecule_pairs_test`:
+
 ```python
 import pickle
 
-with open('/path/to/output_dir/mapping_unique_smiles.pkl', 'rb') as f:
+with open('/path/to/preprocessed_data/mapping.pkl', 'rb') as f:
     data = pickle.load(f)
 
 mol_train = data['molecule_pairs_train']
-print(mol_train.df_smiles)
+print(mol_train.df_smiles)       # DataFrame: unique SMILES → original spectrum indices
+print(mol_train.unique_spectra)  # list of Spectrum objects, one per unique molecule
 ```
-The dataframe df_smiles contains the mapping from indexes of unique compounds to the original spectra loaded.
 
 ### Step 2: Model Training
 
@@ -459,7 +552,104 @@ The command generates evaluation metrics and visualization plots:
 
 ---
 
-## 🛠️ Development & Contributing
+## Hyperparameter Search
+
+SIMBA includes a built-in Optuna-based hyperparameter sweep via the `simba-sweep` command. All trials run **sequentially in a single job**. Results are written to `trials.json` after every trial, enabling **resume** with full knowledge after a crash or walltime limit.
+
+### Configuring the Search Space
+
+Edit `simba/configs/sweep/default.yaml` to define which hyperparameters to search. Each entry under `sweep.params` requires a `type` and bounds/choices:
+
+```yaml
+sweep:
+  n_trials: 10
+  output_dir: ./sweeps/run1
+  resume: false
+  params:
+    optimizer.lr:
+      type: loguniform
+      low: 1.0e-5
+      high: 1.0e-2
+
+    model.transformer.d_model:
+      type: categorical
+      choices: [128, 256, 512]
+
+    model.transformer.n_layers:
+      type: int
+      low: 3
+      high: 8
+
+    training.gradient_clip_val:
+      type: uniform
+      low: 0.5
+      high: 2.0
+```
+
+Supported `type` values: `loguniform`, `uniform`, `int`, `categorical`.
+
+Any valid Hydra config key (e.g. `optimizer.lr`, `model.transformer.d_model`, `training.batch_size`) can be added without touching Python code.
+
+### Running a Sweep Locally
+
+```bash
+simba-sweep \
+    +sweep=default \
+    sweep.n_trials=10 \
+    sweep.output_dir=./sweeps/run1 \
+    paths.preprocessing_dir_train=./preprocessed_data \
+    training.epochs=10 \
+    hardware.accelerator=cpu
+```
+
+### Resuming After Interruption
+
+Set `sweep.resume=true` to continue from where the sweep left off. TPE will use all previously completed trials to guide new ones:
+
+### Starting from Known Good Parameters
+
+You can seed the sweep with specific hyperparameter combinations that run as the first trial(s) before TPE takes over — useful when you have prior knowledge of a reasonable starting point:
+
+```yaml
+# In simba/configs/sweep/default.yaml — uncomment and edit:
+sweep:
+  starting_params:
+    - optimizer.lr: 0.001
+      model.transformer.d_model: 256
+      model.transformer.n_layers: 5
+      training.gradient_clip_val: 1.0
+    - optimizer.lr: 0.0001
+      model.transformer.d_model: 512
+      model.transformer.n_layers: 3
+      training.gradient_clip_val: 0.5
+```
+
+- All keys must be valid params listed under `sweep.params`
+- Multiple starting points are supported — each runs as a separate trial
+- Ignored when `sweep.resume=true` (TPE already has prior knowledge)
+
+### Output Structure
+
+```text
+sweeps/run1/
+├── trials.json                  # All trial results (params + val_loss)
+├── checkpoints/
+│   ├── 0/
+│   │   ├── best_model.ckpt      # Best checkpoint for trial 0
+│   │   └── params.json          # Hyperparams used for this checkpoint
+│   ├── 1/
+│   │   └── ...
+│   └── ...
+└── best_inference/
+    ├── metrics.json             # ED & MCES correlation + MAE for best trial
+    ├── cm.png                   # Confusion matrix
+    ├── hexbin_plot_*.png
+    └── scatter_plot_*.png
+```
+
+After all trials, inference is automatically run on the best trial's checkpoint and metrics/plots are saved to `best_inference/`.
+
+## Development & Contributing
 
 ### Setting Up Development Environment
 

@@ -10,7 +10,8 @@ from pathlib import Path
 import dill
 import lightning.pytorch as pl
 import numpy as np
-from lightning.pytorch.callbacks import ModelCheckpoint
+import torch
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
@@ -24,7 +25,11 @@ from simba.core.data.weighted_sampling import (
     SimilarityWeightSampler,
 )
 from simba.core.models.similarity_models import SimilarityModelMultitask
-from simba.core.training.losscallback import LossCallback
+from simba.core.training.callbacks import (
+    LossCallback,
+    ProgressLogCallback,
+    ValMetricsCallback,
+)
 from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.utils.sanity_checks import SanityChecks
@@ -84,12 +89,14 @@ def load_dataset(cfg: DictConfig):
         )
 
         mgf_path = mapping["mgf_path"]
-        
+
         # Use preprocessing config values (if available) to ensure consistent filtering
-        use_only_protonized = getattr(cfg.preprocessing, 'use_only_protonized_adducts', True)
-        
+        use_only_protonized = getattr(
+            cfg.preprocessing, "use_only_protonized_adducts", True
+        )
+
         all_spectra = load_spectra(
-            mgf_path, 
+            mgf_path,
             cfg,
             n_samples=-1,  # Load all spectra during training
             use_only_protonized_adducts=use_only_protonized,
@@ -111,23 +118,27 @@ def load_dataset(cfg: DictConfig):
                 original_spectra = []
                 idx_map = {}  # old_idx -> new_idx
                 missing = []
-                
+
                 for old_idx, mgf_idx in enumerate(spectrum_indexes):
                     if mgf_idx in spectra_by_idx:
                         idx_map[old_idx] = len(original_spectra)
                         original_spectra.append(spectra_by_idx[mgf_idx])
                     else:
                         missing.append(mgf_idx)
-                
+
                 if missing:
-                    logger.warning(f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})")
+                    logger.warning(
+                        f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                    )
                     # Filter df_smiles to keep only rows with valid spectra
                     valid_rows = []
                     for i in df_smiles.index:
                         old_idxs = df_smiles.loc[i, "indexes"]
                         if all(idx in idx_map for idx in old_idxs):
                             # Remap to new positions
-                            df_smiles.at[i, "indexes"] = [idx_map[idx] for idx in old_idxs]
+                            df_smiles.at[i, "indexes"] = [
+                                idx_map[idx] for idx in old_idxs
+                            ]
                             valid_rows.append(i)
                     df_smiles = df_smiles.loc[valid_rows]
 
@@ -288,7 +299,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -298,7 +309,7 @@ def prepare_data(
         use_ce=cfg.model.features.use_ce,
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
-        use_ion_mode = cfg.model.features.use_ion_mode,
+        use_ion_mode=cfg.model.features.use_ion_mode,
     )
 
     # Create samplers
@@ -348,10 +359,11 @@ def create_dataloaders(
     dataloader_val = DataLoader(
         dataset_val,
         batch_size=cfg.training.batch_size,
-        shuffle=False,
+        shuffle=(val_sampler is None),
         sampler=val_sampler,
         num_workers=cfg.hardware.num_workers,
         persistent_workers=cfg.hardware.num_workers > 0,
+        generator=torch.Generator().manual_seed(42) if val_sampler is None else None,
     )
 
     return dataloader_train, dataloader_val
@@ -391,7 +403,36 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    return checkpoint_callback, checkpoint_n_steps_callback, loss_callback
+    # Validation metrics callback (saves confusion matrix + MCES scatter)
+    val_metrics_callback = ValMetricsCallback(
+        output_dir=str(paths["checkpoint_dir"]),
+        n_classes=cfg.model.tasks.edit_distance.n_classes,
+    )
+
+    # Progress logging callback (writes INFO lines to .err log file)
+    progress_log_callback = ProgressLogCallback(
+        log_every_n_steps=cfg.logging.get("progress_log_every_n_steps", 100)
+    )
+
+    # Optional early stopping: patience=0 means disabled
+    early_stopping_callback = None
+    patience = cfg.training.get("early_stopping_patience", 0)
+    if patience and patience > 0:
+        early_stopping_callback = EarlyStopping(
+            monitor="validation_loss",
+            patience=patience,
+            mode="min",
+            verbose=True,
+        )
+
+    return (
+        checkpoint_callback,
+        checkpoint_n_steps_callback,
+        loss_callback,
+        early_stopping_callback,
+        progress_log_callback,
+        val_metrics_callback,
+    )
 
 
 def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMultitask:
@@ -452,7 +493,10 @@ def train(
     checkpoint_callback: ModelCheckpoint | None,
     checkpoint_n_steps_callback: ModelCheckpoint | None,
     loss_callback: LossCallback,
-) -> None:
+    early_stopping_callback: EarlyStopping | None = None,
+    progress_log_callback: ProgressLogCallback | None = None,
+    val_metrics_callback: ValMetricsCallback | None = None,
+) -> pl.Trainer:
     """Run the training loop.
     Args:
         model: SIMBA model to train
@@ -462,27 +506,50 @@ def train(
         checkpoint_callback: Best model checkpoint callback (optional, can be None)
         checkpoint_n_steps_callback: Periodic checkpoint callback (optional, can be None)
         loss_callback: Loss tracking callback
+        early_stopping_callback: EarlyStopping callback (optional, None=disabled)
+    Returns:
+        The fitted PyTorch Lightning Trainer.
     """
     # Build callbacks list, excluding None values
     callbacks = [
         cb
-        for cb in [checkpoint_callback, checkpoint_n_steps_callback, loss_callback]
+        for cb in [
+            checkpoint_callback,
+            checkpoint_n_steps_callback,
+            loss_callback,
+            early_stopping_callback,
+            progress_log_callback,
+            val_metrics_callback,
+        ]
         if cb is not None
     ]
+
+    torch.set_float32_matmul_precision("high")
+
+    from lightning.pytorch.loggers import CSVLogger
+
+    from simba.utils.config_utils import get_model_paths
+
+    checkpoint_dir = get_model_paths(cfg)["checkpoint_dir"]
+    csv_logger = CSVLogger(save_dir=str(checkpoint_dir), name="", version="")
 
     trainer = pl.Trainer(
         max_epochs=cfg.training.epochs,
         accelerator=cfg.hardware.accelerator,
         devices=cfg.hardware.devices,
         val_check_interval=cfg.training.val_check_interval,
+        limit_train_batches=cfg.training.limit_train_batches,
+        limit_val_batches=cfg.training.limit_val_batches,
         gradient_clip_val=cfg.training.gradient_clip_val,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
         callbacks=callbacks,
+        logger=csv_logger,
         enable_progress_bar=cfg.logging.enable_progress_bar,
         log_every_n_steps=cfg.logging.log_every_n_steps,
     )
 
     trainer.fit(model, dataloader_train, dataloader_val)
+    return trainer
 
 
 def _remove_duplicates_array(arr: np.ndarray) -> np.ndarray:

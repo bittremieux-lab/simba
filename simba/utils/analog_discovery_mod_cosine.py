@@ -17,36 +17,38 @@ All figures are saved in the current workspace directory: .
 
 # ## Libraries
 
-
 # %% Cell 3
 import copy
-import os
 import pickle
 
 import matplotlib
+
+
 matplotlib.use("Agg")
+import sys
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import spectrum_utils.plot as sup
+from hydra import compose, initialize_config_dir
 from rdkit import Chem
 from tqdm.auto import tqdm
 
-from hydra import compose, initialize_config_dir
-
-from pathlib import Path
-import sys
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
-from legacy.old_scripts.simba.analog_discovery.mces import MCES
 # We still use SIMBA utilities only for loading/preprocessing spectra and evaluation helpers.
 # The SIMBA neural model is NOT used in this notebook.
-import simba
-from simba.workflows.utils import load_spectra
-from simba.utils.config_utils import get_config_path
-from simba.core.data.preprocessor import Preprocessor
-from simba.core.chemistry.similarity_metrics import MolecularSimilarityMetrics as GroundTruth
+from legacy.old_scripts.simba.analog_discovery.mces import MCES  # noqa: E402
+from simba.core.chemistry.similarity_metrics import (  # noqa: E402
+    MolecularSimilarityMetrics as GroundTruth,
+)
+from simba.core.data.preprocessor import Preprocessor  # noqa: E402
+from simba.utils.config_utils import get_config_path  # noqa: E402
+from simba.workflows.utils import load_spectra  # noqa: E402
+
 
 try:
     from matchms import Spectrum as MatchmsSpectrum
@@ -57,7 +59,8 @@ except ImportError as e:
     ) from e
 
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
+
 
 FIGURE_DIR = Path(".")
 FIGURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -118,17 +121,13 @@ cfg.model.features.use_only_protonized_adducts = False
 cfg.preprocessing = "tfs_auto"
 cfg.hardware.accelerator = "gpu"
 
-cfg.model.features.use_only_protonized_adducts
-
 # ## Input files
 
 
 # %% Cell 8
 reference_file = "/data/simba_files/msnlib_filtered.mgf"
 
-casmi_file = (
-    "/data/tutorial_files/casmi_all_spectra.mgf"
-)
+casmi_file = "/data/tutorial_files/casmi_all_spectra.mgf"
 
 print("Reference:", reference_file)
 print("Query:", casmi_file)
@@ -179,20 +178,23 @@ all_spectrums_reference_processed = [
         max_num_peaks=1000,
         scale_intensity="root",
     )
-    for s in tqdm(all_spectrums_reference_processed, desc="Preprocessing reference spectra")
+    for s in tqdm(
+        all_spectrums_reference_processed, desc="Preprocessing reference spectra"
+    )
 ]
 
 # Keep original spectra whose processed version has enough peaks.
 all_spectrums_reference = [
     s_original
-    for s_original, s_processed in zip(all_spectrums_reference, all_spectrums_reference_processed)
-       if len(s_processed.mz) >= 6
+    for s_original, s_processed in zip(
+        all_spectrums_reference, all_spectrums_reference_processed
+    )
+    if len(s_processed.mz) >= 6
 ]
 
 # Only MS2 spectra
 all_spectrums_reference = [
-    s for s in all_spectrums_reference
-    if str(s.params.get("mslevel", "2")) == "2"
+    s for s in all_spectrums_reference if str(s.params.get("mslevel", "2")) == "2"
 ]
 
 print(f"Reference spectra after filtering: {len(all_spectrums_reference)}")
@@ -235,8 +237,18 @@ if USE_METADATA:
     else:
         for s in all_spectrums_reference:
             _set_param_and_attr(s, "ce", _safe_collision_energy(s))
-            _set_param_and_attr(s, "ionization_method", s.params.get("ion_source", s.params.get("ionization_method", "")))
-            _set_param_and_attr(s, "ion_activation", s.params.get("fragmentation_method", s.params.get("ion_activation", "")))
+            _set_param_and_attr(
+                s,
+                "ionization_method",
+                s.params.get("ion_source", s.params.get("ionization_method", "")),
+            )
+            _set_param_and_attr(
+                s,
+                "ion_activation",
+                s.params.get(
+                    "fragmentation_method", s.params.get("ion_activation", "")
+                ),
+            )
             _set_param_and_attr(s, "adduct", s.params.get("adduct", ""))
             _set_param_and_attr(s, "ionmode", str(s.params.get("ionmode", "")).lower())
 else:
@@ -273,6 +285,10 @@ def _get_first_existing(obj, names, default=None):
                 return value
     return default
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def _get_param_first(spectrum, names, default=None):
     for name in names:
         if name in spectrum.params and spectrum.params[name] is not None:
@@ -299,6 +315,10 @@ def _extract_peaks(spectrum):
     order = np.argsort(mz)
     return mz[order], intensities[order]
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def _extract_precursor_mz(spectrum):
     precursor = _get_first_existing(spectrum, ["precursor_mz", "precursor"])
     if precursor is None:
@@ -316,6 +336,10 @@ def _extract_precursor_mz(spectrum):
     except Exception:
         return None
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 def to_matchms_spectrum(spectrum):
     mz, intensities = _extract_peaks(spectrum)
     metadata = dict(getattr(spectrum, "params", {}))
@@ -330,10 +354,19 @@ def to_matchms_spectrum(spectrum):
         metadata=metadata,
     )
 
-query_matchms = [to_matchms_spectrum(s) for s in tqdm(all_spectrums_query, desc="Converting query spectra")]
-reference_matchms = [to_matchms_spectrum(s) for s in tqdm(all_spectrums_reference, desc="Converting reference spectra")]
 
-print(f"Converted query spectra: {len(query_matchms)}; reference spectra: {len(reference_matchms)}")
+query_matchms = [
+    to_matchms_spectrum(s)
+    for s in tqdm(all_spectrums_query, desc="Converting query spectra")
+]
+reference_matchms = [
+    to_matchms_spectrum(s)
+    for s in tqdm(all_spectrums_reference, desc="Converting reference spectra")
+]
+
+print(
+    f"Converted query spectra: {len(query_matchms)}; reference spectra: {len(reference_matchms)}"
+)
 
 # ## Compute modified cosine similarity matrix
 
@@ -378,8 +411,6 @@ for i, q in enumerate(tqdm(query_matchms, desc="Scoring query spectra")):
     for j, r in enumerate(reference_matchms):
         ranking[i, j], n_matching_peaks[i, j] = score_modified_cosine(q, r)
 
-ranking.shape
-
 # The `ranking` matrix replaces SIMBA's ranking. Here, **larger values mean better matches**.
 
 
@@ -403,11 +434,9 @@ save_current_figure("modified_cosine_score_distribution.png")
 def get_top_k_candidates(ranking, reference_spectra, k=10):
     top_indices = np.argsort(ranking, axis=1)[:, -k:][:, ::-1]
     top_scores = np.take_along_axis(ranking, top_indices, axis=1)
-    top_spectra = [
-        [reference_spectra[j] for j in row]
-        for row in top_indices
-    ]
+    top_spectra = [[reference_spectra[j] for j in row] for row in top_indices]
     return top_spectra, top_scores, top_indices
+
 
 spectrums_k_retrieved, modified_cosine_k_retrieved, arg_top_k = get_top_k_candidates(
     ranking,
@@ -466,7 +495,8 @@ print(f"Real edit distance: {ground_truth_ed[0, 0]}")
 
 
 # %% Cell 35
-#from legacy.old_scripts.simba.analog_discovery.mces import MCES
+# from legacy.old_scripts.simba.analog_discovery.mces import MCES
+
 
 def safe_mces_sim(smiles1, smiles2, default=np.nan):
     if smiles1 is None or smiles2 is None:
@@ -483,6 +513,10 @@ def safe_mces_sim(smiles1, smiles2, default=np.nan):
     except Exception:
         return default
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 mces_k_retrieved = [
     [
         safe_mces_sim(
@@ -525,7 +559,13 @@ best_modified_cosine_scores = [
 
 print(f"Retrieved spectra evaluated: {len(spectrums_retrieved)}")
 print(f"Mean best top-{TOP_K} MCES similarity: {np.nanmean(mces_sims):.3f}")
+<<<<<<< HEAD
 print(f"Mean modified cosine of structurally best top-{TOP_K} hit: {np.nanmean(best_modified_cosine_scores):.3f}")
+=======
+print(
+    f"Mean modified cosine of structurally best top-{TOP_K} hit: {np.nanmean(best_modified_cosine_scores):.3f}"
+)
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 
 # %% Cell 37
@@ -557,16 +597,26 @@ plt.grid(alpha=0.3)
 save_current_figure("normalized_mces_distance_boxplot.png")
 
 
+<<<<<<< HEAD
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 norm_mces_sims= [1-m for m in mces_sims if m is not None]
+=======
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import seaborn as sns  # noqa: E402
+
+
+norm_mces_sims = [1 - m for m in mces_sims if m is not None]
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 # Choose ONE palette and reuse it everywhere in the paper
 colors = sns.color_palette("deep", n_colors=6)
 
 plt.figure(figsize=(2, 5))
 
+<<<<<<< HEAD
 sns.violinplot(
     data=[norm_mces_sims],
     inner=None,
@@ -574,19 +624,30 @@ sns.violinplot(
     cut=0,
     palette=['r']
 )
+=======
+sns.violinplot(data=[norm_mces_sims], inner=None, scale="width", cut=0, palette=["r"])
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 sns.boxplot(
     data=[norm_mces_sims],
     width=0.2,
     showcaps=True,
+<<<<<<< HEAD
     boxprops={'facecolor': 'none'},
     showfliers=False,
     whiskerprops={'linewidth': 2},
     medianprops={'color': 'black', 'linewidth': 2}
+=======
+    boxprops={"facecolor": "none"},
+    showfliers=False,
+    whiskerprops={"linewidth": 2},
+    medianprops={"color": "black", "linewidth": 2},
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 )
 stacked_labels = [
     "SIMBA with metadata",
 ]
+<<<<<<< HEAD
 plt.xticks(
     ticks=range(len([norm_mces_sims])),
     labels=stacked_labels,
@@ -595,6 +656,12 @@ plt.xticks(
 
 plt.ylim([-0.05, 0.7])
 plt.ylabel('Normalized MCES distance')
+=======
+plt.xticks(ticks=range(len([norm_mces_sims])), labels=stacked_labels, fontsize=8)
+
+plt.ylim([-0.05, 0.7])
+plt.ylabel("Normalized MCES distance")
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 plt.grid(alpha=0.3)
 # ## Save results
 

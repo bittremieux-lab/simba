@@ -40,11 +40,12 @@ def preprocess(overrides: tuple[str, ...]):
             preprocessing.max_spectra_train=1000000 \\
             hardware.num_workers=4
 
-        # Custom splits and mapping filename
+        # Custom splits: 2 val buckets and 2 test buckets (20% each, out of 10 total)
         simba preprocess \\
             paths.spectra_path=data/spectra.mgf \\
-            preprocessing.val_split=0.15 \\
-            preprocessing.test_split=0.15 \\
+            'preprocessing.train_buckets=[0,1,2,3,4,5]' \\
+            'preprocessing.val_buckets=[6,7]' \\
+            'preprocessing.test_buckets=[8,9]' \\
             paths.preprocessing_pickle_file=custom_mapping.pkl
     """
     # Initialize Hydra configuration
@@ -102,9 +103,21 @@ def _preprocess_with_hydra(cfg: DictConfig):
     click.echo(f"Number of workers: {cfg.preprocessing.num_workers}")
 
     # Validate splits
-    if cfg.preprocessing.val_split + cfg.preprocessing.test_split >= 1.0:
+    n_buckets = cfg.preprocessing.n_buckets
+    train_b = set(cfg.preprocessing.train_buckets)
+    val_b = set(cfg.preprocessing.val_buckets)
+    test_b = set(cfg.preprocessing.test_buckets)
+    all_buckets = train_b | val_b | test_b
+    if len(train_b & val_b) or len(train_b & test_b) or len(val_b & test_b):
         click.echo(
-            "❌ Error: val_split + test_split must be less than 1.0",
+            "Error: train_buckets, val_buckets and test_buckets must not overlap",
+            err=True,
+        )
+        raise click.Abort()
+    if max(all_buckets) >= n_buckets:
+        click.echo(
+            f"Error: bucket numbers must be in [0, {n_buckets}), "
+            f"got max={max(all_buckets)}",
             err=True,
         )
         raise click.Abort()

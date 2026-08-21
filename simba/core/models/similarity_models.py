@@ -74,7 +74,7 @@ class SimilarityModel(pl.LightningModule):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
-            use_ion_mode= use_ion_mode,
+            use_ion_mode=use_ion_mode,
         )
 
         self.regression_loss = nn.MSELoss()
@@ -115,8 +115,8 @@ class SimilarityModel(pl.LightningModule):
         if self.use_ion_mode:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
-            kwargs_0["precursor_charge"]=batch["precursor_charge_0"].float()
-            kwargs_1["precursor_charge"]=batch["precursor_charge_1"].float()
+            kwargs_0["precursor_charge"] = batch["precursor_charge_0"].float()
+            kwargs_1["precursor_charge"] = batch["precursor_charge_1"].float()
         if self.use_adduct:
             kwargs_0["ionmode"] = batch["ionmode_0"].float()
             kwargs_1["ionmode"] = batch["ionmode_1"].float()
@@ -381,7 +381,7 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ce=use_ce,
             use_ion_activation=use_ion_activation,
             use_ion_method=use_ion_method,
-            use_ion_mode= use_ion_mode,
+            use_ion_mode=use_ion_mode,
         )
         self.weights = weights
 
@@ -429,8 +429,8 @@ class SimilarityModelMultitask(SimilarityModel):
         # Initialize learnable log variance parameters for each loss
         self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
         if USE_LEARNABLE_MULTITASK:
-            initial_log_sigma1= 0.0 
-            initial_log_sigma2 = -5.3  
+            initial_log_sigma1 = 0.0
+            initial_log_sigma2 = -5.3
             self.log_sigma1 = nn.Parameter(torch.tensor(initial_log_sigma1))
             self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
 
@@ -467,51 +467,55 @@ class SimilarityModelMultitask(SimilarityModel):
             "precursor_charge": batch["precursor_charge_1"].float(),
         }
 
-        batch["ionmode_0"] = torch.nan_to_num(
-            batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ionmode_1"] = torch.nan_to_num(
-            batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ionmode"] = batch["ionmode_0"].float()
-        kwargs_1["ionmode"] = batch["ionmode_1"].float()
-        batch["adduct_0"] = torch.nan_to_num(
-            batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["adduct_1"] = torch.nan_to_num(
-            batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
+        if self.use_ion_mode:
+            batch["ionmode_0"] = torch.nan_to_num(
+                batch["ionmode_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ionmode_1"] = torch.nan_to_num(
+                batch["ionmode_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ionmode"] = batch["ionmode_0"].float()
+            kwargs_1["ionmode"] = batch["ionmode_1"].float()
 
-        kwargs_0["adduct"] = batch["adduct_0"].float()
-        kwargs_1["adduct"] = batch["adduct_1"].float()
+        if self.use_adduct:
+            batch["adduct_0"] = torch.nan_to_num(
+                batch["adduct_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["adduct_1"] = torch.nan_to_num(
+                batch["adduct_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["adduct"] = batch["adduct_0"].float()
+            kwargs_1["adduct"] = batch["adduct_1"].float()
 
-        batch["ce_0"] = torch.nan_to_num(
-            batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ce_1"] = torch.nan_to_num(
-            batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ce"] = batch["ce_0"].float()
-        kwargs_1["ce"] = batch["ce_1"].float()
+        if self.use_ce:
+            batch["ce_0"] = torch.nan_to_num(
+                batch["ce_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ce_1"] = torch.nan_to_num(
+                batch["ce_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ce"] = batch["ce_0"].float()
+            kwargs_1["ce"] = batch["ce_1"].float()
 
-        batch["ion_activation_0"] = torch.nan_to_num(
-            batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_activation_1"] = torch.nan_to_num(
-            batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
-        kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
+        if self.use_ion_activation:
+            batch["ion_activation_0"] = torch.nan_to_num(
+                batch["ion_activation_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_activation_1"] = torch.nan_to_num(
+                batch["ion_activation_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ion_activation"] = batch["ion_activation_0"].float()
+            kwargs_1["ion_activation"] = batch["ion_activation_1"].float()
 
-        batch["ion_method_0"] = torch.nan_to_num(
-            batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-        batch["ion_method_1"] = torch.nan_to_num(
-            batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
-        )
-
-        kwargs_0["ion_method"] = batch["ion_method_0"].float()
-        kwargs_1["ion_method"] = batch["ion_method_1"].float()
+        if self.use_ion_method:
+            batch["ion_method_0"] = torch.nan_to_num(
+                batch["ion_method_0"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            batch["ion_method_1"] = torch.nan_to_num(
+                batch["ion_method_1"], nan=0.0, posinf=0.0, neginf=0.0
+            )
+            kwargs_0["ion_method"] = batch["ion_method_0"].float()
+            kwargs_1["ion_method"] = batch["ion_method_1"].float()
         # intensity and mz
         batch["intensity_0"] = torch.nan_to_num(
             batch["intensity_0"], nan=0.0, posinf=0.0, neginf=0.0
@@ -580,6 +584,26 @@ class SimilarityModelMultitask(SimilarityModel):
             target_matrix[i, : target_class + 1] = 1.0
         loss = F.binary_cross_entropy(prob, target_matrix, reduction="mean")
         return loss
+
+    def validation_step(self, batch, batch_idx):
+        """Validation step — returns loss + predictions for confusion matrix / scatter plot."""
+        logits_list = self(batch)
+        logits1 = logits_list[0]  # [B, n_classes]
+        logits2 = logits_list[1]  # [B] cosine similarity
+
+        target1 = batch["ed"].to(dtype=torch.long, device=self.device).view(-1)
+        target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
+
+        loss = self.step(batch, batch_idx)
+        self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        return {
+            "loss": loss,
+            "ed_pred": torch.argmax(logits1, dim=1).cpu(),
+            "ed_target": target1.cpu(),
+            "mces_pred": logits2.view(-1).cpu(),
+            "mces_target": target2.cpu(),
+        }
 
     def step(self, batch, batch_idx, threshold=0.5, weight_loss2=None):
         logits_list = self(batch)
@@ -769,9 +793,9 @@ class EmbeddingExtractor(pl.LightningModule):
                 lr=lr,
                 use_cosine_distance=use_cosine_distance,
                 strict=strict,
-                 use_adduct=self.config.model.features.use_adduct,
+                use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,
-                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_activation=self.config.model.features.use_ion_activation,
                 use_ion_method=self.config.model.features.use_ion_method,
                 use_ion_mode=self.config.model.features.use_ion_mode,
             )
@@ -787,7 +811,7 @@ class EmbeddingExtractor(pl.LightningModule):
                 strict=strict,
                 use_adduct=self.config.model.features.use_adduct,
                 use_ce=self.config.model.features.use_ce,
-                 use_ion_activation=self.config.model.features.use_ion_activation,
+                use_ion_activation=self.config.model.features.use_ion_activation,
                 use_ion_method=self.config.model.features.use_ion_method,
                 use_ion_mode=self.config.model.features.use_ion_mode,
             )
@@ -800,7 +824,7 @@ class EmbeddingExtractor(pl.LightningModule):
             "precursor_mass": batch["precursor_mass"].float(),
             "precursor_charge": batch["precursor_charge"].float(),
         }
-        
+
         # Add metadata fields if present in batch
         if "ionmode" in batch:
             kwargs["ionmode"] = batch["ionmode"].float()

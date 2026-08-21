@@ -36,6 +36,7 @@ class MCES:
         use_edit_distance: bool = False,
         loaded_molecule_pairs: MolecularPairsSet | None = None,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MoleculePairsOpt:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -100,6 +101,7 @@ class MCES:
                 identifier=identifier,
                 use_edit_distance=use_edit_distance,
                 compute_both_metrics=compute_both_metrics,
+                precomputed_cache=precomputed_cache,
             )
         else:
             molecular_pairs = loaded_molecule_pairs
@@ -289,6 +291,7 @@ class MCES:
         identifier: str = "",
         use_edit_distance=False,
         compute_both_metrics: bool = False,
+        precomputed_cache: dict = None,
     ) -> MolecularPairsSet:
         """
         Compute MCES or edit distance for all pairs of spectra using multiprocessing.
@@ -366,8 +369,8 @@ class MCES:
             else:
                 my_data = sample_idx
 
-            # Now chunk this node's data by workers
-            chunk_size = num_workers * 10
+            # Process all samples as a single chunk per node.
+            chunk_size = len(my_data)
             num_chunks = int(np.ceil(len(my_data) / chunk_size))
             chunks = np.array_split(my_data, num_chunks)
 
@@ -383,6 +386,11 @@ class MCES:
         logger.info(
             f"Size of each sub-chunk: {np.array_split(chunks[0], num_workers)[0].shape[0]}"
         )
+
+        edit_distance.set_global_cache(precomputed_cache)
+        mols = [Chem.MolFromSmiles(s) for s in all_smiles]
+        fpgen = AllChem.GetRDKitFPGenerator(maxPath=3, fpSize=512)
+        fps = [fpgen.GetFingerprint(m) for m in mols]
 
         computed_pair_distances = np.empty((0, 3))
 
@@ -407,10 +415,6 @@ class MCES:
                 logger.info(f"Processing chunk {chunk_idx}/{len(chunks)}")
 
                 pool = multiprocessing.Pool(processes=num_workers)
-
-                mols = [Chem.MolFromSmiles(s) for s in all_smiles]
-                fpgen = AllChem.GetRDKitFPGenerator(maxPath=3, fpSize=512)
-                fps = [fpgen.GetFingerprint(m) for m in mols]
 
                 # Check if we should compute both metrics in single pass
                 if compute_both_metrics:

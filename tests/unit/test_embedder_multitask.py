@@ -116,6 +116,12 @@ class TestEmbedderMultitask:
             "adduct_1": torch.zeros(batch_size, n_adducts),  # One-hot encoded
             "ionmode_0": torch.ones(batch_size, 1),
             "ionmode_1": torch.ones(batch_size, 1),
+            "ce_0": torch.ones(batch_size, 1) * 30.0,
+            "ce_1": torch.ones(batch_size, 1) * 30.0,
+            "ion_activation_0": torch.zeros(batch_size, 1),
+            "ion_activation_1": torch.zeros(batch_size, 1),
+            "ion_method_0": torch.zeros(batch_size, 1),
+            "ion_method_1": torch.zeros(batch_size, 1),
             "similarity": torch.tensor([0.8, 0.6]),
             "similarity_2": torch.tensor([0.7, 0.5]),
         }
@@ -329,9 +335,11 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             loss = embedder.validation_step(sample_batch, batch_idx=0)
 
-        assert isinstance(loss, torch.Tensor)
+        assert isinstance(loss, dict)
+        assert "loss" in loss and "ed_pred" in loss and "ed_target" in loss
+        assert "mces_pred" in loss and "mces_target" in loss
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
-        assert not torch.isnan(loss)
+        assert not torch.isnan(loss["loss"])
 
     def test_test_step(self, embedder, sample_batch):
         # Add required fields

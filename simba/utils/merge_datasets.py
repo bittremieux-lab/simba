@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import dill
 import numpy as np
 import pandas as pd
@@ -5,6 +6,15 @@ from pathlib import Path
 import glob
 import json
 import traceback
+=======
+import glob
+import json
+from pathlib import Path
+
+import dill
+import numpy as np
+import pandas as pd
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
 
 
 SPLITS = ["train", "val", "test"]
@@ -13,7 +23,11 @@ PAIR_PREFIX = "ed_mces_indexes_tani_incremental"
 
 def count_mgf_spectra(mgf_path):
     n = 0
+<<<<<<< HEAD
     with open(mgf_path, "r", errors="ignore") as f:
+=======
+    with open(mgf_path, errors="ignore") as f:
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
         for line in f:
             if line.strip().upper() == "BEGIN IONS":
                 n += 1
@@ -23,7 +37,11 @@ def count_mgf_spectra(mgf_path):
 def concat_mgf(mgf_a, mgf_b, output_mgf):
     with open(output_mgf, "w") as out:
         for mgf in [mgf_a, mgf_b]:
+<<<<<<< HEAD
             with open(mgf, "r", errors="ignore") as f:
+=======
+            with open(mgf, errors="ignore") as f:
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
                 out.write(f.read().strip())
                 out.write("\n\n")
 
@@ -290,10 +308,18 @@ def merge_lightweight_datasets_all_splits(
 
 
 merge_lightweight_datasets_all_splits(
+<<<<<<< HEAD
     dataset_a_pkl="/data/simba_files/distance_files/tfs_msn_ref/mapping_unique_smiles.pkl",
     dataset_b_pkl="/data/simba_files/distance_files/tfs_msn_auto/mapping_unique_smiles.pkl",
     preprocessing_dir_a="/data/simba_files/distance_files/tfs_msn_ref/",
     preprocessing_dir_b="/data/simba_files/distance_files/tfs_msn_auto/",
     output_dir="/data/simba_files_/tfs_msn_merged_ref_auto/",
+=======
+    dataset_a_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_ref/mapping_unique_smiles.pkl",
+    dataset_b_pkl="/data/simba_files/distance_files/tfs_ms2_ms3_auto/mapping_unique_smiles.pkl",
+    preprocessing_dir_a="/data/simba_files/distance_files/tfs_ms2_ms3_ref/",
+    preprocessing_dir_b="/data/simba_files/distance_files/tfs_ms2_ms3_auto/",
+    output_dir="/data/simba_files/tfs_ms2_ms3_merged_ref_auto/",
+>>>>>>> ed28c05658a6b886f9854d4fd1a4a4395009b1f5
     skip_corrupted=True,
 )

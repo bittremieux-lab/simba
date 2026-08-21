@@ -46,7 +46,7 @@ class MolecularSimilarityMetrics:
                         "timeLimit": 10,  # Stop CBC after 1 seconds
                     },
                     no_ilp_threshold=False,  # allow the ILP to stop early once the threshold is exceeded
-                    always_stronger_bound=False,  # use dynamic bounding for speed
+                    always_stronger_bound=True,
                     catch_errors=False,  # typically raise exceptions if something goes wrong
                 )
                 distance = result[1]
