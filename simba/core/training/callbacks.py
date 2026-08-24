@@ -23,18 +23,22 @@ class LossCallback(Callback):
         self.train_loss: list[float] = []
         self.train_loss_ed: list[float] = []
         self.train_loss_mces: list[float] = []
+        self.train_loss_mces_bucket: list[float] = []
         self.train_sigma1: list[float] = []
         self.train_sigma2: list[float] = []
+        self.train_sigma3: list[float] = []
 
         # per-validation tracking (by global step) — scaffold val (dataloader 0)
         self.val_steps: list[int] = []
         self.val_loss: list[float] = []
         self.val_loss_ed: list[float] = []
         self.val_loss_mces: list[float] = []
+        self.val_loss_mces_bucket: list[float] = []
         # official val (dataloader 1, if present)
         self.val_steps_official: list[int] = []
         self.val_loss_official: list[float] = []
         self.val_loss_mces_official: list[float] = []
+        self.val_loss_mces_bucket_official: list[float] = []
 
     def _get(self, metrics, key):
         v = metrics.get(key)
@@ -51,8 +55,10 @@ class LossCallback(Callback):
         self.train_loss.append(loss)
         self.train_loss_ed.append(self._get(m, "loss_ed"))
         self.train_loss_mces.append(self._get(m, "loss_mces"))
+        self.train_loss_mces_bucket.append(self._get(m, "loss_mces_bucket"))
         self.train_sigma1.append(self._get(m, "log_sigma1"))
         self.train_sigma2.append(self._get(m, "log_sigma2"))
+        self.train_sigma3.append(self._get(m, "log_sigma3"))
 
     def on_validation_end(self, trainer, pl_module):
         if trainer.sanity_checking:
@@ -65,12 +71,18 @@ class LossCallback(Callback):
             self.val_loss.append(loss_0)
             self.val_loss_ed.append(self._get(m, "loss_ed_epoch/dataloader_idx_0"))
             self.val_loss_mces.append(self._get(m, "loss_mces_epoch/dataloader_idx_0"))
+            self.val_loss_mces_bucket.append(
+                self._get(m, "loss_mces_bucket_epoch/dataloader_idx_0")
+            )
             loss_1 = self._get(m, "validation_loss_epoch/dataloader_idx_1")
             if loss_1 is not None:
                 self.val_steps_official.append(trainer.global_step)
                 self.val_loss_official.append(loss_1)
                 self.val_loss_mces_official.append(
                     self._get(m, "loss_mces_epoch/dataloader_idx_1")
+                )
+                self.val_loss_mces_bucket_official.append(
+                    self._get(m, "loss_mces_bucket_epoch/dataloader_idx_1")
                 )
         else:
             loss = self._get(m, "validation_loss_epoch")
@@ -80,13 +92,25 @@ class LossCallback(Callback):
             self.val_loss.append(loss)
             self.val_loss_ed.append(self._get(m, "loss_ed_epoch"))
             self.val_loss_mces.append(self._get(m, "loss_mces_epoch"))
+            self.val_loss_mces_bucket.append(self._get(m, "loss_mces_bucket_epoch"))
         self.plot_loss()
 
     def plot_loss(self):
-        has_components = any(v is not None for v in self.train_loss_ed)
-        has_sigma = any(v is not None for v in self.train_sigma1)
+        has_ed = any(v is not None for v in self.train_loss_ed)
+        has_mces = any(v is not None for v in self.train_loss_mces)
+        has_bucket = any(v is not None for v in self.train_loss_mces_bucket)
+        has_sigma = any(
+            v is not None
+            for v in self.train_sigma1 + self.train_sigma2 + self.train_sigma3
+        )
 
-        n_cols = 1 + (2 if has_components else 0) + (1 if has_sigma else 0)
+        n_cols = (
+            1
+            + (1 if has_ed else 0)
+            + (1 if has_mces else 0)
+            + (1 if has_bucket else 0)
+            + (1 if has_sigma else 0)
+        )
         fig, axes = plt.subplots(1, n_cols, figsize=(5 * n_cols, 4))
         if n_cols == 1:
             axes = [axes]
@@ -137,8 +161,7 @@ class LossCallback(Callback):
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-        if has_components:
-            # ED loss
+        if has_ed:
             ax = axes[col]
             col += 1
             _plot_series(
@@ -164,7 +187,7 @@ class LossCallback(Callback):
             ax.legend(fontsize=8)
             ax.grid(True, alpha=0.3)
 
-            # MCES loss
+        if has_mces:
             ax = axes[col]
             col += 1
             _plot_series(
@@ -201,6 +224,44 @@ class LossCallback(Callback):
             ax.legend(fontsize=8)
             ax.grid(True, alpha=0.3)
 
+        if has_bucket:
+            # Optional second target (model.tasks.mces_bucket)
+            ax = axes[col]
+            col += 1
+            _plot_series(
+                ax,
+                self.train_steps,
+                self.train_loss_mces_bucket,
+                lw=1.0,
+                color="steelblue",
+                label="train",
+            )
+            _plot_series(
+                ax,
+                self.val_steps,
+                self.val_loss_mces_bucket,
+                marker="o",
+                ms=6,
+                lw=1.5,
+                color="darkorange",
+                label="val scaffold",
+            )
+            if self.val_steps_official:
+                _plot_series(
+                    ax,
+                    self.val_steps_official,
+                    self.val_loss_mces_bucket_official,
+                    marker="s",
+                    ms=5,
+                    lw=1.5,
+                    color="forestgreen",
+                    label="val official",
+                )
+            ax.set_title("MCES-bucket loss (CORN)")
+            ax.set_xlabel("step")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
         if has_sigma:
             ax = axes[col]
             col += 1
@@ -219,6 +280,14 @@ class LossCallback(Callback):
                 lw=1.0,
                 color="tomato",
                 label="log σ2 (MCES)",
+            )
+            _plot_series(
+                ax,
+                self.train_steps,
+                self.train_sigma3,
+                lw=1.0,
+                color="mediumseagreen",
+                label="log σ3 (MCES bucket)",
             )
             ax.set_title("Learnable uncertainty weights")
             ax.set_xlabel("step")
@@ -306,10 +375,27 @@ class ValMetricsCallback(Callback):
     _BIN_EDGES = np.array([5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0])
     _SELF_LABEL = "self (MCES=0)"
 
+    # Optional second target (model.tasks.mces_bucket): upper edges of the
+    # ordinal MCES buckets, matching SimilarityModelMultitask's
+    # mces_bucket_bin_edges default -- 0 is its own class, so this labels
+    # len(_MCES_BUCKET_EDGES) + 2 classes total. Only used when a validation
+    # batch's outputs actually contain mces_bucket_pred/target (i.e. the head
+    # was enabled for this run); absent otherwise.
+    _MCES_BUCKET_EDGES = np.array([2.0, 4.0, 6.0, 8.0])
+
     def __init__(self, output_dir: str, val_names: list | None = None):
         self.output_dir = output_dir
         self.val_names = val_names or ["val"]
         self._preds: dict = {}
+
+    def _mces_bucket_labels(self) -> list[str]:
+        labels = ["0"]
+        lo = 0.0
+        for hi in self._MCES_BUCKET_EDGES:
+            labels.append(f"({lo:g},{hi:g}]")
+            lo = hi
+        labels.append(f"({lo:g},inf)")
+        return labels
 
     def _bin_labels(self) -> list[str]:
         labels = [self._SELF_LABEL]
@@ -330,6 +416,8 @@ class ValMetricsCallback(Callback):
                 "spec_idx_1": [],
                 "smiles_0": [],
                 "smiles_1": [],
+                "mces_bucket_pred": [],
+                "mces_bucket_target": [],
             }
         return self._preds[idx]
 
@@ -349,6 +437,9 @@ class ValMetricsCallback(Callback):
         buf["spec_idx_1"].append(outputs["spec_idx_1"].numpy())
         buf["smiles_0"].extend(outputs["smiles_0"])
         buf["smiles_1"].extend(outputs["smiles_1"])
+        if "mces_bucket_pred" in outputs:
+            buf["mces_bucket_pred"].append(outputs["mces_bucket_pred"].numpy())
+            buf["mces_bucket_target"].append(outputs["mces_bucket_target"].numpy())
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking or not self._preds:
@@ -368,6 +459,16 @@ class ValMetricsCallback(Callback):
             spec_idx_1 = np.concatenate(buf["spec_idx_1"])
             smiles_0 = buf["smiles_0"]
             smiles_1 = buf["smiles_1"]
+            bucket_pred = (
+                np.concatenate(buf["mces_bucket_pred"])
+                if buf["mces_bucket_pred"]
+                else None
+            )
+            bucket_target = (
+                np.concatenate(buf["mces_bucket_target"])
+                if buf["mces_bucket_target"]
+                else None
+            )
             for k in buf:
                 buf[k] = [] if isinstance(buf[k], list) else buf[k]
 
@@ -395,8 +496,13 @@ class ValMetricsCallback(Callback):
                 pred_mces,
                 is_self,
                 bin_idx,
+                bucket_pred=bucket_pred,
             )
             self._plot_binned_box(gt_mces, pred_mces, is_self, step, val_name)
+            if bucket_pred is not None:
+                self._log_and_plot_mces_bucket_confusion(
+                    pl_module, bucket_pred, bucket_target, step, val_name
+                )
 
     def _bin_index(self, gt_mces: np.ndarray, is_self: np.ndarray) -> np.ndarray:
         """0 = self-pair bin, 1..len(_BIN_EDGES) = the numeric GT-MCES bins
@@ -505,18 +611,22 @@ class ValMetricsCallback(Callback):
         pred_mces,
         is_self,
         bin_idx,
+        bucket_pred=None,
     ):
         """Wide per-pair table: static columns (pair identity, GT, bin) once,
-        one pred_mces_step{N:06d} column added per validation check, instead
-        of a full fresh CSV each time (which was ~750MB x every check on the
-        Gaetan-split val set -- ~120GB for 160 checks alone). Row order is
-        positionally aligned across checks (not re-joined by pair identity)
-        because it's guaranteed stable: the val DataLoader is sequential
-        (shuffle=False, see create_dataloaders in workflows/training.py), so
-        every check iterates the exact same pair order. The array_equal
-        check below makes that assumption loud instead of silently
-        misaligning predictions with the wrong pairs if it's ever violated
-        (e.g. shuffling gets reintroduced for val).
+        one pred_mces_step{N:06d} column added per validation check (plus
+        pred_mces_bucket_step{N:06d} when the optional second target is
+        enabled -- ground truth for it is derivable from gt_mces/mces_bin
+        already here, so only the per-check prediction needs a column),
+        instead of a full fresh CSV each time (which was ~750MB x every
+        check on the Gaetan-split val set -- ~120GB for 160 checks alone).
+        Row order is positionally aligned across checks (not re-joined by
+        pair identity) because it's guaranteed stable: the val DataLoader is
+        sequential (shuffle=False, see create_dataloaders in
+        workflows/training.py), so every check iterates the exact same pair
+        order. The array_equal check below makes that assumption loud
+        instead of silently misaligning predictions with the wrong pairs if
+        it's ever violated (e.g. shuffling gets reintroduced for val).
         """
         import pandas as pd
 
@@ -525,6 +635,7 @@ class ValMetricsCallback(Callback):
             self.output_dir, f"val_pairs_{val_name}_consolidated.parquet"
         )
         pred_col = f"pred_mces_step{step:06d}"
+        bucket_pred_col = f"pred_mces_bucket_step{step:06d}"
 
         if not os.path.exists(path):
             df = pd.DataFrame(
@@ -542,6 +653,8 @@ class ValMetricsCallback(Callback):
                 }
             )
             df[pred_col] = pred_mces.astype(np.float32)
+            if bucket_pred is not None:
+                df[bucket_pred_col] = bucket_pred.astype(np.int16)
             df.to_parquet(path, index=False, compression="snappy")
             return
 
@@ -557,6 +670,8 @@ class ValMetricsCallback(Callback):
                 "have changed that."
             )
         base[pred_col] = pred_mces.astype(np.float32)
+        if bucket_pred is not None:
+            base[bucket_pred_col] = bucket_pred.astype(np.int16)
         base.to_parquet(path, index=False, compression="snappy")
 
     def _plot_binned_box(self, gt_mces, pred_mces, is_self, step, val_name):
@@ -635,6 +750,77 @@ class ValMetricsCallback(Callback):
         fig.tight_layout()
         path = os.path.join(
             self.output_dir, f"mces_binned_box_{val_name}_step{step:06d}.png"
+        )
+        fig.savefig(path, dpi=130)
+        plt.close(fig)
+
+    def _log_and_plot_mces_bucket_confusion(
+        self, pl_module, pred, target, step, val_name
+    ):
+        """Optional-second-target (model.tasks.mces_bucket) validation
+        scoring: balanced accuracy logged as a scalar, confusion matrix
+        saved as counts + row-% + col-% (see _plot_mces_bucket_confusion)."""
+        from sklearn.metrics import balanced_accuracy_score, confusion_matrix
+
+        labels = self._mces_bucket_labels()
+        n = len(labels)
+        bal_acc = balanced_accuracy_score(target, pred)
+        pl_module.log(
+            f"val_mces_bucket_balanced_acc/{val_name}",
+            float(bal_acc),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            add_dataloader_idx=False,
+        )
+        cm = confusion_matrix(target, pred, labels=list(range(n)))
+        self._plot_mces_bucket_confusion(cm, bal_acc, labels, step, val_name)
+
+    def _plot_mces_bucket_confusion(self, cm, bal_acc, labels, step, val_name):
+        """Three panels sharing one figure: raw counts, row-normalized %
+        (per true class), col-normalized % (per predicted class) -- the
+        row/col split the user asked for, alongside the raw values."""
+        n = len(labels)
+        row_sum = cm.sum(axis=1, keepdims=True)
+        col_sum = cm.sum(axis=0, keepdims=True)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cm_row_pct = np.where(row_sum > 0, cm / row_sum * 100, 0.0)
+            cm_col_pct = np.where(col_sum > 0, cm / col_sum * 100, 0.0)
+
+        fig, axes = plt.subplots(1, 3, figsize=(17, 5.5))
+        panels = [
+            (cm, "counts", cm.max() if cm.max() > 0 else 1, "{:,}"),
+            (cm_row_pct, "row % (per true class)", 100, "{:.1f}%"),
+            (cm_col_pct, "col % (per predicted class)", 100, "{:.1f}%"),
+        ]
+        for ax, (grid, kind, vmax, fmt) in zip(axes, panels):
+            im = ax.imshow(grid, cmap="Blues", vmin=0, vmax=vmax)
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            ax.set_xticks(range(n))
+            ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+            ax.set_yticks(range(n))
+            ax.set_yticklabels(labels, fontsize=7)
+            ax.set_xlabel(f"Predicted bucket  [bal.acc={bal_acc:.3f}]")
+            ax.set_ylabel("True bucket")
+            ax.set_title(f"MCES-bucket confusion — {kind}\n(step {step})")
+            threshold = vmax / 2.0
+            for i in range(n):
+                for j in range(n):
+                    val = grid[i, j]
+                    ax.text(
+                        j,
+                        i,
+                        fmt.format(val),
+                        ha="center",
+                        va="center",
+                        fontsize=6,
+                        color="white" if val > threshold else "black",
+                    )
+
+        fig.suptitle(f"[{val_name}]", fontsize=10)
+        fig.tight_layout()
+        path = os.path.join(
+            self.output_dir, f"mces_bucket_confusion_{val_name}_step{step:06d}.png"
         )
         fig.savefig(path, dpi=130)
         plt.close(fig)

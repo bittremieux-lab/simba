@@ -842,6 +842,12 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "corn_use_mlp": cfg.model.tasks.cosine_similarity.corn_use_mlp,
         "corn_use_product": cfg.model.tasks.cosine_similarity.corn_use_product,
         "mces_max_value": cfg.model.tasks.mces.max_value,
+        "use_mces_bucket_head": cfg.model.tasks.mces_bucket.enabled,
+        "mces_bucket_bin_edges": cfg.model.tasks.mces_bucket.bin_edges,
+        "mces_bucket_use_mlp": cfg.model.tasks.mces_bucket.use_mlp,
+        "mces_bucket_use_product": cfg.model.tasks.mces_bucket.use_product,
+        "mces_bucket_loss_weight": cfg.model.tasks.mces_bucket.loss_weight,
+        "mces_bucket_learnable_weight": cfg.model.tasks.mces_bucket.learnable_weight,
         "use_edit_distance_regresion": cfg.model.tasks.edit_distance.use_regression,
         "use_fingerprints": cfg.model.tasks.fingerprints.enabled,
         "USE_LEARNABLE_MULTITASK": cfg.model.multitasking.learnable,
@@ -876,6 +882,61 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         model = SimilarityModelMultitask(**model_kwargs)
 
     return model
+
+
+_CSV_LOGGER_RESILIENCE_PATCHED = False
+
+
+def _patch_csv_logger_header_rewrite_resilience() -> None:
+    """Workaround for a PyTorch Lightning CSVLogger fragility (observed on
+    lightning==2.6.5, experiments 014_1-4): when a metrics.csv already on
+    disk has to be rewritten with a wider header (Lightning's
+    ExperimentWriter._rewrite_with_new_header, triggered whenever a metric
+    key first appears partway through a run -- e.g. train "_epoch" keys
+    only existing from the first true epoch boundary onward), re-reading
+    the old rows via csv.DictReader can produce a row with a stray key
+    (csv.DictReader's restkey defaults to None for any row with more
+    fields than the header), which then crashes csv.DictWriter with
+    "dict contains fields not in fieldnames: None" and kills the whole
+    training run. Root cause not fully pinned down (not reproducible
+    locally with synthetic data at matched or larger scale; only seen on
+    the real multi-million-pair validation set) -- this patches just the
+    rewrite step to drop any keys not in the new header instead of
+    crashing, which is a no-op for every well-formed row and only ever
+    changes behavior for the specific malformed case that used to kill
+    the run outright. Idempotent; safe to call more than once. If a future
+    lightning version restructures this internal (leading underscore,
+    not public API), the patch simply fails to apply and this becomes a
+    no-op -- guarded so that alone can't break training.
+    """
+    global _CSV_LOGGER_RESILIENCE_PATCHED
+    if _CSV_LOGGER_RESILIENCE_PATCHED:
+        return
+    try:
+        import csv
+
+        from lightning.fabric.loggers.csv_logs import _ExperimentWriter
+
+        def _resilient_rewrite_with_new_header(self, fieldnames):
+            with self._fs.open(self.metrics_file_path, "r", newline="") as file:
+                metrics = list(csv.DictReader(file))
+            fieldname_set = set(fieldnames)
+            for m in metrics:
+                for bad_key in [k for k in m if k not in fieldname_set]:
+                    del m[bad_key]
+            with self._fs.open(self.metrics_file_path, "w", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(metrics)
+
+        _ExperimentWriter._rewrite_with_new_header = _resilient_rewrite_with_new_header
+        _CSV_LOGGER_RESILIENCE_PATCHED = True
+    except Exception:
+        logger.warning(
+            "Could not apply the CSVLogger header-rewrite resilience patch "
+            "(lightning internals may have changed) -- continuing without it.",
+            exc_info=True,
+        )
 
 
 def train(
@@ -922,6 +983,8 @@ def train(
     from lightning.pytorch.loggers import CSVLogger
 
     from simba.utils.config_utils import get_model_paths
+
+    _patch_csv_logger_header_rewrite_resilience()
 
     checkpoint_dir = get_model_paths(cfg)["checkpoint_dir"]
     csv_logger = CSVLogger(save_dir=str(checkpoint_dir), name="", version="")

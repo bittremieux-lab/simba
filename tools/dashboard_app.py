@@ -34,6 +34,9 @@ SLURM_DIR = Path(__file__).resolve().parent / "slurm"
 
 _BOX_PLOT_RE = re.compile(r"mces_binned_box_(?P<val_name>.+)_step(?P<step>\d+)\.png$")
 _CSV_RE = re.compile(r"val_pairs_(?P<val_name>.+)_step(?P<step>\d+)\.csv$")
+_BUCKET_CONFUSION_RE = re.compile(
+    r"mces_bucket_confusion_(?P<val_name>.+)_step(?P<step>\d+)\.png$"
+)
 _MCES_MAX = 40.0
 _BIN_ORDER = [
     "self (MCES=0)",
@@ -58,6 +61,41 @@ _TAB10 = [
     "#bcbd22",
     "#17becf",
 ]
+
+# Optional second target (model.tasks.mces_bucket) -- must match the model's
+# default mces_bucket_bin_edges (similarity_models.py). Bucket 0 is its own
+# class (self-pairs, borders [0,0]); the rest are left-open/right-closed
+# bins with a final open-ended one, used by _corn_corrected_mces below.
+# NOTE: hardcoded to one global scheme -- a run trained with a *different*
+# bin_edges (e.g. experiment 013, which used the older 7-class [1,2,4,6,8]
+# before (0,1]/(1,2] were merged) will have its CORN-corrected row computed
+# with the WRONG edges here, since there's no per-run edge metadata stored
+# anywhere the dashboard can read. For 013 specifically this silently
+# reinterprets its bucket index 6 ("(8,inf)", >99% of its predictions)
+# against this array's index 5 instead -- don't trust 013's
+# CORN-corrected-MCES row after this change lands; its own training-time
+# metrics (balanced accuracy, confusion-matrix PNGs) are unaffected since
+# those use the model's own runtime edges, not this constant.
+_CORN_BUCKET_EDGES = np.array([2.0, 4.0, 6.0, 8.0])
+CORN_CORRECTED_SUFFIX = " (CORN-corrected MCES)"
+
+
+def _corn_corrected_mces(pred_mces: np.ndarray, bucket_pred: np.ndarray) -> np.ndarray:
+    """Combine the CORN bucket prediction with the continuous MCES
+    prediction: the bucket defines [left, right] borders and the continuous
+    value gets clipped into them. Bucket 0 has borders [0,0] (trusted
+    outright, no continuous value needed); the top bucket only clips on the
+    left (open-ended on the right). Gives a single corrected continuous MCES
+    estimate that every existing per-pair metric (MAE, overlap, Hit@k) can
+    be recomputed against, unlike the raw prediction alone."""
+    extended = np.concatenate(
+        [[0.0], _CORN_BUCKET_EDGES, [np.inf]]
+    )  # [0,1,2,4,6,8,inf]
+    b = np.clip(bucket_pred.astype(np.int64), 0, len(extended) - 1)
+    is_zero = b == 0
+    left = np.where(is_zero, 0.0, extended[np.clip(b - 1, 0, None)])
+    right = np.where(is_zero, 0.0, extended[b])
+    return np.clip(pred_mces, left, right)
 
 
 def list_experiments() -> list[Path]:
@@ -126,6 +164,26 @@ def list_val_names(exp_dir: Path) -> list[str]:
     return sorted(names)
 
 
+def list_bucket_confusion_steps(exp_dir: Path, val_name: str) -> list[int]:
+    """Steps with a mces_bucket_confusion PNG -- only present for runs that
+    had model.tasks.mces_bucket.enabled=true (the optional second target)."""
+    steps = []
+    for p in exp_dir.glob(f"mces_bucket_confusion_{val_name}_step*.png"):
+        m = _BUCKET_CONFUSION_RE.match(p.name)
+        if m:
+            steps.append(int(m.group("step")))
+    return sorted(steps)
+
+
+def list_bucket_confusion_val_names(exp_dir: Path) -> list[str]:
+    names = set()
+    for p in exp_dir.glob("mces_bucket_confusion_*_step*.png"):
+        m = _BUCKET_CONFUSION_RE.match(p.name)
+        if m:
+            names.add(m.group("val_name"))
+    return sorted(names)
+
+
 def list_csv_steps(exp_dir: Path, val_name: str) -> list[int]:
     steps = []
     for p in exp_dir.glob(f"val_pairs_{val_name}_step*.csv"):
@@ -154,14 +212,25 @@ _PARQUET_PRED_COL_RE = re.compile(r"^pred_mces_step(\d+)$")
 def list_consolidated_steps(exp_dir_str: str, val_name: str) -> list[int]:
     """Steps available in the consolidated parquet file (one static table +
     one pred_mces_step{N} column per validation check), read from its schema
-    only -- no data loaded."""
+    only -- no data loaded. A file that exists but fails to open (e.g.
+    truncated mid-write by a SLURM time-limit SIGTERM landing during a
+    _save_consolidated rewrite -- seen on 014_1) is treated the same as "no
+    consolidated file yet" rather than propagating: every downstream reader
+    (load_pair_data_for_step, _mae_for_bin, compute_hit_at_k_all, ...) already
+    checks "steps empty -> bail" before touching the file's actual data, so
+    this one guard is enough to keep one corrupted run's file from crashing
+    the whole dashboard instead of just that run's own cells."""
     path = consolidated_parquet_path(Path(exp_dir_str), val_name)
     if not path.exists():
         return []
     import pyarrow.parquet as pq
 
+    try:
+        schema_names = pq.ParquetFile(path).schema.names
+    except Exception:
+        return []
     steps = []
-    for name in pq.ParquetFile(path).schema.names:
+    for name in schema_names:
         m = _PARQUET_PRED_COL_RE.match(name)
         if m:
             steps.append(int(m.group(1)))
@@ -178,24 +247,43 @@ def list_available_steps(exp_dir: Path, val_name: str) -> list[int]:
 
 @st.cache_data(show_spinner="Loading per-pair data ...")
 def load_pair_data_for_step(
-    exp_dir_str: str, val_name: str, step: int, columns: tuple[str, ...]
+    exp_dir_str: str,
+    val_name: str,
+    step: int,
+    columns: tuple[str, ...],
+    corn_corrected: bool = False,
 ) -> pd.DataFrame:
     """Same interface as load_pair_csv (a DataFrame with a plain 'pred_mces'
     column for this one step) but transparently prefers the consolidated
     parquet file when one exists -- reads only the needed static columns
     plus this step's single prediction column, columnar and fast regardless
     of how many total checks the run has had. Falls back to the per-step CSV
-    for experiments without a consolidated file yet."""
+    for experiments without a consolidated file yet.
+
+    corn_corrected=True substitutes _corn_corrected_mces(pred_mces,
+    bucket_pred) for the plain 'pred_mces' column instead (see that
+    function) -- only supported via the consolidated parquet path, since the
+    per-step CSV format predates the mces_bucket second target entirely.
+    """
     exp_dir = Path(exp_dir_str)
     parquet_path = consolidated_parquet_path(exp_dir, val_name)
     if parquet_path.exists():
         pred_col = f"pred_mces_step{step:06d}"
         wants_pred = "pred_mces" in columns
         static_needed = [c for c in columns if c != "pred_mces"]
-        read_cols = static_needed + ([pred_col] if wants_pred else [])
-        df = pd.read_parquet(parquet_path, columns=read_cols)
+        extra_cols = [pred_col] if wants_pred else []
+        bucket_col = f"pred_mces_bucket_step{step:06d}"
+        if wants_pred and corn_corrected:
+            extra_cols.append(bucket_col)
+        df = pd.read_parquet(parquet_path, columns=static_needed + extra_cols)
         if wants_pred:
-            df = df.rename(columns={pred_col: "pred_mces"})
+            if corn_corrected:
+                df["pred_mces"] = _corn_corrected_mces(
+                    df[pred_col].to_numpy(), df[bucket_col].to_numpy()
+                )
+                df = df.drop(columns=[pred_col, bucket_col])
+            else:
+                df = df.rename(columns={pred_col: "pred_mces"})
         return df
     csv_path = exp_dir / f"val_pairs_{val_name}_step{step:06d}.csv"
     return load_pair_csv(str(csv_path), columns)
@@ -839,7 +927,9 @@ def render_metrics_tab(df: pd.DataFrame, x_col: str, x_label: str, exp_dir: Path
     st.plotly_chart(fig, width="stretch")
 
 
-def build_fine_box_plot_figure(df: pd.DataFrame, bin_width: float) -> plt.Figure:
+def build_fine_box_plot_figure(
+    df: pd.DataFrame, bin_width: float, title_suffix: str = ""
+) -> plt.Figure:
     """Same drawing code as ValMetricsCallback._plot_binned_box in
     simba/core/training/callbacks.py -- whis=(5,95), outliers hidden, pred=GT
     reference diagonal, each box n-annotated directly on the plot (not just on
@@ -907,7 +997,7 @@ def build_fine_box_plot_figure(df: pd.DataFrame, bin_width: float) -> plt.Figure
     ax.legend(fontsize=8)
     ax.set_xlabel(f"GT MCES (bin width={bin_width:g}; self-pairs kept separate at 0)")
     ax.set_ylabel("Predicted MCES")
-    ax.set_title(f"Predicted MCES by GT bin (n={sum(plot_ns):,} pairs)")
+    ax.set_title(f"Predicted MCES by GT bin (n={sum(plot_ns):,} pairs){title_suffix}")
     fig.tight_layout()
     return fig
 
@@ -925,7 +1015,31 @@ def render_box_plot_tab(exp_dir: Path):
         st.info("No binned-box plots found yet for this val set.")
         return
     step = st.select_slider("Validation step", options=steps, value=steps[-1])
-    st.image(str(exp_dir / f"mces_binned_box_{val_name}_step{step:06d}.png"))
+
+    # For runs with the optional mces_bucket (CORN) head, always show the
+    # CORN-corrected version of this same box plot alongside the raw one --
+    # same bin_width=5 as the pre-rendered PNG (built live from per-pair
+    # data via _corn_corrected_mces, since the training-time PNG only ever
+    # existed for the raw prediction).
+    has_bucket_at_step = step in list_bucket_pred_steps(str(exp_dir), val_name)
+    if has_bucket_at_step:
+        col_raw, col_corrected = st.columns(2)
+        with col_raw:
+            st.image(str(exp_dir / f"mces_binned_box_{val_name}_step{step:06d}.png"))
+        with col_corrected:
+            corrected_df = load_pair_data_for_step(
+                str(exp_dir),
+                val_name,
+                step,
+                ("gt_mces", "pred_mces", "is_self_pair"),
+                corn_corrected=True,
+            )
+            fig = build_fine_box_plot_figure(
+                corrected_df, bin_width=5.0, title_suffix=" -- CORN-corrected"
+            )
+            st.pyplot(fig)
+    else:
+        st.image(str(exp_dir / f"mces_binned_box_{val_name}_step{step:06d}.png"))
 
     st.divider()
     st.subheader(f"Fine-grained box plot -- same step ({step:,}), custom bin width")
@@ -979,6 +1093,32 @@ def render_box_plot_tab(exp_dir: Path):
     )
     fig = build_fine_box_plot_figure(filtered_df, bin_width)
     st.pyplot(fig)
+
+
+def render_mces_bucket_tab(exp_dir: Path):
+    """Optional second target (model.tasks.mces_bucket): balanced accuracy is
+    in metrics.csv (see render_metrics_tab / Compare runs), this tab is just
+    the per-step confusion-matrix image (counts + row% + col%)."""
+    val_names = list_bucket_confusion_val_names(exp_dir)
+    if not val_names:
+        st.info(
+            "No MCES-bucket confusion plots found for this experiment -- "
+            "this run likely had model.tasks.mces_bucket.enabled=false."
+        )
+        return
+    val_name = (
+        st.selectbox("Val set", val_names, key="bucket_val_name")
+        if len(val_names) > 1
+        else val_names[0]
+    )
+    steps = list_bucket_confusion_steps(exp_dir, val_name)
+    if not steps:
+        st.info("No MCES-bucket confusion plots found yet for this val set.")
+        return
+    step = st.select_slider(
+        "Validation step", options=steps, value=steps[-1], key="bucket_step"
+    )
+    st.image(str(exp_dir / f"mces_bucket_confusion_{val_name}_step{step:06d}.png"))
 
 
 @st.cache_data(
@@ -1181,16 +1321,28 @@ def _pick_val_name(exp_dir: Path) -> str | None:
     return "val" if "val" in names else names[0]
 
 
-def _pred_by_bin_last_step(exp_dir: Path, val_name: str) -> dict[str, np.ndarray]:
+def _pred_by_bin_last_step(
+    exp_dir: Path, val_name: str, corn_corrected: bool = False
+) -> dict[str, np.ndarray]:
     """Predicted-MCES values grouped by GT-MCES bin, from this run's most
     recent validation check (unfiltered by mass) -- the raw material to
     recompute overlap-coefficient cells for runs that predate that logging
-    (e.g. experiment 009, run before val_overlap* columns existed)."""
-    steps = list_available_steps(exp_dir, val_name)
+    (e.g. experiment 009, run before val_overlap* columns existed), or for
+    the CORN-corrected second row (corn_corrected=True, see
+    _corn_corrected_mces)."""
+    steps = (
+        list_bucket_pred_steps(str(exp_dir), val_name)
+        if corn_corrected
+        else list_available_steps(exp_dir, val_name)
+    )
     if not steps:
         return {}
     pair_df = load_pair_data_for_step(
-        str(exp_dir), val_name, steps[-1], ("pred_mces", "mces_bin")
+        str(exp_dir),
+        val_name,
+        steps[-1],
+        ("pred_mces", "mces_bin"),
+        corn_corrected=corn_corrected,
     )
     pred = pair_df["pred_mces"].to_numpy()
     bins = pair_df["mces_bin"].to_numpy()
@@ -1235,13 +1387,21 @@ def _mae_for_bin(
     mass_lo: float,
     mass_hi: float,
     bin_label: str | None,
+    corn_corrected: bool = False,
 ) -> float | None:
     """MAE at this run's most recent validation check, restricted to molecule
     mass difference in [mass_lo, mass_hi] -- overall (bin_label=None) or one
     specific GT-MCES bin. Always a per-pair recompute: no pre-logged
     mass-filtered metric exists in metrics.csv. Reuses the same helpers as
-    the Mass heatmap tab's heavy path."""
-    steps = list_available_steps(exp_dir, val_name)
+    the Mass heatmap tab's heavy path. Pass mass_hi=float("inf") for no mass
+    filtering at all -- the mask condition (diff <= mass_hi) is then always
+    true for any finite diff. corn_corrected=True scores the CORN-corrected
+    prediction (see _corn_corrected_mces) instead of the model's own."""
+    steps = (
+        list_bucket_pred_steps(str(exp_dir), val_name)
+        if corn_corrected
+        else list_available_steps(exp_dir, val_name)
+    )
     if not steps:
         return None
     step = steps[-1]
@@ -1250,6 +1410,7 @@ def _mae_for_bin(
         val_name,
         step,
         ("mol_idx_0", "mol_idx_1", "gt_mces", "pred_mces", "mces_bin"),
+        corn_corrected=corn_corrected,
     )
     mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
     stats = _mass_diff_masked_bin_stats(pair_df, mol_mass, mass_lo, mass_hi)
@@ -1265,13 +1426,19 @@ def _overlap_for_spec(
     mass_hi: float,
     skip: int,
     anchor_bin: str | None,
+    corn_corrected: bool = False,
 ) -> float | None:
     """Overlap coefficient at this run's most recent validation check,
     restricted to molecule mass difference in [mass_lo, mass_hi]: the average
     over every adjacent bin-pair at this skip distance (anchor_bin=None), or
     one specific pair anchored at anchor_bin (paired with the bin `skip`
-    further out). Always a per-pair recompute, same reason as `_mae_for_bin`."""
-    steps = list_available_steps(exp_dir, val_name)
+    further out). Always a per-pair recompute, same reason as `_mae_for_bin`.
+    corn_corrected=True scores the CORN-corrected prediction instead."""
+    steps = (
+        list_bucket_pred_steps(str(exp_dir), val_name)
+        if corn_corrected
+        else list_available_steps(exp_dir, val_name)
+    )
     if not steps:
         return None
     step = steps[-1]
@@ -1280,6 +1447,7 @@ def _overlap_for_spec(
         val_name,
         step,
         ("mol_idx_0", "mol_idx_1", "pred_mces", "mces_bin"),
+        corn_corrected=corn_corrected,
     )
     mol_mass = mol_idx_mass_lookup(str(exp_dir), val_name, step)
     pred_by_bin = _mass_diff_masked_pred_by_bin(pair_df, mol_mass, mass_lo, mass_hi)
@@ -1481,7 +1649,16 @@ def compute_hit_at_k_all(
     first exp_dir's data and reused for every method, so the comparison is
     apples-to-apples -- only the ranking differs per method."""
     exp_dirs = [Path(p) for p in exp_dir_strs]
-    ref_path = exp_dirs[0] / f"val_pairs_{val_name}_consolidated.parquet"
+    # Ground-truth reference (gt_mces/mces_bin/pool) is the same regardless
+    # of which experiment it's read from, but exp_dirs[0] specifically could
+    # be a run whose consolidated parquet exists yet is corrupted (e.g. a
+    # SLURM time-limit SIGTERM landing mid-write) -- list_available_steps
+    # already treats that the same as "no file", so use the first exp_dir
+    # that actually has steps rather than blindly trusting index 0.
+    ref_candidates = [d for d in exp_dirs if list_available_steps(d, val_name)]
+    if not ref_candidates:
+        return {}
+    ref_path = ref_candidates[0] / f"val_pairs_{val_name}_consolidated.parquet"
     ref_df = pd.read_parquet(
         ref_path,
         columns=[
@@ -1550,6 +1727,183 @@ def compute_hit_at_k_all(
     return results
 
 
+_PARQUET_BUCKET_PRED_COL_RE = re.compile(r"^pred_mces_bucket_step(\d+)$")
+
+
+@st.cache_data(show_spinner=False)
+def list_bucket_pred_steps(exp_dir_str: str, val_name: str) -> list[int]:
+    """Steps with a pred_mces_bucket_step{N} column -- only present for runs
+    that had model.tasks.mces_bucket.enabled=true (the optional second
+    target). A file that exists but fails to open (see list_consolidated_steps)
+    is treated as "no data" rather than propagating."""
+    path = consolidated_parquet_path(Path(exp_dir_str), val_name)
+    if not path.exists():
+        return []
+    import pyarrow.parquet as pq
+
+    try:
+        schema_names = pq.ParquetFile(path).schema.names
+    except Exception:
+        return []
+    steps = []
+    for name in schema_names:
+        m = _PARQUET_BUCKET_PRED_COL_RE.match(name)
+        if m:
+            steps.append(int(m.group(1)))
+    return sorted(steps)
+
+
+@st.cache_data(show_spinner="Computing Hit@k for the CORN-corrected prediction ...")
+def _corn_corrected_ranking_score(
+    pred_mces: np.ndarray, bucket_pred: np.ndarray
+) -> np.ndarray:
+    """Ranking-only score for Hit@k: corrected_value * 1000 + raw pred_mces.
+    _corn_corrected_mces alone is a good scalar for MAE/overlap, but for
+    per-query ranking it collapses everything in a bucket to the same value
+    (bucket 0 clips to exactly 0.0 for ~55% of self-bucket queries), which
+    creates ties numpy's sort breaks arbitrarily -- verified this cost ~8
+    points of Hit@1 on experiment 013 (0.607 raw -> 0.546 corrected-only).
+    Since the corrected value is continuous (not a coarse class index) and
+    pred_mces is bounded by mces_max_value (40 by design), multiplying by
+    1000 still preserves the corrected value's own ordering for anything
+    not exactly tied -- the raw term only ever acts as a tiebreaker within
+    an exact tie, restoring the fine-grained signal the plain corrected
+    value throws away. Confirmed this recovers Hit@1 to 0.622 on 013,
+    slightly above the raw prediction's own 0.607."""
+    corrected = _corn_corrected_mces(pred_mces, bucket_pred)
+    return corrected * 1000.0 + pred_mces
+
+
+def compute_hit_at_k_corn_corrected(
+    exp_dir_strs: tuple[str, ...],
+    val_name: str,
+    n_decoys: int = N_DECOYS_DEFAULT,
+    ks: tuple[int, ...] = HIT_AT_K_VALUES,
+) -> dict[str, dict]:
+    """{run_label: {k: hit_rate}}, one entry per exp_dir that actually has
+    mces_bucket predictions -- ranks candidates by
+    _corn_corrected_ranking_score (ascending, same convention as the
+    primary Hit@k row: lower predicted MCES = more similar = ranked
+    first). Decoy selection (same pool/gt_matrix basis as
+    compute_hit_at_k_all) comes from the first qualifying exp_dir, same
+    convention as that function."""
+    exp_dirs = [Path(p) for p in exp_dir_strs]
+    qualifying = [d for d in exp_dirs if list_bucket_pred_steps(str(d), val_name)]
+    if not qualifying:
+        return {}
+
+    ref_path = qualifying[0] / f"val_pairs_{val_name}_consolidated.parquet"
+    ref_df = pd.read_parquet(
+        ref_path,
+        columns=[
+            "mol_idx_0",
+            "mol_idx_1",
+            "gt_mces",
+            "mces_bin",
+            "spec_idx_0",
+            "spec_idx_1",
+        ],
+    )
+    pool_mols, query_mols = _build_pool_and_queries(ref_df)
+    mol_to_local = {m: i for i, m in enumerate(pool_mols)}
+    gt_matrix = _build_score_matrix(ref_df, pool_mols, mol_to_local, "gt_mces")
+
+    results = {}
+    for exp_dir in qualifying:
+        step = list_bucket_pred_steps(str(exp_dir), val_name)[-1]
+        bucket_col = f"pred_mces_bucket_step{step:06d}"
+        mces_col = f"pred_mces_step{step:06d}"
+        path = exp_dir / f"val_pairs_{val_name}_consolidated.parquet"
+        df = pd.read_parquet(
+            path,
+            columns=[
+                "mol_idx_0",
+                "mol_idx_1",
+                "mces_bin",
+                "spec_idx_0",
+                "spec_idx_1",
+                bucket_col,
+                mces_col,
+            ],
+        )
+        score_col = "_corn_corrected_score"
+        df[score_col] = _corn_corrected_ranking_score(
+            df[mces_col].to_numpy(), df[bucket_col].to_numpy()
+        )
+        score_matrix = _build_score_matrix(df, pool_mols, mol_to_local, score_col)
+        true_scores = _true_match_scores(df, score_col)
+        results[exp_dir.name] = _hit_at_k(
+            gt_matrix,
+            score_matrix,
+            true_scores,
+            mol_to_local,
+            query_mols,
+            n_decoys,
+            ks,
+            higher_is_better=False,
+        )
+    return results
+
+
+def _corn_corrected_compare_row(
+    exp_dir: Path, val_name: str, include_mass_filtered: bool
+) -> dict | None:
+    """Second row for a run with an mces_bucket head, recomputed from
+    per-pair data using the CORN-corrected MCES prediction (see
+    _corn_corrected_mces) in place of the model's own continuous prediction
+    -- every metric _compare_runs_row shows except Val loss (not derivable
+    post-hoc from just the two saved predictions) and MCES-bucket balanced
+    accuracy (a classification metric on the bucket itself, not on any
+    corrected continuous value)."""
+    bucket_steps = list_bucket_pred_steps(str(exp_dir), val_name)
+    if not bucket_steps:
+        return None
+
+    row = {
+        "Run": f"{exp_dir.name}{CORN_CORRECTED_SUFFIX}",
+        "Last step": bucket_steps[-1],
+    }
+    row["Overall MAE"] = _mae_for_bin(
+        exp_dir, val_name, 0.0, float("inf"), None, corn_corrected=True
+    )
+    row["Identity MAE"] = _mae_for_bin(
+        exp_dir, val_name, 0.0, float("inf"), "self (MCES=0)", corn_corrected=True
+    )
+
+    pred_by_bin_cache = {}
+
+    def _pred_by_bin():
+        if not pred_by_bin_cache:
+            pred_by_bin_cache.update(
+                _pred_by_bin_last_step(exp_dir, val_name, corn_corrected=True)
+            )
+        return pred_by_bin_cache
+
+    for skip in (0, 2):
+        row[f"Overlap (skip{skip})"] = _overlap_avg_skip_from_pairs(
+            _pred_by_bin(), skip
+        )
+
+    for skip in (0, 1, 2):
+        val = None
+        if skip + 1 < len(_BIN_ORDER):
+            pb = _pred_by_bin()
+            anchor, partner = _BIN_ORDER[0], _BIN_ORDER[skip + 1]
+            if anchor in pb and partner in pb:
+                val = _overlap_coefficient(pb[anchor], pb[partner])
+        row[f"Identity overlap (skip{skip})"] = val
+
+    if include_mass_filtered:
+        row["Overlap (mass diff<30)"] = _overlap_for_spec(
+            exp_dir, val_name, 0.0, 30.0, 0, None, corn_corrected=True
+        )
+        row["Overlap (mass diff<100)"] = _overlap_for_spec(
+            exp_dir, val_name, 0.0, 100.0, 0, None, corn_corrected=True
+        )
+
+    return row
+
+
 def _compare_runs_row(exp_dir: Path, include_mass_filtered: bool) -> dict | None:
     """One comparison row for a single experiment. Returns None for
     experiments with no validation data logged yet."""
@@ -1560,12 +1914,29 @@ def _compare_runs_row(exp_dir: Path, include_mass_filtered: bool) -> dict | None
     if val_name is None:
         return None
 
-    row = {"Run": exp_dir.name, "Last step": int(df["step"].max())}
+    # "Last step" should mean the last *validation* check -- every other
+    # column here (Val loss, MAE, Overlap, ...) is anchored to one, so
+    # reporting the raw train-step counter instead (which runs far ahead
+    # between checks) made this look out of sync with its own row.
+    if "validation_loss_epoch" in df.columns:
+        val_rows = df.dropna(subset=["validation_loss_epoch"])
+    else:
+        val_rows = df.iloc[0:0]
+    last_step = (
+        int(val_rows["step"].max()) if not val_rows.empty else int(df["step"].max())
+    )
+    row = {"Run": exp_dir.name, "Last step": last_step}
     row["Val loss"] = _last_non_null(df, "validation_loss_epoch")
     row["Overall MAE"] = _last_non_null(df, "val_mces_mae")
     row["Identity MAE"] = _last_non_null(df, f"val_mae_mces/self (MCES=0)/{val_name}")
     if row["Val loss"] is None and row["Overall MAE"] is None:
         return None  # no validation check has landed for this run yet
+
+    # Optional second target (model.tasks.mces_bucket) -- absent (None) for
+    # runs that had it disabled.
+    row["MCES-bucket bal.acc"] = _last_non_null(
+        df, f"val_mces_bucket_balanced_acc/{val_name}"
+    )
 
     # Older runs (e.g. 009) predate val_overlap* logging entirely -- recompute
     # from per-pair data on demand rather than leaving those cells empty.
@@ -1655,6 +2026,19 @@ def render_compare_runs_tab():
     if not rows:
         st.info("No run has a validation check logged yet.")
         return
+
+    # Extra row per run with an mces_bucket (CORN) head: every metric above
+    # except Val loss, recomputed against the CORN-corrected MCES prediction
+    # (see _corn_corrected_mces) instead of the model's own continuous one.
+    for exp_dir in experiments:
+        val_name = _pick_val_name(exp_dir)
+        if val_name is None:
+            continue
+        corrected_row = _corn_corrected_compare_row(
+            exp_dir, val_name, include_mass_filtered
+        )
+        if corrected_row is not None:
+            rows.append(corrected_row)
 
     table = pd.DataFrame(rows).set_index("Run")
     surviving = {d.name: d for d in experiments if d.name in table.index}
@@ -1838,6 +2222,25 @@ def render_compare_runs_tab():
             for k, v in ks_dict.items():
                 table.loc[run_label, f"Hit@{k}"] = v
 
+        # Hit@k for the CORN-corrected row (see _corn_corrected_compare_row
+        # above, which already filled in this row's other columns). Uses
+        # `experiments` (every compatible run), NOT `surviving` -- the
+        # corrected row only needs per-pair parquet data, not a working
+        # metrics.csv, so it must stay computable even for a run whose
+        # primary row is missing (e.g. metrics.csv got corrupted/truncated
+        # by a training-time crash after the parquet was already written;
+        # see the 014_1-4 CSVLogger incident). Scoping this to `surviving`
+        # silently dropped every such run's Hit@k despite its other
+        # corrected-row columns showing real numbers.
+        corn_exp_dir_strs = tuple(str(d) for d in experiments)
+        corn_hit_results = compute_hit_at_k_corn_corrected(
+            corn_exp_dir_strs, val_name_for_hitk
+        )
+        for run_label, ks_dict in corn_hit_results.items():
+            second_row_label = f"{run_label}{CORN_CORRECTED_SUFFIX}"
+            for k, v in ks_dict.items():
+                table.loc[second_row_label, f"Hit@{k}"] = v
+
     default_cols = [
         c
         for c in [
@@ -1859,6 +2262,14 @@ def render_compare_runs_tab():
         ]
         if c in table.columns
     ]
+    selected_rows = st.multiselect(
+        "Runs to show", options=list(table.index), default=list(table.index)
+    )
+    if not selected_rows:
+        st.info("Pick at least one run.")
+        return
+    table = table.loc[selected_rows]
+
     selected = st.multiselect(
         "Metrics to show", options=list(table.columns), default=default_cols
     )
@@ -1930,8 +2341,15 @@ def main():
     else:
         x_col, x_label = "step", "step"
 
-    tab_loss, tab_metrics, tab_box, tab_mass, tab_compare = st.tabs(
-        ["Loss", "Validation metrics", "Box plot", "Mass heatmap", "Compare runs"]
+    tab_loss, tab_metrics, tab_box, tab_bucket, tab_mass, tab_compare = st.tabs(
+        [
+            "Loss",
+            "Validation metrics",
+            "Box plot",
+            "MCES bucket",
+            "Mass heatmap",
+            "Compare runs",
+        ]
     )
     with tab_loss:
         render_loss_tab(df, x_col, x_label)
@@ -1939,6 +2357,8 @@ def main():
         render_metrics_tab(df, x_col, x_label, exp_dir)
     with tab_box:
         render_box_plot_tab(exp_dir)
+    with tab_bucket:
+        render_mces_bucket_tab(exp_dir)
     with tab_mass:
         render_mass_heatmap_tab(exp_dir)
     with tab_compare:

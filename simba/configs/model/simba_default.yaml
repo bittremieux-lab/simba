@@ -77,6 +77,28 @@ tasks:
     corn_use_mlp: false  # small MLP before the final linear layer, vs a single linear layer
     corn_use_product: false  # concat elementwise product with |emb0-emb1|, vs |emb0-emb1| alone
 
+  # Optional second target: an auxiliary CORN-style ordinal classification
+  # head on MCES, trained in parallel with whatever the primary task is
+  # (independent of cosine_similarity.head_mode above). Buckets: 0 is its
+  # own class (self-pairs); bin_edges are the upper edges of the remaining
+  # left-open/right-closed bins, e.g. [2,4,6,8] -> 0, (0,2], (2,4], (4,6],
+  # (6,8], (8,inf) — 6 classes total (len(bin_edges) + 2). (0,1]/(1,2] were
+  # originally separate but merged into (0,2] -- (1,2] was empty in
+  # experiment 013's validation set.
+  mces_bucket:
+    enabled: false
+    bin_edges: [2, 4, 6, 8]
+    use_mlp: false
+    use_product: false
+    # Only used when multitasking.learnable=false and learnable_weight=false
+    # (fixed loss weight).
+    loss_weight: 1.0
+    # Learnable weight for JUST this task (a dedicated log_sigma3), independent
+    # of multitasking.learnable -- the primary task's own weighting (loss1/
+    # loss2) stays exactly as it is whether this is on or off. Takes
+    # precedence over loss_weight above when true.
+    learnable_weight: false
+
   # Tanimoto similarity
   tanimoto:
     enabled: false

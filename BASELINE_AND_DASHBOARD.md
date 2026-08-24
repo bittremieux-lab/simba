@@ -1,6 +1,6 @@
 # Gaetan-split baseline (009) and the training dashboard
 
-Status snapshot as of 2026-08-18. Covers: what the current baseline experiment
+Status snapshot as of 2026-08-22 (section 11 added). Covers: what the current baseline experiment
 is, the data it runs on, how to (re)run it, what scripts exist, and the
 Streamlit dashboard built to monitor/analyze it.
 
@@ -673,3 +673,119 @@ something that really is structurally close). SIMBA's mistakes more often
 rank something genuinely dissimilar (MCES 10-20) above the actual match --
 a more concerning failure mode than a close call between similar
 candidates. Not yet investigated further or acted on.
+
+## 11. MCES-bucket auxiliary classification task (CORN head, experiments 013/014_1-4)
+
+An optional second target trained in parallel with whatever the primary task
+is: a CORN-style (Shi, Cao & Raschka) ordinal classification head predicting
+which MCES bucket a pair falls into, independent of `cosine_similarity.head_mode`.
+Off by default; `model.tasks.mces_bucket.enabled=true` turns it on.
+
+**Buckets**: 0 (self-pairs, its own class) then left-open/right-closed bins
+with a final open-ended one. Current default `bin_edges=[2,4,6,8]` -> 0,
+(0,2], (2,4], (4,6], (6,8], (8,inf) -- 6 classes. (Experiment 013 ran with
+the original `[1,2,4,6,8]` / 7-class scheme, before `(0,1]`/`(1,2]` were
+merged into `(0,2]` -- `(1,2]` was completely empty in 013's validation set,
+so splitting it out just gave the task a class it could never learn.)
+
+**Architecture**: `|emb0-emb1|` (optionally concatenated with `emb0*emb1`
+via `use_product`, optionally passed through a small MLP via `use_mlp`) into
+a linear head with `n_classes-1` outputs, trained with CORN's real
+conditional-binary-decomposition loss (not just the name -- the primary
+task's own `head_mode="corn"` option is a distinct, pre-existing thing: an
+alternative parametrization of the *primary* similarity score, not an
+auxiliary task at all). Weighting options: a fixed `loss_weight` (default
+1.0, simple additive term on top of the primary loss), or
+`learnable_weight=true` for an isolated learnable `log_sigma3` -- distinct
+from `model.multitasking.learnable=true`, which would also reweight the
+*primary* task's own loss (jumping it from an implicit 1x to an initial
+~200x under `log_sigma2`'s init) and so isn't a clean way to test just the
+bucket task's weight.
+
+**Validation-time additions**: `val_mces_bucket_balanced_acc/{val_name}` in
+metrics.csv; `mces_bucket_confusion_{val_name}_step{N:06d}.png` (counts +
+row-% + col-% in one figure); a `pred_mces_bucket_step{N:06d}` column in
+`val_pairs_{val_name}_consolidated.parquet`. Also fixed two pre-existing
+gaps while wiring this up: `loss_ed`/`loss_mces`/`loss_mces_bucket` and
+`log_sigma1/2/3` are now actually logged per step (the callback that reads
+them via `trainer.callback_metrics` already existed and silently no-opped
+since nothing ever wrote those keys); and the ED head's forward pass +
+loss are now skipped entirely when `use_edit_distance=false` (previously
+computed and discarded every batch regardless), same for the duplicate
+forward pass `training_step`/`validation_step` used to make via `step()`
+(now reuses the one they already computed).
+
+**CORN-corrected value, for the dashboard only (not training)**: the raw
+per-pair MCES prediction is often quite good, but the auxiliary task adds
+real information about which coarse bucket a pair belongs to. Clipping the
+raw prediction into the predicted bucket's `[left, right]` range
+(`_corn_corrected_mces` in `tools/dashboard_app.py`) improves MAE and
+overlap-coefficient metrics, but badly hurts Hit@k: bucket 0 clips to
+*exactly* 0.0, so on experiment 013 55% of self-bucket queries have their
+true match tied at 0.0 with an average of ~13 decoys, and ties get broken
+by an unstable sort unrelated to actual similarity. Fix: rank by
+`corrected*1000 + raw_pred` instead (`_corn_corrected_ranking_score`) --
+the coarse corrected value still dominates ordering between buckets, but
+the ≤40-unit raw term breaks exact ties within a bucket. On 013 this took
+Hit@1 from 0.546 (corrected alone) to 0.622 (above the model's own raw
+0.607, though still below cosine's 0.679) -- and, as expected, changed
+*nothing* for overlap-coefficient (bit-identical): that metric bins into
+50 histogram buckets spanning the full multi-bucket range, so a ≤40-unit
+nudge on a scale of thousands never moves a point to a different bin. Only
+ever changes what the dashboard *shows*; the model's own predictions and
+training are untouched.
+
+Dashboard surface: a `(CORN-corrected MCES)` second row per qualifying run
+in Compare Runs (MAE/overlap recomputed from per-pair data, Hit@k via the
+tiebreak score above); a corrected confusion-matrix-style box plot next to
+the raw one in the Box Plot tab whenever bucket predictions exist for the
+selected step; a "Runs to show" multiselect (mirrors "Metrics to show") to
+hide rows. Two robustness fixes worth knowing about: (1) the corrected
+row's Hit@k used to be silently dropped for any run whose primary row was
+missing, since it was scoped to the same `surviving` dict as the primary
+Hit@k computation -- it only ever needs the parquet, so it's now computed
+from the full experiment list instead; (2) a run whose consolidated
+parquet exists but is corrupted (see below) used to crash the entire
+dashboard the moment any tab touched it -- `list_consolidated_steps` /
+`list_bucket_pred_steps` now catch that and treat it as "no data", so one
+broken run degrades gracefully instead of taking down every other run's
+view.
+
+**Experiments 013 / 014_1-4**: 013 = 012 (identical Gaetan-split-v2 config)
++ `mces_bucket.enabled=true`, everything else default. 014_1/2/3 each
+change exactly one thing from 013 (`loss_weight=0.1`; `use_mlp=true`;
+`use_product=true`); 014_4 combines all three (not a single-variable test
+-- deliberate, after the single-variable runs showed capacity mattered far
+more than weight). At a truncated step-10000 snapshot (see below for why):
+capacity changes (014_2 bal.acc=0.447, 014_3=0.440) beat the weight-only
+change (014_1=0.334) by a wide margin, and both also had noticeably better
+primary-task loss/MAE than 013's own trajectory at that step -- i.e. the
+unweighted bucket loss (weight=1.0, confirmed via direct comparison against
+012) really was costing the primary task something. All 5 runs (013 +
+014_1-4) later completed their full ~230k-step / 24h budgets with the
+CSVLogger fix below in place; final cross-run comparison not yet pulled.
+
+**PyTorch Lightning CSVLogger bug, found and fixed via this work**: a real,
+reproducible library fragility (confirmed against a stray `csv.DictReader`
+`restkey=None` mechanism, and separately against a genuine fieldnames
+mismatch after what looked like a SLURM-requeue-created fresh writer state)
+where `_rewrite_with_new_header` crashes the entire training run the
+moment a metric key's on-disk header and the writer's in-memory key list
+desync -- not reproducible locally at any tested scale with synthetic
+data, only ever seen on the real multi-million-pair validation set.
+Patched in `simba/workflows/training.py`
+(`_patch_csv_logger_header_rewrite_resilience`, applied at the top of
+`train()`): the rewrite step now drops any key not in the current header
+instead of raising, a no-op for every well-formed row and only relevant to
+the one malformed case that used to kill the run. All 5 of 013/014_1-4's
+final full-length runs completed cleanly with this in place.
+
+One casualty along the way: 014_1's `val_pairs_val_consolidated.parquet`
+got truncated exactly when a SLURM time-limit SIGTERM landed mid-write --
+confirmed unrecoverable (correct `PAR1` header, but no trailing footer, so
+no parquet reader can parse it, not just pyarrow). Its `metrics.csv` is
+intact (separate write path), so its primary Compare-Runs row still works;
+anything needing per-pair data (corrected row, Hit@k, mass-filtered
+overlap) does not. Its model checkpoints are intact up to step 230000, so
+re-running inference from the checkpoint would recover this if ever
+needed -- not done as of this writing.

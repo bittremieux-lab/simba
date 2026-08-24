@@ -379,3 +379,280 @@ class TestEmbedderMultitask:
             assert isinstance(result, torch.Tensor)
             # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
             assert not torch.isnan(result)
+
+    def test_use_edit_distance_false_skips_ed_computation(
+        self, embedder_config, sample_batch
+    ):
+        """When ED is fully disabled, its head shouldn't run at all -- no
+        batch["ed"] needed, emb (logits1) is None, not just excluded from
+        the loss sum."""
+        embedder_config["use_edit_distance"] = False
+        embedder = SimilarityModelMultitask(**embedder_config)
+
+        emb0 = torch.randn(4, embedder_config["d_model"])
+        emb1 = torch.randn(4, embedder_config["d_model"])
+        emb, emb_sim_2 = embedder.compute_from_embeddings(emb0, emb1)
+        assert emb is None
+
+        # No "ed" key in the batch at all -- should not be read/needed.
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+        out_train = embedder.training_step(sample_batch, batch_idx=0)
+        assert not torch.isnan(out_train["loss"])
+        assert "ed_pred" not in out_train
+
+        embedder.eval()
+        with torch.no_grad():
+            out_val = embedder.validation_step(sample_batch, batch_idx=0)
+        assert not torch.isnan(out_val["loss"])
+
+    def test_step_reuses_precomputed_logits_list(self, embedder, sample_batch):
+        """training_step/validation_step should only call the encoder once
+        per batch (via forward), passing the same logits_list into step()
+        instead of forward()-ing a second time."""
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        call_count = {"n": 0}
+        original_forward = embedder.forward
+
+        def counting_forward(*args, **kwargs):
+            call_count["n"] += 1
+            return original_forward(*args, **kwargs)
+
+        embedder.forward = counting_forward
+        embedder.training_step(sample_batch, batch_idx=0)
+        assert call_count["n"] == 1
+
+        call_count["n"] = 0
+        embedder.eval()
+        with torch.no_grad():
+            embedder.validation_step(sample_batch, batch_idx=0)
+        assert call_count["n"] == 1
+
+    def test_loss_components_and_sigma_logged(self, embedder, sample_batch):
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        logged = {}
+        embedder.log = lambda name, value, **kw: logged.__setitem__(name, value)
+
+        embedder.training_step(sample_batch, batch_idx=0)
+
+        for key in ("loss_ed", "loss_mces", "log_sigma1", "log_sigma2"):
+            assert key in logged, f"{key} was not logged"
+        assert "loss_mces_bucket" not in logged
+        assert "log_sigma3" not in logged
+
+
+class TestMcesBucketHead:
+    """Optional second target (model.tasks.mces_bucket): a CORN-style
+    ordinal classification head trained in parallel on MCES, on top of
+    whatever the primary task/head_mode is. Disabled by default (see
+    TestEmbedderMultitask above, which covers use_mces_bucket_head=False
+    unaffected by any of this)."""
+
+    @pytest.fixture
+    def embedder_config(self):
+        return {
+            "d_model": 128,
+            "n_layers": 2,
+            "n_classes": 6,
+            "use_gumbel": False,
+            "dropout": 0.1,
+            "weights": None,
+            "lr": 0.001,
+            "use_element_wise": True,
+            "use_cosine_distance": True,
+            "weights_sim2": None,
+            "use_edit_distance_regresion": False,
+            "use_mces20_log_loss": True,
+            "use_fingerprints": False,
+            "use_precursor_mz_for_model": True,
+            "tau_gumbel_softmax": 10,
+            "gumbel_reg_weight": 0.1,
+            "USE_LEARNABLE_MULTITASK": True,
+            "use_adduct": True,
+            "use_ce": False,
+            "use_ion_activation": False,
+            "use_ion_method": False,
+            "use_mces_bucket_head": True,
+        }
+
+    @pytest.fixture
+    def embedder(self, embedder_config):
+        return SimilarityModelMultitask(**embedder_config)
+
+    @pytest.fixture
+    def sample_batch(self):
+        batch_size = 2
+        n_peaks = 10
+        n_adducts = 48
+
+        return {
+            "mz_0": torch.randn(batch_size, n_peaks),
+            "intensity_0": torch.randn(batch_size, n_peaks).abs(),
+            "mz_1": torch.randn(batch_size, n_peaks),
+            "intensity_1": torch.randn(batch_size, n_peaks).abs(),
+            "precursor_mass_0": torch.randn(batch_size, 1),
+            "precursor_charge_0": torch.ones(batch_size, 1),
+            "precursor_mass_1": torch.randn(batch_size, 1),
+            "precursor_charge_1": torch.ones(batch_size, 1),
+            "adduct_0": torch.zeros(batch_size, n_adducts),
+            "adduct_1": torch.zeros(batch_size, n_adducts),
+            "ionmode_0": torch.ones(batch_size, 1),
+            "ionmode_1": torch.ones(batch_size, 1),
+            "ce_0": torch.ones(batch_size, 1) * 30.0,
+            "ce_1": torch.ones(batch_size, 1) * 30.0,
+            "ion_activation_0": torch.zeros(batch_size, 1),
+            "ion_activation_1": torch.zeros(batch_size, 1),
+            "ion_method_0": torch.zeros(batch_size, 1),
+            "ion_method_1": torch.zeros(batch_size, 1),
+            "similarity": torch.tensor([0.8, 0.6]),
+            "similarity_2": torch.tensor([0.7, 0.5]),
+            "mol_idx_0": torch.tensor([0, 1]),
+            "mol_idx_1": torch.tensor([1, 2]),
+            "spec_idx_0": torch.tensor([0, 1]),
+            "spec_idx_1": torch.tensor([1, 2]),
+            "smiles_0": ["CCO", "CCN"],
+            "smiles_1": ["CCN", "CCC"],
+        }
+
+    def test_init(self, embedder):
+        assert embedder.use_mces_bucket_head is True
+        assert isinstance(embedder.mces_bucket_head, nn.Linear)
+        # 4 edges -> 6 classes (singleton 0 + 4 finite bins + open-ended top)
+        assert embedder.mces_bucket_n_classes == 6
+        assert embedder.mces_bucket_head.out_features == 5  # n_classes - 1
+        assert hasattr(embedder, "log_sigma3")
+
+    def test_disabled_head_has_no_new_attributes(self):
+        config = {
+            "d_model": 128,
+            "n_layers": 2,
+            "n_classes": 6,
+            "use_gumbel": False,
+            "lr": 0.001,
+        }
+        embedder = SimilarityModelMultitask(**config)
+        assert embedder.use_mces_bucket_head is False
+        assert not hasattr(embedder, "mces_bucket_head")
+        assert not hasattr(embedder, "log_sigma3")
+
+    def test_target_bins_match_requested_scheme(self, embedder):
+        # 0, (0,2], (2,4], (4,6], (6,8], (8,inf) -> classes 0..5 -- (0,1] and
+        # (1,2] were originally separate but merged into one (0,2] bin since
+        # (1,2] was empty in experiment 013's validation set.
+        raw = torch.tensor(
+            [0.0, 0.3, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.1, 50.0]
+        )
+        expected = torch.tensor([0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
+        bins = embedder._mces_bucket_target_bins(raw)
+        assert torch.equal(bins, expected)
+
+    def test_compute_from_embeddings_returns_three(self, embedder):
+        batch_size = 4
+        emb0 = torch.randn(batch_size, 128)
+        emb1 = torch.randn(batch_size, 128)
+
+        result = embedder.compute_from_embeddings(emb0, emb1)
+
+        assert len(result) == 3
+        emb, emb_sim_2, emb_sim_3 = result
+        assert emb_sim_3.shape == (batch_size, 5)
+
+    def test_forward_basic_returns_three(self, embedder, sample_batch):
+        embedder.eval()
+        with torch.no_grad():
+            result = embedder.forward(sample_batch)
+        assert len(result) == 3
+
+    def test_forward_with_return_spectrum_output_returns_five(
+        self, embedder, sample_batch
+    ):
+        embedder.eval()
+        with torch.no_grad():
+            result = embedder.forward(sample_batch, return_spectrum_output=True)
+        assert len(result) == 5
+        emb, emb_sim_2, emb_sim_3, emb0, emb1 = result
+        batch_size = sample_batch["mz_0"].shape[0]
+        assert emb0.shape[0] == batch_size
+        assert emb1.shape[0] == batch_size
+
+    def test_validation_step_reports_bucket_pred_and_target(
+        self, embedder, sample_batch
+    ):
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        embedder.eval()
+        with torch.no_grad():
+            out = embedder.validation_step(sample_batch, batch_idx=0)
+
+        assert "mces_bucket_pred" in out and "mces_bucket_target" in out
+        assert out["mces_bucket_pred"].shape == (2,)
+        assert not torch.isnan(out["loss"])
+
+    def test_training_step_loss_not_nan(self, embedder, sample_batch):
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        out = embedder.training_step(sample_batch, batch_idx=0)
+
+        assert not torch.isnan(out["loss"])
+
+    def test_loss_mces_bucket_and_sigma3_logged(self, embedder, sample_batch):
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        logged = {}
+        embedder.log = lambda name, value, **kw: logged.__setitem__(name, value)
+
+        embedder.training_step(sample_batch, batch_idx=0)
+
+        for key in ("loss_mces_bucket", "log_sigma3", "loss_ed", "loss_mces"):
+            assert key in logged, f"{key} was not logged"
+
+    def test_bucket_only_learnable_weight_isolated_from_primary_task(
+        self, embedder_config, sample_batch
+    ):
+        """mces_bucket_learnable_weight=True, USE_LEARNABLE_MULTITASK=False:
+        log_sigma3 should exist and get logged, and the combined loss should
+        equal (loss1 + weight_loss2 * loss2) -- the exact same primary-task
+        formula as the plain fixed-weight path -- plus the bucket term under
+        its own learnable log_sigma3, evaluated from one single forward pass
+        (eval mode, no dropout) so there's no cross-call randomness to
+        confound the comparison."""
+        embedder_config["USE_LEARNABLE_MULTITASK"] = False
+        embedder_config["mces_bucket_learnable_weight"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+
+        assert hasattr(embedder, "log_sigma3")
+        assert not hasattr(embedder, "log_sigma1")
+        assert not hasattr(embedder, "log_sigma2")
+
+        sample_batch["ed"] = torch.tensor([2, 3])
+        sample_batch["mces"] = torch.tensor([0.7, 0.5])
+
+        embedder.eval()
+        with torch.no_grad():
+            logits_list = embedder(sample_batch)
+            loss = embedder.step(sample_batch, batch_idx=0, logits_list=logits_list)
+
+            logits1, logits2, logits3 = logits_list
+            target1 = sample_batch["ed"].long()
+            target2 = sample_batch["mces"].float()
+            loss1 = embedder.customised_ce(logits1, target1)
+            squared_diff = (logits2.view(-1, 1) - target2.view(-1, 1)) ** 2
+            loss2 = squared_diff.mean()
+            weight_loss2 = embedder.calculate_weight_loss2()
+            raw_mces_target = (1.0 - target2) * embedder.mces_max_value
+            bucket_bins = embedder._mces_bucket_target_bins(raw_mces_target)
+            loss3 = embedder._corn_loss_generic(
+                logits3, bucket_bins, embedder.mces_bucket_n_classes
+            )
+            expected = (loss1 + weight_loss2 * loss2) + (
+                torch.exp(-embedder.log_sigma3) * loss3 + embedder.log_sigma3
+            )
+
+        assert not torch.isnan(loss)
+        assert torch.allclose(loss, expected, atol=1e-4)

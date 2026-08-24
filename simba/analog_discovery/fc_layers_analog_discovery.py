@@ -103,8 +103,12 @@ class FcLayerAnalogDiscovery:
                 joint = torch.cat([emb1, fp_proj], dim=-1)  # (B, d_model + d_model//2)
                 emb1 = model.norm_mix(model.relu(model.linear_mix(joint)))
 
-        # now just delegate to your new helper:
-        return model.compute_from_embeddings(emb0, emb1)
+        # now just delegate to your new helper: only sim1/sim2 are used by
+        # analog discovery, so slice explicitly rather than unpack -- stays
+        # correct if the model was trained with the optional MCES-bucket
+        # second target (compute_from_embeddings then returns a 3rd item).
+        result = model.compute_from_embeddings(emb0, emb1)
+        return result[0], result[1]
 
     '''
     @staticmethod
