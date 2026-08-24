@@ -51,6 +51,12 @@ from tqdm.auto import tqdm
 from simba.core.data.spectrum import SpectrumExt
 
 
+# Must match callbacks.py's _MCES_BUCKET_EDGES / dashboard_app.py's
+# _CORN_BUCKET_EDGES -- the merged 6-class scheme every mces_bucket_head
+# checkpoint (013, 014_1-4) was trained with.
+CORN_BUCKET_EDGES = np.array([2.0, 4.0, 6.0, 8.0])
+
+
 def load_candidate_index(candidate_tsv: str | list[str]) -> pd.DataFrame:
     """Load the (smiles, adduct) -> cand_id / precursor mapping built for
     ICEBERG. Accepts one path or a list (e.g. the original
@@ -167,6 +173,96 @@ def rank_candidates(
         sims = (test_embs[i : i + 1] @ cand_embs[row_idxs].T).squeeze(0)
         order = torch.argsort(sims, descending=True)
         ranked = [cand_smis[j] for j in order.tolist()]
+        per_query.append(ranked[:top_k])
+    return per_query
+
+
+def _corn_decode_bucket(logits: torch.Tensor) -> torch.Tensor:
+    """Chain-rule decode (cumulative product of conditional probabilities) to a
+    predicted ordinal bucket index -- mirrors
+    SimilarityModelMultitask._corn_decode_bin_generic exactly (duplicated
+    here rather than imported since it's a one-line staticmethod and pulling
+    in the Lightning module just for this would be more coupling than it's
+    worth)."""
+    probas = torch.sigmoid(logits)
+    cumprod = torch.cumprod(probas, dim=-1)
+    return (cumprod > 0.5).sum(dim=-1)
+
+
+def _corn_corrected_mces(pred_mces: np.ndarray, bucket_pred: np.ndarray) -> np.ndarray:
+    """Clip the primary head's raw MCES prediction into its predicted CORN
+    bucket's [left, right] range. Mirrors tools/dashboard_app.py's
+    _corn_corrected_mces: boundaries = [0, 0, *CORN_BUCKET_EDGES, inf] so
+    bucket 0 clips to exactly [0, 0] (self/singleton), bucket i>=1 clips into
+    (boundaries[i], boundaries[i+1]], last bucket is open-ended."""
+    boundaries = np.concatenate([[0.0, 0.0], CORN_BUCKET_EDGES, [np.inf]])
+    left = boundaries[bucket_pred]
+    right = boundaries[bucket_pred + 1]
+    return np.clip(pred_mces, left, right)
+
+
+def _corn_corrected_ranking_score(
+    pred_mces: np.ndarray, bucket_pred: np.ndarray
+) -> np.ndarray:
+    """corrected*1000 + raw breaks exact ties within a bucket (most severely
+    bucket 0, where every self-bucket candidate corrects to exactly 0) for
+    Hit@k, while leaving the corrected value itself (used for MAE/overlap
+    elsewhere) untouched -- see tools/dashboard_app.py's identical formula
+    and BASELINE_AND_DASHBOARD.md section 11 for why this is needed."""
+    corrected = _corn_corrected_mces(pred_mces, bucket_pred)
+    return corrected * 1000.0 + pred_mces
+
+
+def rank_candidates_corn_corrected(
+    test_smiles: list,
+    test_adducts: list,
+    query_candidates: dict,
+    cand_smi_to_row: dict,
+    test_embs_raw: torch.Tensor,
+    cand_embs_raw: torch.Tensor,
+    model,
+    device: torch.device,
+    top_k: int = 20,
+) -> list:
+    """Same contract as rank_candidates, but ranking by CORN-corrected MCES
+    (lower = closer = better) computed from a genuine pairwise bucket-head
+    forward pass instead of a cached-embedding dot product.
+
+    The primary head's cosine-similarity ranking IS decomposable into
+    independent per-spectrum embeddings (nn.CosineSimilarity re-normalizes
+    internally, so normalized or raw embeddings give the same result) -- but
+    the bucket head takes abs(emb0 - emb1) on raw, magnitude-sensitive
+    embeddings, which is a function of the *pair*, not of two independent
+    embeddings. That's why this needs model.compute_from_embeddings run
+    directly on each query's (small, formula-matched) candidate batch,
+    rather than a cheap matmul -- only the bucket head's own small MLP runs
+    pairwise; the expensive transformer encoding is still done once per
+    spectrum, exactly as before.
+    """
+    per_query = []
+    for i, (q_smi, q_adduct) in enumerate(zip(test_smiles, test_adducts)):
+        cand_list = query_candidates.get(canonicalize(q_smi), [])
+        row_idxs, cand_smis = [], []
+        for c in cand_list:
+            row_idx = cand_smi_to_row.get((c, q_adduct))
+            if row_idx is None:
+                continue
+            row_idxs.append(row_idx)
+            cand_smis.append(c)
+        if not row_idxs:
+            per_query.append(None)
+            continue
+
+        emb0 = test_embs_raw[i : i + 1].expand(len(row_idxs), -1).to(device)
+        emb1 = cand_embs_raw[row_idxs].to(device)
+        with torch.no_grad():
+            _, emb_sim_2, emb_sim_3 = model.compute_from_embeddings(emb0, emb1)
+        pred_mces = ((1.0 - emb_sim_2) * model.mces_max_value).cpu().numpy()
+        bucket_pred = _corn_decode_bucket(emb_sim_3).cpu().numpy()
+        score = _corn_corrected_ranking_score(pred_mces, bucket_pred)
+
+        order = np.argsort(score)  # ascending: lowest (closest) MCES first
+        ranked = [cand_smis[j] for j in order]
         per_query.append(ranked[:top_k])
     return per_query
 
@@ -293,12 +389,20 @@ def run(
     intermediates_dir: str | None = None,
     gt_mces_dir: str | None = None,
     skip_mces: bool = False,
+    precursor_mass_mode: str = "measured",
+    corn_corrected: bool = False,
+    mces_bucket_use_mlp: bool = False,
+    mces_bucket_use_product: bool = False,
+    min_peaks: int | None = None,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    print(f"\nLoading {split}-fold real spectra from {mgf} ...")
-    test_smiles, test_spectra = load_spectra(mgf, split)
+    print(
+        f"\nLoading {split}-fold real spectra from {mgf} "
+        f"(precursor_mass_mode={precursor_mass_mode}) ..."
+    )
+    test_smiles, test_spectra = load_spectra(mgf, split, precursor_mass_mode)
     test_adducts = [s.adduct for s in test_spectra]
     print(f"  {len(test_smiles)} real test spectra")
 
@@ -324,13 +428,27 @@ def run(
         cand_smi_to_row[(smi, spec.adduct)] = row_idx
     print(f"  {len(cand_spectra)} candidate spectra ready")
 
-    print(f"\nLoading SIMBA checkpoint: {checkpoint} (head_mode={head_mode})")
-    model = load_model(checkpoint, device, head_mode=head_mode)
+    print(
+        f"\nLoading SIMBA checkpoint: {checkpoint} (head_mode={head_mode}, "
+        f"corn_corrected={corn_corrected})"
+    )
+    model = load_model(
+        checkpoint,
+        device,
+        head_mode=head_mode,
+        use_mces_bucket_head=corn_corrected,
+        mces_bucket_use_mlp=mces_bucket_use_mlp,
+        mces_bucket_use_product=mces_bucket_use_product,
+    )
 
     print("\nEmbedding real test spectra ...")
-    test_embs = embed_spectra(model, test_spectra, batch_size, device)
+    test_embs, test_embs_raw = embed_spectra(
+        model, test_spectra, batch_size, device, return_raw=True
+    )
     print("\nEmbedding ICEBERG-predicted candidate spectra ...")
-    cand_embs = embed_spectra(model, cand_spectra, batch_size, device)
+    cand_embs, cand_embs_raw = embed_spectra(
+        model, cand_spectra, batch_size, device, return_raw=True
+    )
 
     if intermediates_dir:
         out_dir = Path(intermediates_dir)
@@ -345,16 +463,31 @@ def run(
         )
         print(f"Intermediates saved to {out_dir}/")
 
-    print("\nRanking candidates ...")
-    per_query_ranked = rank_candidates(
-        test_smiles,
-        test_adducts,
-        query_candidates,
-        cand_smi_to_row,
-        test_embs,
-        cand_embs,
-        top_k=20,
+    print(
+        f"\nRanking candidates ({'CORN-corrected' if corn_corrected else 'cosine'}) ..."
     )
+    if corn_corrected:
+        per_query_ranked = rank_candidates_corn_corrected(
+            test_smiles,
+            test_adducts,
+            query_candidates,
+            cand_smi_to_row,
+            test_embs_raw,
+            cand_embs_raw,
+            model,
+            device,
+            top_k=20,
+        )
+    else:
+        per_query_ranked = rank_candidates(
+            test_smiles,
+            test_adducts,
+            query_candidates,
+            cand_smi_to_row,
+            test_embs,
+            cand_embs,
+            top_k=20,
+        )
     results, n_no_candidates = compute_hit_rates_from_ranking(
         test_smiles, per_query_ranked
     )
@@ -367,6 +500,22 @@ def run(
     print(f"\n=== SIMBA+ICEBERG retrieval ({split}, n={n_scored}) ===")
     for k, v in results.items():
         print(f"  {k}: {v:.4f} ({v * 100:.2f}%)")
+
+    subset_results = None
+    if min_peaks is not None:
+        keep_idx = [i for i, s in enumerate(test_spectra) if len(s.mz) >= min_peaks]
+        sub_smiles = [test_smiles[i] for i in keep_idx]
+        sub_ranked = [per_query_ranked[i] for i in keep_idx]
+        subset_results, n_no_cand_sub = compute_hit_rates_from_ranking(
+            sub_smiles, sub_ranked
+        )
+        n_scored_sub = len(sub_smiles) - n_no_cand_sub
+        print(
+            f"\n=== SIMBA+ICEBERG retrieval ({split}, peaks>={min_peaks}, "
+            f"n={n_scored_sub}/{len(sub_smiles)} queries) ==="
+        )
+        for k, v in subset_results.items():
+            print(f"  {k}: {v:.4f} ({v * 100:.2f}%)")
 
     if not skip_mces:
         print(f"\nLoading GT MCES lookup from {gt_mces_dir} ...")
@@ -381,20 +530,35 @@ def run(
             print(f"  {k}: {v}")
 
     if output_tsv:
-        pd.DataFrame(
-            [
+        rows = [
+            {
+                "split": split,
+                "model": Path(checkpoint).parent.name,
+                "head_mode": head_mode,
+                "corn_corrected": corn_corrected,
+                "precursor_mass_mode": precursor_mass_mode,
+                "peak_filter": "none",
+                "n": n_scored,
+                **results,
+            }
+        ]
+        if subset_results is not None:
+            rows.append(
                 {
                     "split": split,
                     "model": Path(checkpoint).parent.name,
                     "head_mode": head_mode,
-                    "n": n_scored,
-                    **results,
+                    "corn_corrected": corn_corrected,
+                    "precursor_mass_mode": precursor_mass_mode,
+                    "peak_filter": f"peaks>={min_peaks}",
+                    "n": n_scored_sub,
+                    **subset_results,
                 }
-            ]
-        ).to_csv(output_tsv, sep="\t", index=False)
+            )
+        pd.DataFrame(rows).to_csv(output_tsv, sep="\t", index=False)
         print(f"\nSaved to {output_tsv}")
 
-    return results
+    return results, subset_results
 
 
 def main():
@@ -443,6 +607,51 @@ def main():
         "--skip_mces",
         action="store_true",
         help="Skip GT MCES computation, report only hit@k",
+    )
+    p.add_argument(
+        "--precursor_mass_mode",
+        default="measured",
+        choices=["measured", "theoretical"],
+        help=(
+            "'measured' reads the MGF's own PRECURSOR_MZ (historical default); "
+            "'theoretical' recomputes it from the true SMILES+adduct instead, "
+            "matching what every checkpoint from experiment 010 onward was "
+            "trained with. ICEBERG candidate spectra are always theoretical "
+            "already (hardcoded in build_candidate_tsv*.py), unaffected by "
+            "this flag -- it only changes the real query spectra."
+        ),
+    )
+    p.add_argument(
+        "--corn_corrected",
+        action="store_true",
+        help=(
+            "Rank by CORN-corrected MCES (pairwise bucket-head forward pass) "
+            "instead of plain embedding cosine similarity. Requires a "
+            "checkpoint trained with model.tasks.mces_bucket.enabled=true "
+            "(013, 014_1-4) -- pass --mces_bucket_use_mlp/--mces_bucket_use_product "
+            "matching that checkpoint's own training config."
+        ),
+    )
+    p.add_argument(
+        "--mces_bucket_use_mlp",
+        action="store_true",
+        help="Must match the checkpoint's model.tasks.mces_bucket.use_mlp (true for 014_2)",
+    )
+    p.add_argument(
+        "--mces_bucket_use_product",
+        action="store_true",
+        help="Must match the checkpoint's model.tasks.mces_bucket.use_product",
+    )
+    p.add_argument(
+        "--min_peaks",
+        type=int,
+        default=None,
+        help=(
+            "Additionally report hit@k restricted to test spectra with >= "
+            "this many peaks (SIMBA's own canonical filter, min_n_peaks=6 in "
+            "simba/configs/data/default.yaml and all data-prep scripts) "
+            "alongside the unrestricted full-test-set numbers."
+        ),
     )
     args = p.parse_args()
     run(**vars(args))

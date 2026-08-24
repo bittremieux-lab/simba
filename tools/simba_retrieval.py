@@ -25,9 +25,10 @@ import torch
 import torch.nn.functional as F
 from rdkit import Chem
 from rdkit.Chem import AllChem, DataStructs
+from rdkit.Chem.Descriptors import ExactMolWt
 from tqdm.auto import tqdm
 
-from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS, theoretical_precursor_mz
 from simba.core.data.encoding import encode_adduct_mass
 from simba.core.data.preprocessor import Preprocessor
 from simba.core.data.spectrum import SpectrumExt
@@ -53,6 +54,10 @@ def load_model(
     corn_use_mlp: bool = False,
     corn_use_product: bool = False,
     mces_max_value: float = 40.0,
+    use_mces_bucket_head: bool = False,
+    mces_bucket_bin_edges=(2.0, 4.0, 6.0, 8.0),
+    mces_bucket_use_mlp: bool = False,
+    mces_bucket_use_product: bool = False,
 ) -> SimilarityModelMultitask:
     model = SimilarityModelMultitask.load_from_checkpoint(
         checkpoint_path,
@@ -69,6 +74,10 @@ def load_model(
         corn_use_product=corn_use_product,
         mces_max_value=mces_max_value,
         use_edit_distance=False,
+        use_mces_bucket_head=use_mces_bucket_head,
+        mces_bucket_bin_edges=mces_bucket_bin_edges,
+        mces_bucket_use_mlp=mces_bucket_use_mlp,
+        mces_bucket_use_product=mces_bucket_use_product,
         strict=False,
     )
     model.eval()
@@ -78,8 +87,17 @@ def load_model(
 # ── Spectrum loading ───────────────────────────────────────────────────────────
 
 
-def _to_spectrum_ext(spec: matchms.Spectrum, fold: str) -> SpectrumExt:
-    """Wrap a matchms Spectrum as a SpectrumExt so it can go through Preprocessor."""
+def _to_spectrum_ext(
+    spec: matchms.Spectrum, fold: str, precursor_mass_mode: str = "measured"
+) -> SpectrumExt:
+    """Wrap a matchms Spectrum as a SpectrumExt so it can go through Preprocessor.
+
+    precursor_mass_mode: "measured" reads the MGF's own PRECURSOR_MZ/PEPMASS
+    field (historical default); "theoretical" recomputes it from the true
+    SMILES (RDKit ExactMolWt) and adduct instead, discarding the measured
+    value -- mirrors multitask_dataset_builder.py's training-time behavior,
+    which every checkpoint from experiment 010 onward was trained under.
+    """
     charge = spec.get("charge")
     charge = int(charge) if charge else 1
 
@@ -94,9 +112,16 @@ def _to_spectrum_ext(spec: matchms.Spectrum, fold: str) -> SpectrumExt:
     ionmode = spec.get("ionmode")
     ionmode = ionmode.lower() if ionmode else "none"
 
+    if precursor_mass_mode == "theoretical":
+        mol = Chem.MolFromSmiles(spec.get("smiles"))
+        neutral_mass = ExactMolWt(mol)
+        precursor_mz = theoretical_precursor_mz(neutral_mass, spec.get("adduct"))
+    else:
+        precursor_mz = float(spec.get("precursor_mz") or 0.0)
+
     return SpectrumExt(
         identifier=str(spec.get("scans") or ""),
-        precursor_mz=float(spec.get("precursor_mz") or 0.0),
+        precursor_mz=precursor_mz,
         precursor_charge=charge,
         mz=np.asarray(spec.peaks.mz, dtype=np.float64),
         intensity=np.asarray(spec.peaks.intensities, dtype=np.float64),
@@ -118,7 +143,7 @@ def _to_spectrum_ext(spec: matchms.Spectrum, fold: str) -> SpectrumExt:
     )
 
 
-def load_spectra(mgf_path: str, fold: str):
+def load_spectra(mgf_path: str, fold: str, precursor_mass_mode: str = "measured"):
     """Return (smiles, spectra) for the given fold from the MGF file.
 
     Peaks are still raw at this point — preprocessing happens in
@@ -136,7 +161,7 @@ def load_spectra(mgf_path: str, fold: str):
         if spec.peaks is None or len(spec.peaks.mz) < 1:
             continue
         smiles_list.append(smi)
-        spectra.append(_to_spectrum_ext(spec, fold))
+        spectra.append(_to_spectrum_ext(spec, fold, precursor_mass_mode))
     return smiles_list, spectra
 
 
@@ -223,6 +248,7 @@ def embed_spectra(
     batch_size: int,
     device: torch.device,
     force_ce_zero: bool = False,
+    return_raw: bool = False,
 ) -> torch.Tensor:
     """
     Encode spectra through SIMBA encoder + MCES projection head.
@@ -235,6 +261,13 @@ def embed_spectra(
     Useful for diagnosing CE-induced embedding collapse: with CE conditioning,
     the model clusters spectra by CE energy rather than molecular structure,
     hurting retrieval. Setting CE=0 everywhere gives CE-agnostic embeddings.
+
+    return_raw: also return the pre-normalize embedding (the exact tensor
+    compute_from_embeddings expects as emb0/emb1). The final L2-normalize
+    below changes magnitude, which corrupts the MCES-bucket head's output
+    (it's magnitude-sensitive, unlike the cosine-similarity head which
+    re-normalizes internally) — so the bucket head must be run on this raw
+    tensor, not the normalized one. Returns (normalized_embs, raw_embs).
     """
     enc = model.spectrum_encoder
     use_ion_mode = getattr(enc, "use_ion_mode", False)
@@ -242,6 +275,7 @@ def embed_spectra(
     use_ce = getattr(enc, "use_ce", False)
 
     all_embs = []
+    all_raw_embs = []
     for start in tqdm(
         range(0, len(spectra), batch_size), desc="Embedding", unit="batch"
     ):
@@ -284,10 +318,15 @@ def embed_spectra(
         else:
             raise ValueError(f"Unknown head_mode: {model.head_mode!r}")
 
+        if return_raw:
+            all_raw_embs.append(emb.cpu())
         emb = F.normalize(emb, p=2, dim=-1)
         all_embs.append(emb.cpu())
 
-    return torch.cat(all_embs)  # (N, d_model)
+    normalized = torch.cat(all_embs)  # (N, d_model)
+    if return_raw:
+        return normalized, torch.cat(all_raw_embs)
+    return normalized
 
 
 # ── Nearest-neighbor transfer ─────────────────────────────────────────────────
@@ -314,6 +353,75 @@ def nearest_neighbor_transfer(
         transferred.append(train_fps[nn_idx])
         all_indices.append(nn_idx)
     return torch.cat(transferred), torch.cat(all_indices)  # (N_test, nbits), (N_test,)
+
+
+def nearest_neighbor_transfer_corn_corrected(
+    test_embs_raw: torch.Tensor,
+    train_embs_raw: torch.Tensor,
+    train_fps: torch.Tensor,
+    model: SimilarityModelMultitask,
+    device: torch.device,
+    test_chunk_size: int = 128,
+    train_chunk_size: int = 8192,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """CORN-corrected variant of nearest_neighbor_transfer: for each test
+    spectrum, finds the train spectrum with the LOWEST CORN-corrected
+    ranking score (same corrected*1000+raw formula as
+    tools/simba_retrieval_iceberg.py's rank_candidates_corn_corrected)
+    instead of highest plain cosine similarity.
+
+    Genuinely pairwise -- the bucket head needs abs(emb0-emb1) on raw,
+    magnitude-sensitive embeddings, not decomposable into a cached matmul --
+    so this chunks both test and train to bound memory (train is usually
+    tens of thousands of unique molecules after dedup, too large to
+    broadcast against a full test chunk in one shot).
+    """
+    from simba_retrieval_iceberg import (
+        _corn_corrected_ranking_score,
+        _corn_decode_bucket,
+    )
+
+    n_test = len(test_embs_raw)
+    n_train = len(train_embs_raw)
+    best_score = torch.full((n_test,), float("inf"))
+    best_idx = torch.zeros(n_test, dtype=torch.long)
+
+    for t_start in tqdm(
+        range(0, n_test, test_chunk_size), desc="CORN NN transfer", unit="test-chunk"
+    ):
+        t_end = min(t_start + test_chunk_size, n_test)
+        t_chunk = test_embs_raw[t_start:t_end].to(device)  # (T, d)
+        T = t_chunk.shape[0]
+        chunk_best_score = torch.full((T,), float("inf"), device=device)
+        chunk_best_idx = torch.zeros(T, dtype=torch.long, device=device)
+
+        for tr_start in range(0, n_train, train_chunk_size):
+            tr_end = min(tr_start + train_chunk_size, n_train)
+            tr_chunk = train_embs_raw[tr_start:tr_end].to(device)  # (K, d)
+            K = tr_chunk.shape[0]
+
+            emb0 = t_chunk.unsqueeze(1).expand(T, K, -1).reshape(T * K, -1)
+            emb1 = tr_chunk.unsqueeze(0).expand(T, K, -1).reshape(T * K, -1)
+            with torch.no_grad():
+                _, emb_sim_2, emb_sim_3 = model.compute_from_embeddings(emb0, emb1)
+            pred_mces = (1.0 - emb_sim_2) * model.mces_max_value
+            bucket_pred = _corn_decode_bucket(emb_sim_3)
+            score = _corn_corrected_ranking_score(
+                pred_mces.cpu().numpy(), bucket_pred.cpu().numpy()
+            )
+            score = torch.from_numpy(score).to(device).view(T, K)
+
+            chunk_min, chunk_argmin = score.min(dim=1)
+            improved = chunk_min < chunk_best_score
+            chunk_best_score = torch.where(improved, chunk_min, chunk_best_score)
+            chunk_best_idx = torch.where(
+                improved, chunk_argmin + tr_start, chunk_best_idx
+            )
+
+        best_score[t_start:t_end] = chunk_best_score.cpu()
+        best_idx[t_start:t_end] = chunk_best_idx.cpu()
+
+    return train_fps[best_idx], best_idx
 
 
 # ── Morgan fingerprints ───────────────────────────────────────────────────────
@@ -400,6 +508,10 @@ def run(
     intermediates_dir: str | None = None,
     force_ce_zero: bool = False,
     head_mode: str = "cosine_relu",
+    precursor_mass_mode: str = "measured",
+    corn_corrected: bool = False,
+    mces_bucket_use_mlp: bool = False,
+    mces_bucket_use_product: bool = False,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -408,9 +520,12 @@ def run(
     with open(candidates) as fh:
         candidate_json = json.load(fh)
 
-    print(f"\nLoading spectra (split={split}, ref=train) ...")
-    train_smiles, train_spectra = load_spectra(mgf, "train")
-    test_smiles, test_spectra = load_spectra(mgf, split)
+    print(
+        f"\nLoading spectra (split={split}, ref=train, "
+        f"precursor_mass_mode={precursor_mass_mode}) ..."
+    )
+    train_smiles, train_spectra = load_spectra(mgf, "train", precursor_mass_mode)
+    test_smiles, test_spectra = load_spectra(mgf, split, precursor_mass_mode)
     print(f"  train: {len(train_smiles)}  {split}: {len(test_smiles)}")
 
     # Deduplicate training: keep first spectrum per unique canonical SMILES.
@@ -445,26 +560,53 @@ def run(
     )  # (N_train, 2048)
 
     # Load model and embed
-    print(f"\nLoading SIMBA checkpoint: {checkpoint} (head_mode={head_mode})")
-    model = load_model(checkpoint, device, head_mode=head_mode)
+    print(
+        f"\nLoading SIMBA checkpoint: {checkpoint} (head_mode={head_mode}, "
+        f"corn_corrected={corn_corrected})"
+    )
+    model = load_model(
+        checkpoint,
+        device,
+        head_mode=head_mode,
+        use_mces_bucket_head=corn_corrected,
+        mces_bucket_use_mlp=mces_bucket_use_mlp,
+        mces_bucket_use_product=mces_bucket_use_product,
+    )
 
     if force_ce_zero:
         print("  [CE=0 mode] CE zeroed out for all spectra — CE-agnostic embeddings.")
 
     print("\nEmbedding train spectra ...")
-    train_embs = embed_spectra(
-        model, train_spectra, batch_size, device, force_ce_zero=force_ce_zero
+    train_embs, train_embs_raw = embed_spectra(
+        model,
+        train_spectra,
+        batch_size,
+        device,
+        force_ce_zero=force_ce_zero,
+        return_raw=True,
     )
     print("\nEmbedding test spectra ...")
-    test_embs = embed_spectra(
-        model, test_spectra, batch_size, device, force_ce_zero=force_ce_zero
+    test_embs, test_embs_raw = embed_spectra(
+        model,
+        test_spectra,
+        batch_size,
+        device,
+        force_ce_zero=force_ce_zero,
+        return_raw=True,
     )
 
     # NN transfer
-    print("\nNearest-neighbor transfer ...")
-    transferred_fps, nn_indices = nearest_neighbor_transfer(
-        test_embs, train_embs, train_fps
+    print(
+        f"\nNearest-neighbor transfer ({'CORN-corrected' if corn_corrected else 'cosine'}) ..."
     )
+    if corn_corrected:
+        transferred_fps, nn_indices = nearest_neighbor_transfer_corn_corrected(
+            test_embs_raw, train_embs_raw, train_fps, model, device
+        )
+    else:
+        transferred_fps, nn_indices = nearest_neighbor_transfer(
+            test_embs, train_embs, train_fps
+        )
 
     # Save intermediates before scoring so they're available even if scoring is re-run
     if intermediates_dir:
@@ -494,6 +636,8 @@ def run(
                 {
                     "split": split,
                     "model": Path(checkpoint).parent.name,
+                    "corn_corrected": corn_corrected,
+                    "precursor_mass_mode": precursor_mass_mode,
                     "n": len(test_smiles),
                     **results,
                 }
@@ -532,6 +676,39 @@ def main():
         default="cosine_relu",
         choices=HEAD_MODES,
         help="Must match the head_mode the checkpoint was trained with",
+    )
+    p.add_argument(
+        "--precursor_mass_mode",
+        default="measured",
+        choices=["measured", "theoretical"],
+        help=(
+            "'measured' reads the MGF's own PRECURSOR_MZ (historical default); "
+            "'theoretical' recomputes it from the true SMILES+adduct instead, "
+            "matching what every checkpoint from experiment 010 onward was "
+            "trained with."
+        ),
+    )
+    p.add_argument(
+        "--corn_corrected",
+        action="store_true",
+        help=(
+            "Find the nearest train spectrum by CORN-corrected MCES (pairwise "
+            "bucket-head forward pass) instead of plain embedding cosine "
+            "similarity. Requires a checkpoint trained with "
+            "model.tasks.mces_bucket.enabled=true (013, 014_1-4) -- pass "
+            "--mces_bucket_use_mlp/--mces_bucket_use_product matching that "
+            "checkpoint's own training config."
+        ),
+    )
+    p.add_argument(
+        "--mces_bucket_use_mlp",
+        action="store_true",
+        help="Must match the checkpoint's model.tasks.mces_bucket.use_mlp (true for 014_2)",
+    )
+    p.add_argument(
+        "--mces_bucket_use_product",
+        action="store_true",
+        help="Must match the checkpoint's model.tasks.mces_bucket.use_product",
     )
     args = p.parse_args()
     run(**vars(args))

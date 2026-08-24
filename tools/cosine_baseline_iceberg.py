@@ -124,6 +124,7 @@ def run(
     output_tsv: str | None = None,
     gt_mces_dir: str | None = None,
     skip_mces: bool = False,
+    min_peaks: int | None = None,
 ):
     print(f"\nLoading {split}-fold real spectra from {mgf} ...")
     test_smiles, test_spectra = load_spectra(mgf, split)
@@ -182,6 +183,22 @@ def run(
     for k, v in results.items():
         print(f"  {k}: {v:.4f} ({v * 100:.2f}%)")
 
+    subset_results = None
+    if min_peaks is not None:
+        keep_idx = [i for i, s in enumerate(test_spectra) if len(s.mz) >= min_peaks]
+        sub_smiles = [test_smiles[i] for i in keep_idx]
+        sub_ranked = [per_query_ranked[i] for i in keep_idx]
+        subset_results, n_no_cand_sub = compute_hit_rates_from_ranking(
+            sub_smiles, sub_ranked
+        )
+        n_scored_sub = len(sub_smiles) - n_no_cand_sub
+        print(
+            f"\n=== Cosine-similarity baseline (no SIMBA), {split}, peaks>={min_peaks}, "
+            f"n={n_scored_sub}/{len(sub_smiles)} queries ==="
+        )
+        for k, v in subset_results.items():
+            print(f"  {k}: {v:.4f} ({v * 100:.2f}%)")
+
     if not skip_mces:
         print(f"\nLoading GT MCES lookup from {gt_mces_dir} ...")
         gt_lookup = load_gt_mces_lookup(gt_mces_dir)
@@ -197,19 +214,29 @@ def run(
     if output_tsv:
         import pandas as pd
 
-        pd.DataFrame(
-            [
+        rows = [
+            {
+                "split": split,
+                "model": "cosine_baseline_no_simba",
+                "peak_filter": "none",
+                "n": n_scored,
+                **results,
+            }
+        ]
+        if subset_results is not None:
+            rows.append(
                 {
                     "split": split,
                     "model": "cosine_baseline_no_simba",
-                    "n": n_scored,
-                    **results,
+                    "peak_filter": f"peaks>={min_peaks}",
+                    "n": n_scored_sub,
+                    **subset_results,
                 }
-            ]
-        ).to_csv(output_tsv, sep="\t", index=False)
+            )
+        pd.DataFrame(rows).to_csv(output_tsv, sep="\t", index=False)
         print(f"\nSaved to {output_tsv}")
 
-    return results
+    return results, subset_results
 
 
 def main():
@@ -258,6 +285,17 @@ def main():
         "--skip_mces",
         action="store_true",
         help="Skip GT MCES computation, report only hit@k",
+    )
+    p.add_argument(
+        "--min_peaks",
+        type=int,
+        default=None,
+        help=(
+            "Additionally report hit@k restricted to test spectra with >= "
+            "this many peaks (SIMBA's own canonical filter, min_n_peaks=6 in "
+            "simba/configs/data/default.yaml and all data-prep scripts) "
+            "alongside the unrestricted full-test-set numbers."
+        ),
     )
     args = p.parse_args()
     run(**vars(args))
