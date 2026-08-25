@@ -41,8 +41,8 @@ from simba_retrieval_iceberg import (
 
 def run(
     mgf: str,
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     intermediates_dir: str,
     split: str = "test",
     bin_width: float = 0.01,
@@ -94,9 +94,17 @@ def main():
     p.add_argument(
         "--candidate_tsv",
         required=True,
-        help="ICEBERG candidate TSV (smiles/ionization/precursor)",
+        nargs="+",
+        help="ICEBERG candidate TSV(s) (smiles/ionization/precursor) -- one path, "
+        "or several (e.g. the original plus a delta file), matched 1:1 by "
+        "position with --iceberg_preds",
     )
-    p.add_argument("--iceberg_preds", required=True, help="ICEBERG predictions HDF5")
+    p.add_argument(
+        "--iceberg_preds",
+        required=True,
+        nargs="+",
+        help="ICEBERG predictions HDF5(s) -- one path, or several to merge",
+    )
     p.add_argument(
         "--intermediates_dir",
         required=True,

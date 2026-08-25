@@ -249,8 +249,8 @@ def extract_test_spectra_by_index(
 
 
 def load_iceberg_peaks(
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     wanted: list[tuple[str, str, float]],
     mass_tol: float = 0.02,
 ) -> dict[tuple[str, str], tuple[float, np.ndarray, np.ndarray]]:
@@ -262,11 +262,23 @@ def load_iceberg_peaks(
     {(canonical smiles, adduct): (candidate's own precursor_mz, mass,
     intensity)} -- the candidate's own precursor_mz (not necessarily bit-
     identical to the query's) is carried through so SIMBA-preprocessing this
-    spectrum removes the right peak."""
-    print(
-        f"  Loading {candidate_tsv} (mass-filtered lookup, no full-table canonicalization) ..."
+    spectrum removes the right peak.
+
+    candidate_tsv/iceberg_preds each accept one path or several (matched 1:1
+    by position, same delta-file convention as simba_retrieval_iceberg.py)
+    -- concatenated/merged before the mass-filtered lookup."""
+    tsv_paths = (
+        [candidate_tsv] if isinstance(candidate_tsv, str) else list(candidate_tsv)
     )
-    cand_index = pd.read_csv(candidate_tsv, sep="\t")
+    preds_paths = (
+        [iceberg_preds] if isinstance(iceberg_preds, str) else list(iceberg_preds)
+    )
+    print(
+        f"  Loading {tsv_paths} (mass-filtered lookup, no full-table canonicalization) ..."
+    )
+    cand_index = pd.concat(
+        [pd.read_csv(p, sep="\t") for p in tsv_paths], ignore_index=True
+    )
 
     cand_ids = {}
     cand_precursor_mz = {}
@@ -292,17 +304,18 @@ def load_iceberg_peaks(
         cand_precursor_mz[(c_smi, adduct)] = float(match.iloc[0]["precursor"])
 
     wanted_ids = set(cand_ids.values())
-    print(f"  Reading {len(wanted_ids)} predicted spectra from {iceberg_preds} ...")
+    print(f"  Reading {len(wanted_ids)} predicted spectra from {preds_paths} ...")
     result_by_id = {}
-    with h5py.File(iceberg_preds, "r") as f:
-        manifest = f["__predspec_manifest__"]
-        for name, leaf in zip(manifest["name"][:], manifest["leaf_path"][:]):
-            name_str = name.decode().removeprefix("pred_")
-            if name_str not in wanted_ids:
-                continue
-            arr = f[leaf.decode()]["f"][:]
-            mask = arr[:, 0] > 0
-            result_by_id[name_str] = (arr[mask, 0], arr[mask, 1])
+    for preds_path in preds_paths:
+        with h5py.File(preds_path, "r") as f:
+            manifest = f["__predspec_manifest__"]
+            for name, leaf in zip(manifest["name"][:], manifest["leaf_path"][:]):
+                name_str = name.decode().removeprefix("pred_")
+                if name_str not in wanted_ids or name_str in result_by_id:
+                    continue
+                arr = f[leaf.decode()]["f"][:]
+                mask = arr[:, 0] > 0
+                result_by_id[name_str] = (arr[mask, 0], arr[mask, 1])
 
     return {
         key: (cand_precursor_mz[key], *result_by_id[cid])
@@ -338,8 +351,8 @@ def plot_mirror(
 def run(
     table_csv: str,
     mgf: str,
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     output_dir: str,
     n_per_cell: int = 3,
     seed: int = 42,
@@ -457,8 +470,8 @@ def main():
     )
     p.add_argument("--table_csv", required=True)
     p.add_argument("--mgf", required=True)
-    p.add_argument("--candidate_tsv", required=True)
-    p.add_argument("--iceberg_preds", required=True)
+    p.add_argument("--candidate_tsv", required=True, nargs="+")
+    p.add_argument("--iceberg_preds", required=True, nargs="+")
     p.add_argument("--output_dir", required=True)
     p.add_argument("--n_per_cell", type=int, default=3)
     p.add_argument("--seed", type=int, default=42)

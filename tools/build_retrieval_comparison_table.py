@@ -61,6 +61,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import json
 from pathlib import Path
 
@@ -70,32 +71,45 @@ import scipy.sparse as sp
 import torch
 from ood_generalization_check import build_candidate_embeddings_by_smi_adduct
 from simba_retrieval import canonicalize
-from simba_retrieval_iceberg import load_gt_mces_lookup, load_iceberg_spectra
+from simba_retrieval_iceberg import (
+    load_candidate_index,
+    load_gt_mces_lookup,
+    load_iceberg_spectra,
+)
 from tqdm.auto import tqdm
 
 
-def count_test_peaks_in_order(mgf_path: str) -> list[int]:
-    """Raw peak count per test-fold spectrum, in the same order
-    load_spectra(mgf, "test") (and thus test_smiles.json/test_adducts.json)
-    enumerates them. Manual MGF scan (fast — avoids matchms's slow
-    per-spectrum object construction, same technique as
-    plot_confusion_matrix_examples.py's extract_test_spectra_by_index)."""
+def scan_test_mgf_in_order(mgf_path: str) -> tuple[list[int], list[float]]:
+    """Raw peak count + measured PRECURSOR_MZ per test-fold spectrum, in the
+    same order load_spectra(mgf, "test") (and thus
+    test_smiles.json/test_adducts.json) enumerates them. One manual MGF scan
+    (fast — avoids matchms's slow per-spectrum object construction, same
+    technique as plot_confusion_matrix_examples.py's
+    extract_test_spectra_by_index) covers both fields at once rather than
+    scanning the file twice."""
     counts = []
+    precursor_mzs = []
     current_fold = None
     current_n = 0
+    current_prec = np.nan
     with open(mgf_path) as fh:
         for line in fh:
             line = line.rstrip("\n")
             if line == "BEGIN IONS":
                 current_fold = None
                 current_n = 0
+                current_prec = np.nan
                 continue
             if line == "END IONS":
                 if current_fold == "test":
                     counts.append(current_n)
+                    precursor_mzs.append(current_prec)
                 continue
             if line.startswith("FOLD="):
                 current_fold = line[len("FOLD=") :]
+            elif line.startswith("PRECURSOR_MZ="):
+                with contextlib.suppress(ValueError):
+                    current_prec = float(line[len("PRECURSOR_MZ=") :])
             elif current_fold == "test" and "=" not in line and line.strip():
                 parts = line.split()
                 if len(parts) >= 2:
@@ -105,33 +119,38 @@ def count_test_peaks_in_order(mgf_path: str) -> list[int]:
                         current_n += 1
                     except ValueError:
                         pass
-    return counts
+    return counts, precursor_mzs
 
 
 def build_candidate_npeaks_lookup(
-    candidate_tsv: str, iceberg_preds: str
-) -> dict[tuple[str, str], int]:
-    """(canonical smiles, adduct) -> raw peak count of that candidate's own
-    ICEBERG-predicted spectrum. Same identity as
+    candidate_tsv: str | list[str], iceberg_preds: str | list[str]
+) -> tuple[dict[tuple[str, str], int], dict[tuple[str, str], float]]:
+    """(canonical smiles, adduct) -> (raw peak count of that candidate's own
+    ICEBERG-predicted spectrum, candidate's own theoretical precursor m/z
+    from candidate_tsv's own "precursor" column). Same identity as
     build_candidate_embeddings_by_smi_adduct/build_candidate_row_lookup_by_smi_adduct
     above — first-seen-wins on a duplicate (smiles, adduct) row, never
     averaged."""
     print(f"Loading {candidate_tsv} for peak counts ...")
-    cand_df = pd.read_csv(candidate_tsv, sep="\t")
+    cand_df = load_candidate_index(candidate_tsv).reset_index()
     spec_ids = cand_df["spec"].tolist()
     print(
         f"  Reading peak counts for {len(spec_ids)} ICEBERG spectra from {iceberg_preds} ..."
     )
     iceberg_specs = load_iceberg_spectra(iceberg_preds, spec_ids)
-    out: dict[tuple[str, str], int] = {}
-    for smi, adduct, spec_id in zip(cand_df["smiles"], cand_df["ionization"], spec_ids):
+    npeaks_out: dict[tuple[str, str], int] = {}
+    precursor_out: dict[tuple[str, str], float] = {}
+    for smi, adduct, spec_id, prec_mz in zip(
+        cand_df["smiles"], cand_df["ionization"], spec_ids, cand_df["precursor"]
+    ):
         key = (canonicalize(smi), adduct)
-        if key in out:
+        if key in npeaks_out:
             continue
         spec = iceberg_specs.get(spec_id)
         if spec is not None:
-            out[key] = len(spec[0])
-    return out
+            npeaks_out[key] = len(spec[0])
+            precursor_out[key] = float(prec_mz)
+    return npeaks_out, precursor_out
 
 
 def build_candidate_row_lookup_by_smi_adduct(
@@ -165,8 +184,8 @@ def run(
     candidates: str,
     gt_mces_dir: str,
     mgf: str,
-    candidate_tsv: str,
-    iceberg_preds: str,
+    candidate_tsv: str | list[str],
+    iceberg_preds: str | list[str],
     output_csv: str,
     mces_max_value: float = 40.0,
 ) -> None:
@@ -229,13 +248,15 @@ def run(
     gt_lookup = load_gt_mces_lookup(gt_mces_dir)
     print(f"  {len(gt_lookup) // 2} unique (test, candidate) pairs with a GT value")
 
-    print(f"Counting raw peaks per test spectrum from {mgf} ...")
-    test_npeaks = count_test_peaks_in_order(mgf)
+    print(f"Counting raw peaks + precursor m/z per test spectrum from {mgf} ...")
+    test_npeaks, test_precursor_mzs = scan_test_mgf_in_order(mgf)
     assert len(test_npeaks) == len(test_smiles), (
         f"{len(test_npeaks)} test-fold spectra counted from the MGF vs "
         f"{len(test_smiles)} in the SIMBA intermediates — order/count mismatch"
     )
-    cand_npeaks_lookup = build_candidate_npeaks_lookup(candidate_tsv, iceberg_preds)
+    cand_npeaks_lookup, cand_precursor_lookup = build_candidate_npeaks_lookup(
+        candidate_tsv, iceberg_preds
+    )
     print(f"  {len(cand_npeaks_lookup)} (candidate, adduct) peak counts")
 
     cols = {
@@ -254,6 +275,8 @@ def run(
         "is_correct": [],
         "n_peaks_test": [],
         "n_peaks_candidate": [],
+        "test_precursor_mz": [],
+        "candidate_precursor_mz": [],
     }
 
     n_no_pool = 0
@@ -341,6 +364,10 @@ def run(
             cols["n_peaks_candidate"].append(
                 cand_npeaks_lookup.get((c_canon, adduct), np.nan)
             )
+            cols["test_precursor_mz"].append(test_precursor_mzs[spec_i])
+            cols["candidate_precursor_mz"].append(
+                cand_precursor_lookup.get((c_canon, adduct), np.nan)
+            )
 
     print(f"\n  {n_no_pool} test spectra had no formula-matched candidate pool at all")
     print(
@@ -377,8 +404,8 @@ def main():
     p.add_argument("--candidates", required=True)
     p.add_argument("--gt_mces_dir", required=True)
     p.add_argument("--mgf", required=True)
-    p.add_argument("--candidate_tsv", required=True)
-    p.add_argument("--iceberg_preds", required=True)
+    p.add_argument("--candidate_tsv", required=True, nargs="+")
+    p.add_argument("--iceberg_preds", required=True, nargs="+")
     p.add_argument("--output_csv", required=True)
     p.add_argument("--mces_max_value", type=float, default=40.0)
     args = p.parse_args()

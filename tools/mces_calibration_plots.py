@@ -16,6 +16,23 @@ excludes only the literal self spectrum and includes same-molecule-
 different-spectrum pairs (GT=0) — see ood_generalization_check.py's module
 docstring for the full explanation.
 
+TWO test-to-test METHODOLOGIES, used for different purposes: the main
+`test_to_test_binned_box.png` uses
+ood_generalization_check.score_test_to_test_molecule_level -- ONE
+representative pair per (molecule_a, molecule_b), same protocol validation
+itself uses (multitask_dataset.py's __getitem__, callbacks.py's is_self),
+so the resulting plot is a genuine apples-to-apples comparison against
+validation's own numbers (same pair count, same self-pair definition,
+including the same natural mix of trivial same-spectrum self-pairs for
+single-spectrum molecules). The mass-cutoff breakdown below
+(binned_box_by_mass_cutoff.png / mae_spearman_by_mass_cutoff.png) instead
+uses score_test_to_test_no_averaging's EXHAUSTIVE spectrum-vs-spectrum
+comparison -- a different, legitimate question in its own right (does
+restricting to a mass range improve calibration/spectral-condition
+robustness), where the much larger sample size is a genuine advantage
+rather than a problem; it is NOT meant to be compared against validation's
+numbers directly.
+
 GT MCES binned on the x-axis, SIMBA-predicted MCES boxplotted per bin,
 whis=(5, 95) and outlier points hidden (showfliers=False) so a few extreme
 predictions per bin don't dominate the picture. Each box is annotated with
@@ -82,6 +99,7 @@ from ood_generalization_check import (
     add_self_pairs,
     build_candidate_embeddings_by_smi_adduct,
     expand_and_score_ragged,
+    score_test_to_test_molecule_level,
     score_test_to_test_no_averaging,
 )
 from rdkit import Chem
@@ -215,6 +233,88 @@ def binned_box_on_ax(
     return len(groups), n_kept, n_total
 
 
+_VAL_BIN_EDGES = np.array([5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0])
+_VAL_SELF_LABEL = "self (MCES=0)"
+
+
+def _val_bin_labels() -> list[str]:
+    labels = [_VAL_SELF_LABEL]
+    lo = 0.0
+    for hi in _VAL_BIN_EDGES:
+        labels.append(f"({lo:g},{hi:g}]")
+        lo = hi
+    return labels
+
+
+def binned_box_on_ax_val_style(
+    ax, gt: np.ndarray, pred: np.ndarray, is_self: np.ndarray, title: str
+) -> None:
+    """Exact port of simba/core/training/callbacks.py's
+    ValMetricsCallback._plot_binned_box -- self-pairs get a dedicated box at
+    GT=0, non-self pairs use 5-unit-wide bins up to 40. Used ONLY for the
+    molecule-level test-to-test plot (matching validation's own binning
+    convention so the two are visually comparable) -- test-to-candidate
+    keeps its existing bin_width=2 style above, since it doesn't have a
+    validation-side counterpart to match."""
+    labels = _val_bin_labels()
+    edges = _VAL_BIN_EDGES
+    groups, positions, widths, ns = [], [], [], []
+
+    self_vals = pred[is_self]
+    groups.append(self_vals)
+    positions.append(0.0)
+    widths.append(1.5)
+    ns.append(len(self_vals))
+
+    non_self_gt = gt[~is_self]
+    non_self_pred = pred[~is_self]
+    bin_idx = np.clip(np.digitize(non_self_gt, edges[:-1]), 0, len(edges) - 1)
+    lo = 0.0
+    for i, hi in enumerate(edges):
+        vals = non_self_pred[bin_idx == i]
+        groups.append(vals)
+        positions.append((lo + hi) / 2.0)
+        widths.append((hi - lo) * 0.8)
+        ns.append(len(vals))
+        lo = hi
+
+    plot_groups = [g for g in groups if len(g) > 0]
+    plot_positions = [p for p, g in zip(positions, groups) if len(g) > 0]
+    plot_widths = [w for w, g in zip(widths, groups) if len(g) > 0]
+    plot_labels = [lab for lab, g in zip(labels, groups) if len(g) > 0]
+    if not plot_groups:
+        ax.set_title(f"{title}\n(no pairs)")
+        return
+    ax.boxplot(
+        plot_groups,
+        positions=plot_positions,
+        widths=plot_widths,
+        whis=(5, 95),
+        showfliers=False,
+    )
+    ax.plot(
+        [0, 40.0],
+        [0, 40.0],
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        label="pred = GT",
+    )
+    ymax = max(np.percentile(g, 95) for g in plot_groups)
+    label_y = ymax * 1.03
+    for p, n in zip(plot_positions, [n for n in ns if n > 0]):
+        ax.text(
+            p, label_y, f"n={n:,}", ha="center", va="bottom", fontsize=7, rotation=90
+        )
+    ax.set_ylim(top=label_y * 1.25)
+    ax.set_xticks(plot_positions)
+    ax.set_xticklabels(plot_labels, rotation=30, ha="right")
+    ax.set_xlabel("GT MCES")
+    ax.set_ylabel("Predicted MCES")
+    ax.set_title(title, fontsize=10)
+    ax.legend(fontsize=8)
+
+
 def plot_binned_box(
     pred: np.ndarray,
     gt: np.ndarray,
@@ -268,9 +368,13 @@ def run(
         tt_gt_matrix = cache["tt_gt_matrix"]
         tt_valid_mask = cache["tt_valid_mask"]
         tt_spec_molidx = cache["tt_spec_molidx"]
-        tt_pred, tt_gt = tt_pred_matrix[tt_valid_mask], tt_gt_matrix[tt_valid_mask]
+        tt_mol_pred = cache["tt_mol_pred"]
+        tt_mol_gt = cache["tt_mol_gt"]
+        tt_mol_is_self = cache["tt_mol_is_self"]
+        tt_mol_same_spectrum = cache["tt_mol_same_spectrum"]
         print(
-            f"  {len(tc_gt):,} test-to-candidate pairs, {len(tt_gt):,} test-to-test pairs (from cache)"
+            f"  {len(tc_gt):,} test-to-candidate pairs, {int(tt_valid_mask.sum()):,} exhaustive "
+            f"test-to-test pairs, {len(tt_mol_gt):,} molecule-level test-to-test pairs (from cache)"
         )
     else:
         inter = Path(intermediates_dir)
@@ -307,9 +411,6 @@ def run(
         )
         print(f"  {len(tc_gt):,} scored pairs (incl. self)")
 
-        print(
-            "\n--- test-to-test (self spectrum excluded, same-molecule spectra included, no averaging) ---"
-        )
         with open(Path(test_to_test_prepro_dir) / "mapping.pkl", "rb") as fh:
             mapping = pickle.load(fh)
         tt_idx_to_smiles = mapping["df_smiles_test"]["canon_smiles"].tolist()
@@ -317,13 +418,39 @@ def run(
             Path(test_to_test_prepro_dir)
             / "ed_mces_indexes_tani_incremental_test_node0_chunk0.npy"
         )
+
+        print(
+            "\n--- test-to-test, molecule-level (matches validation's own protocol exactly) ---"
+        )
+        (
+            tt_mol_pred,
+            tt_mol_gt,
+            tt_mol_is_self,
+            tt_mol_same_spectrum,
+            tt_mol_a,
+            tt_mol_b,
+            _tt_mol_idx0,
+            _tt_mol_idx1,
+        ) = score_test_to_test_molecule_level(
+            tt_pairs, tt_idx_to_smiles, test_smiles, test_embeddings, mces_max_value
+        )
+        print(
+            f"  {len(tt_mol_gt):,} molecule-level pairs, {tt_mol_is_self.sum():,} self-pairs "
+            f"({int((tt_mol_is_self & tt_mol_same_spectrum).sum()):,} trivial same-spectrum)"
+        )
+
+        print(
+            "\n--- test-to-test, exhaustive spectrum-vs-spectrum (self spectrum excluded, "
+            "same-molecule spectra included, no averaging -- a spectral-condition-robustness "
+            "diagnostic, NOT comparable to validation's own numbers; used only for the "
+            "mass-cutoff breakdown below) ---"
+        )
         tt_pred_matrix, tt_gt_matrix, tt_valid_mask, tt_spec_molidx = (
             score_test_to_test_no_averaging(
                 tt_pairs, tt_idx_to_smiles, test_smiles, test_embeddings, mces_max_value
             )
         )
-        tt_pred, tt_gt = tt_pred_matrix[tt_valid_mask], tt_gt_matrix[tt_valid_mask]
-        print(f"  {len(tt_gt):,} scored individual-spectrum pairs")
+        print(f"  {int(tt_valid_mask.sum()):,} scored individual-spectrum pairs")
 
         print(f"Caching scored pairs to {cache_path} ...")
         with open(cache_path, "wb") as fh:
@@ -340,6 +467,12 @@ def run(
                     "tt_gt_matrix": tt_gt_matrix,
                     "tt_valid_mask": tt_valid_mask,
                     "tt_spec_molidx": tt_spec_molidx,
+                    "tt_mol_pred": tt_mol_pred,
+                    "tt_mol_gt": tt_mol_gt,
+                    "tt_mol_is_self": tt_mol_is_self,
+                    "tt_mol_same_spectrum": tt_mol_same_spectrum,
+                    "tt_mol_a": tt_mol_a,
+                    "tt_mol_b": tt_mol_b,
                 },
                 fh,
                 protocol=pickle.HIGHEST_PROTOCOL,
@@ -353,12 +486,22 @@ def run(
         gt_clip_max=gt_clip_max,
     )
 
-    plot_binned_box(
-        tt_pred,
-        tt_gt,
-        "Test-to-test: SIMBA-predicted MCES by GT bin (self spectrum excluded, same-molecule spectra included, no averaging)",
-        out_dir / "test_to_test_binned_box.png",
-        gt_clip_max=gt_clip_max,
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    binned_box_on_ax_val_style(
+        ax,
+        tt_mol_gt,
+        tt_mol_pred,
+        tt_mol_is_self,
+        "Test-to-test (molecule-level, matches validation's own protocol)",
+    )
+    fig.tight_layout()
+    tt_out_path = out_dir / "test_to_test_binned_box.png"
+    fig.savefig(tt_out_path, dpi=150)
+    plt.close(fig)
+    n_trivial = int((tt_mol_is_self & tt_mol_same_spectrum).sum())
+    print(
+        f"Saved {tt_out_path}  ({len(tt_mol_gt):,} molecule-level pairs, "
+        f"{int(tt_mol_is_self.sum()):,} self-pairs, {n_trivial:,} trivial same-spectrum)"
     )
 
     print("\n--- Mass-restricted comparison (item 8c) ---")

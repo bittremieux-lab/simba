@@ -310,6 +310,109 @@ def score_test_to_test_no_averaging(
     return pred_matrix, gt_matrix, valid_mask, spec_molidx
 
 
+def score_test_to_test_molecule_level(
+    gt_pairs: np.ndarray,
+    idx_to_smiles: list[str],
+    test_smiles_raw: list[str],
+    test_embeddings: torch.Tensor,
+    mces_max_value: float,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    """Molecule-level test-to-test scoring, matching the SAME protocol
+    validation itself uses (simba/core/data/datasets/multitask_dataset.py's
+    __getitem__ for validation, simba/core/training/callbacks.py's
+    is_self/_plot_binned_box): one representative pair per (molecule_a,
+    molecule_b), position-0 always the FIRST spectrum index for molecule_a,
+    position-1 always the LAST spectrum index for molecule_b -- same rule
+    for self-pairs, where it naturally collapses to the same spectrum on
+    both sides for a molecule with only one spectrum in this fold (a
+    genuine, expected outcome of the rule, not a bug -- validation has the
+    identical phenomenon for its own single-spectrum molecules).
+
+    This is deliberately NOT score_test_to_test_no_averaging's exhaustive
+    spectrum-vs-spectrum comparison (~n_spectra^2 pairs): that measures a
+    different thing (within-molecule spectral-condition robustness -- how
+    much do a molecule's own different spectra agree with each other) at a
+    wildly different pair count and statistical character than what
+    validation reports. Use THIS function whenever the goal is a genuine
+    apples-to-apples comparison against validation's own numbers; use
+    score_test_to_test_no_averaging for spectral-robustness diagnostics in
+    their own right.
+
+    gt_pairs: mined molecule-level pairs (mol_idx_a, mol_idx_b, ..., mces),
+    same i<j convention as validation's own
+    ed_mces_indexes_tani_incremental_val_*.npy (both built by
+    tools/prepare_msg_*_split_max_lb_hdf5.py's build_pairs).
+
+    Returns (pred, gt, is_self, same_spectrum, mol_idx_a, mol_idx_b, idx0, idx1)
+    -- all 1-D, same length, self-pairs first then cross-pairs. mol_idx_a/
+    mol_idx_b (indices into idx_to_smiles) are returned so callers needing a
+    per-pair property of the underlying molecules (e.g. molecular mass for a
+    mass-cutoff analysis) don't need to re-derive them; idx0/idx1 (row
+    indices into test_embeddings/test_smiles_raw, i.e. the two ACTUAL
+    representative spectra used for this pair) are returned so callers
+    needing the raw (pre-normalize) embeddings for a genuinely pairwise
+    computation (e.g. a CORN bucket-head forward pass) don't need to
+    re-derive the same first/last selection logic themselves.
+    """
+    smi_to_molidx = {smi: i for i, smi in enumerate(idx_to_smiles)}
+    spec_molidx_all = np.array(
+        [smi_to_molidx.get(canonicalize(s), -1) for s in test_smiles_raw]
+    )
+
+    mol_to_positions: dict[int, list[int]] = {}
+    for pos, molidx in enumerate(spec_molidx_all):
+        if molidx >= 0:
+            mol_to_positions.setdefault(int(molidx), []).append(pos)
+    first_pos = {m: p[0] for m, p in mol_to_positions.items()}
+    last_pos = {m: p[-1] for m, p in mol_to_positions.items()}
+    mols_with_spec = sorted(mol_to_positions.keys())
+
+    mol_a_all = gt_pairs[:, 0].astype(int)
+    mol_b_all = gt_pairs[:, 1].astype(int)
+    gt_cross_all = gt_pairs[:, -1].astype(float)
+    valid_cross = np.array(
+        [(a in first_pos and b in last_pos) for a, b in zip(mol_a_all, mol_b_all)]
+    )
+    mol_a_cross = mol_a_all[valid_cross]
+    mol_b_cross = mol_b_all[valid_cross]
+    idx0_cross = np.array([first_pos[a] for a in mol_a_cross])
+    idx1_cross = np.array([last_pos[b] for b in mol_b_cross])
+    gt_cross = gt_cross_all[valid_cross]
+    same_spec_cross = (
+        idx0_cross == idx1_cross
+    )  # structurally always False: a!=b, disjoint position lists
+
+    idx0_self = np.array([first_pos[m] for m in mols_with_spec])
+    idx1_self = np.array([last_pos[m] for m in mols_with_spec])
+    gt_self = np.zeros(len(mols_with_spec))
+    same_spec_self = idx0_self == idx1_self
+
+    idx0 = np.concatenate([idx0_self, idx0_cross])
+    idx1 = np.concatenate([idx1_self, idx1_cross])
+    gt = np.concatenate([gt_self, gt_cross])
+    is_self = np.concatenate(
+        [np.ones(len(mols_with_spec), dtype=bool), np.zeros(len(gt_cross), dtype=bool)]
+    )
+    same_spectrum = np.concatenate([same_spec_self, same_spec_cross])
+    mol_idx_a = np.concatenate([np.array(mols_with_spec), mol_a_cross])
+    mol_idx_b = np.concatenate([np.array(mols_with_spec), mol_b_cross])
+
+    test_emb_norm = torch.nn.functional.normalize(test_embeddings, p=2, dim=-1).numpy()
+    sims = (test_emb_norm[idx0] * test_emb_norm[idx1]).sum(axis=1)
+    pred = np.clip(mces_max_value * (1.0 - sims), 0.0, None).astype(np.float32)
+
+    return pred, gt, is_self, same_spectrum, mol_idx_a, mol_idx_b, idx0, idx1
+
+
 def report(name: str, pred: np.ndarray, gt: np.ndarray) -> dict:
     mae = float(np.abs(pred - gt).mean())
     rho, _ = spearmanr(pred, gt)
