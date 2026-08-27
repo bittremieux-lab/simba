@@ -7,7 +7,6 @@
 #SBATCH --array=0-99%20
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
 #SBATCH -o %x_%A_%a.out
 #SBATCH -e %x_%A_%a.err
 
@@ -47,9 +46,9 @@
 # Combine when done:
 #   uv run python tools/analog_discovery_exact_mces.py --output_dir "$OUTPUT_DIR" combine
 
-set -uo pipefail
+set -euo pipefail
 
-SIMBA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SIMBA_DIR=/sofia/projects/2026_053/simba_project/simba
 
 if [ -z "${OUTPUT_DIR:-}" ]; then
     echo "OUTPUT_DIR not set -- submit with: sbatch --export=OUTPUT_DIR=/path/to/... $0" >&2
@@ -64,7 +63,7 @@ echo "Date      : $(date)"
 
 cd "${SIMBA_DIR}"
 
-uv run python tools/analog_discovery_exact_mces.py \
+"${SIMBA_DIR}/.venv/bin/python" tools/analog_discovery_exact_mces.py \
     --output_dir "${OUTPUT_DIR}" \
     compute_block \
     --task_id "${SLURM_ARRAY_TASK_ID}" \

@@ -160,10 +160,41 @@ def panel_boxplot(scores: dict, gt: np.ndarray, top_k: int, output_dir: Path) ->
             f"({n_no_gt} queries excluded, no resolved GT in top{top_k})"
         )
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    data = [per_method[m] for m in METHODS]
-    ax.boxplot(data, tick_labels=[METHOD_LABELS[m] for m in METHODS], showmeans=True)
-    ax.set_ylabel(f"Best true MCES among top-{top_k} candidates")
+    # Oracle: best GT MCES anywhere in the WHOLE library per query, ignoring
+    # every method's own ranking entirely -- the ceiling no ranking method
+    # can beat, since it's not constrained to any top-k. Uses the exhaustive
+    # GT matrix directly, which is why stage 3 computed it exhaustively
+    # rather than per-method top-k-only.
+    oracle_mces = []
+    n_no_gt_oracle = 0
+    for i in range(n_q):
+        row = gt[i]
+        if np.all(np.isnan(row)):
+            n_no_gt_oracle += 1
+            continue
+        oracle_mces.append(float(np.nanmin(row)))
+    summary["oracle"] = {
+        "n": len(oracle_mces),
+        "n_excluded_no_gt": n_no_gt_oracle,
+        "mean": float(np.mean(oracle_mces)) if oracle_mces else float("nan"),
+        "median": float(np.median(oracle_mces)) if oracle_mces else float("nan"),
+    }
+    print(
+        f"  [oracle] best-in-library MCES: n={len(oracle_mces)} "
+        f"mean={summary['oracle']['mean']:.2f} median={summary['oracle']['median']:.2f} "
+        f"({n_no_gt_oracle} queries excluded, no resolved GT anywhere)"
+    )
+
+    plot_methods = [*METHODS, "oracle"]
+    plot_labels = {**METHOD_LABELS, "oracle": "Oracle (best in library)"}
+    per_method["oracle"] = oracle_mces
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    data = [per_method[m] for m in plot_methods]
+    ax.boxplot(data, tick_labels=[plot_labels[m] for m in plot_methods], showmeans=True)
+    ax.set_ylabel(
+        f"Best true MCES among top-{top_k} candidates (oracle: whole library)"
+    )
     ax.set_title("Analog discovery: retrieved-analog quality")
     fig.tight_layout()
     fig.savefig(output_dir / "analog_discovery_boxplot.png", dpi=150)
