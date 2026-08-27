@@ -182,40 +182,63 @@ def load_dataset(cfg: DictConfig):
                     else:
                         missing.append(mgf_idx)
 
-                mol_idx_remap = None
-                if missing:
-                    # Some spectra failed the training loader's validity check
-                    # (filter mismatch between preprocessing and training).
-                    # Drop molecules whose spectra are all missing; keep molecules
-                    # that have at least one valid spectrum.
-                    logger.warning(
-                        f"[{split}] {len(missing)} spectra missing from loaded set "
-                        f"(e.g., MGF index {missing[0]}). Dropping affected molecules."
-                    )
-                    # Graceful remap: skip missing entries
-                    for i in df_smiles.index:
-                        df_smiles.at[i, "indexes"] = [
-                            idx_map[idx]
-                            for idx in df_smiles.loc[i, "indexes"]
-                            if idx in idx_map
-                        ]
-                    # Drop molecules with no valid spectra remaining
-                    valid_rows = [
-                        i for i in df_smiles.index if df_smiles.loc[i, "indexes"]
+                # Graceful remap: skip missing entries (indexes list becomes
+                # empty for a molecule whose spectra were all missing).
+                for i in df_smiles.index:
+                    df_smiles.at[i, "indexes"] = [
+                        idx_map[idx]
+                        for idx in df_smiles.loc[i, "indexes"]
+                        if idx in idx_map
                     ]
-                    if len(valid_rows) < len(df_smiles):
-                        dropped = len(df_smiles) - len(valid_rows)
+
+                # CASMI-analog-discovery distance-exclusion experiment (train
+                # split only -- see NOTES_014_2_ANALOG_DISCOVERY.md): drop
+                # train molecules listed in train_exclude_smiles_file, same
+                # mol_idx_remap mechanism as the missing-spectra drop below,
+                # so _apply_remap in prepare_data() filters/reindexes the
+                # precomputed pair-distance array consistently either way.
+                excluded_smiles = set()
+                exclude_file = getattr(cfg.sampling, "train_exclude_smiles_file", None)
+                if split == "train" and exclude_file:
+                    excluded_smiles = set(Path(exclude_file).read_text().splitlines())
+                    logger.info(
+                        f"[{split}] train_exclude_smiles_file={exclude_file}: "
+                        f"{len(excluded_smiles)} molecules to exclude"
+                    )
+
+                mol_idx_remap = None
+                no_spectra = {
+                    i for i in df_smiles.index if not df_smiles.loc[i, "indexes"]
+                }
+                excluded_rows = (
+                    {
+                        i
+                        for i in df_smiles.index
+                        if df_smiles.loc[i, "canon_smiles"] in excluded_smiles
+                    }
+                    if excluded_smiles
+                    else set()
+                )
+                drop_rows = no_spectra | excluded_rows
+                if drop_rows:
+                    if no_spectra:
                         logger.warning(
-                            f"[{split}] Dropping {dropped} molecules with no valid spectra"
+                            f"[{split}] {len(missing)} spectra missing from loaded set "
+                            f"(e.g., MGF index {missing[0]}). Dropping "
+                            f"{len(no_spectra)} molecules with no valid spectra."
                         )
-                        # mol_idx_remap: old 0-based pos → new 0-based pos (for pair_distances)
-                        mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
-                        df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
-                else:
-                    for i in df_smiles.index:
-                        df_smiles.at[i, "indexes"] = [
-                            idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
-                        ]
+                    if excluded_rows:
+                        logger.info(
+                            f"[{split}] Dropping {len(excluded_rows)} molecules "
+                            f"(and every pair involving them) per "
+                            f"train_exclude_smiles_file -- "
+                            f"{len(df_smiles) - len(drop_rows)} / {len(df_smiles)} "
+                            "train molecules remain."
+                        )
+                    valid_rows = [i for i in df_smiles.index if i not in drop_rows]
+                    # mol_idx_remap: old 0-based pos → new 0-based pos (for pair_distances)
+                    mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
+                    df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
 
                 # Build unique_spectra from df_smiles indexes (index is now 0..n-1)
                 unique_spectra = [

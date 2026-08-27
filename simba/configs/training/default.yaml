@@ -42,6 +42,14 @@ sampling:
   # Drop train/val pairs whose raw MCES distance equals this value exactly (null = keep all)
   exclude_mces_value: null
 
+  # Drop TRAIN molecules (and every pair involving them) whose canonical SMILES
+  # appears in this file, one per line (null = keep all). val/test are never
+  # filtered by this -- only used for the CASMI-analog-discovery distance-
+  # exclusion experiment (see NOTES_014_2_ANALOG_DISCOVERY.md), so a query set
+  # can be held structurally distant from training without touching the split
+  # itself.
+  train_exclude_smiles_file: null
+
   # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
   add_identity_pairs: false
 
