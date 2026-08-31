@@ -413,6 +413,7 @@ class SimilarityModelMultitask(SimilarityModel):
         weights_sim2=None,  # weights of second similarity
         use_edit_distance_regresion=False,
         use_mces20_log_loss=True,
+        mces_log_loss_a=5,  # log_conversion's warp strength; implied pseudocount c = mces_max_value / a (a=5 -> log(MCES+8), a=40 -> log(MCES+1))
         use_fingerprints=False,
         use_precursor_mz_for_model=True,
         tau_gumbel_softmax=10,
@@ -529,6 +530,7 @@ class SimilarityModelMultitask(SimilarityModel):
             )
 
         self.use_mces20_log_loss = use_mces20_log_loss
+        self.mces_log_loss_a = mces_log_loss_a
         self.use_fingerprints = use_fingerprints
         if self.use_fingerprints:
             print("Fingerprints enabled!")
@@ -807,7 +809,11 @@ class SimilarityModelMultitask(SimilarityModel):
             loss2 = self._corn_loss(logits2, target_bins)
         else:
 
-            def log_conversion(x, a=5):
+            def log_conversion(x, a):
+                # Equivalent to training toward log(raw_mces + c) with implied
+                # pseudocount c = mces_max_value / a (derived and numerically
+                # verified in NOTES_014_2_ANALOG_DISCOVERY.md) -- a=5 (the
+                # historical hardcoded default) implies c=8; a=40 implies c=1.
                 scaling_factor = np.log(a + 1)
                 logits2_for_loss = torch.log((a + 1) - (a * x)) / scaling_factor
                 return 1 - logits2_for_loss
@@ -816,8 +822,8 @@ class SimilarityModelMultitask(SimilarityModel):
             # distance-based heads already have their own nonlinearity (exp), so
             # they skip it and train on plain MSE.
             if self.use_mces20_log_loss and "distance" not in self.head_mode:
-                logits2_for_loss = log_conversion(logits2)
-                target2_for_loss = log_conversion(target2)
+                logits2_for_loss = log_conversion(logits2, self.mces_log_loss_a)
+                target2_for_loss = log_conversion(target2, self.mces_log_loss_a)
             else:
                 logits2_for_loss = logits2
                 target2_for_loss = target2

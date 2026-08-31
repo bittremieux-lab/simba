@@ -58,6 +58,12 @@ tasks:
   mces:
     enabled: true
     use_log_loss: false
+    # Warp strength for use_log_loss's log_conversion -- only applies when
+    # use_log_loss=true. Implied pseudocount c = max_value / log_loss_a, i.e.
+    # training toward log(raw_mces + c): default 5 -> c=8 (historical
+    # hardcoded value); 40 -> c=1 (see NOTES_014_2_ANALOG_DISCOVERY.md for
+    # the derivation).
+    log_loss_a: 5
     threshold: 20
     max_value: 40
 

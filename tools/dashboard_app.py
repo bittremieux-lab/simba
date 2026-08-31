@@ -98,17 +98,39 @@ def _corn_corrected_mces(pred_mces: np.ndarray, bucket_pred: np.ndarray) -> np.n
     return np.clip(pred_mces, left, right)
 
 
+def _is_shown_experiment(name: str) -> bool:
+    """014_2 baseline + the budget-matched CASMI-distance sweep (T0-T12) +
+    excl14 (already budget-matched by construction, since 7,564 was taken
+    FROM its own eligible count -- see NOTES_014_2_ANALOG_DISCOVERY.md,
+    "Budget-matched exclusion sets") + the two log-loss runs (a5/a40).
+    Excludes the superseded, non-budget-matched excl4/6/8/10/12 runs --
+    narrowed on the user's request to just these comparisons.
+    """
+    return (
+        name == "014_2_mces_bucket_mlp_1gpu"
+        or name == "014_2_casmi_excl14_1gpu"
+        or name.startswith("014_2_casmi_budget7564_T")
+        or name in ("014_2_logloss_a5_1gpu", "014_2_logloss_a40_1gpu")
+    )
+
+
 def list_experiments() -> list[Path]:
     """Experiments that used the current ValMetricsCallback -- identified by
     having at least one binned-box PNG (older runs' metrics.csv has a
     different, incompatible schema: Spearman columns instead of val_mae_mces,
-    no binned-box plots)."""
+    no binned-box plots).
+
+    Filtered per _is_shown_experiment -- narrowed on the user's request
+    rather than showing every experiment in EXPERIMENTS_DIR.
+    """
     if not EXPERIMENTS_DIR.is_dir():
         return []
     return sorted(
         d
         for d in EXPERIMENTS_DIR.iterdir()
-        if d.is_dir() and any(d.glob("mces_binned_box_*_step*.png"))
+        if d.is_dir()
+        and _is_shown_experiment(d.name)
+        and any(d.glob("mces_binned_box_*_step*.png"))
     )
 
 
