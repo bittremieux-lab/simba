@@ -50,6 +50,20 @@ sampling:
   # itself.
   train_exclude_smiles_file: null
 
+  # Extra MGF of synthetic, ICEBERG-predicted spectra to make available for
+  # TRAIN molecules only (null = disabled, no effect on any run that doesn't
+  # set this -- see NOTES_014_2_ICEBERG_AUGMENTATION.md). Molecules present
+  # in this file get their synthetic spectrum indexes recorded separately
+  # from their real ones; iceberg_spectra_prob controls how often a
+  # synthetic one gets drawn instead.
+  iceberg_mgf_path: null
+
+  # Per-sample probability of drawing a synthetic ICEBERG spectrum instead
+  # of a real one for a train molecule that has both (only used when
+  # iceberg_mgf_path is set; falls back to a real spectrum whenever a
+  # molecule has no synthetic ones, regardless of this value).
+  iceberg_spectra_prob: 0.0
+
   # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
   add_identity_pairs: false
 

@@ -101,6 +101,8 @@ def run(
     mces_bucket_use_product: bool = False,
     bin_width: float = 0.01,
     max_mz: float = 1100.0,
+    d_model: int = 256,
+    n_layers: int = 5,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     out_dir = Path(output_dir)
@@ -114,6 +116,8 @@ def run(
         use_mces_bucket_head=True,
         mces_bucket_use_mlp=mces_bucket_use_mlp,
         mces_bucket_use_product=mces_bucket_use_product,
+        d_model=d_model,
+        n_layers=n_layers,
     )
 
     print(
@@ -189,6 +193,20 @@ def main():
     )
     p.add_argument(
         "--max_mz", type=float, default=1100.0, help="Plain-cosine max m/z (Da)"
+    )
+    p.add_argument(
+        "--d_model",
+        type=int,
+        default=256,
+        help="Must match the checkpoint's model.transformer.d_model -- the checkpoint "
+        "itself doesn't record this, so a mismatch silently drops weights (strict=False) "
+        "instead of erroring",
+    )
+    p.add_argument(
+        "--n_layers",
+        type=int,
+        default=5,
+        help="Must match the checkpoint's model.transformer.n_layers (see --d_model)",
     )
     args = p.parse_args()
     run(**vars(args))

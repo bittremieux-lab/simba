@@ -240,6 +240,49 @@ def load_dataset(cfg: DictConfig):
                     mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
                     df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
 
+                # ICEBERG train-spectra-augmentation (train split only -- see
+                # NOTES_014_2_ICEBERG_AUGMENTATION.md): load a separate MGF of
+                # synthetic, ICEBERG-predicted spectra and record each
+                # matched molecule's synthetic spectrum indexes in a new
+                # df_smiles column, kept apart from "indexes" (real spectra).
+                # CustomDatasetMultitasking._sample_spectrum_index reads this
+                # column to draw a synthetic spectrum with probability
+                # cfg.sampling.iceberg_spectra_prob instead of a real one.
+                # No effect whatsoever when iceberg_mgf_path is unset (the
+                # default for every existing experiment).
+                df_smiles["synthetic_indexes"] = [[] for _ in range(len(df_smiles))]
+                iceberg_mgf_path = getattr(cfg.sampling, "iceberg_mgf_path", None)
+                if split == "train" and iceberg_mgf_path:
+                    iceberg_spectra = load_spectra(
+                        iceberg_mgf_path,
+                        cfg,
+                        n_samples=-1,
+                        use_only_protonized_adducts=use_only_protonized,
+                    )
+                    canon_to_row = {
+                        df_smiles.loc[i, "canon_smiles"]: i for i in df_smiles.index
+                    }
+                    n_matched_spectra = 0
+                    matched_molecules = set()
+                    for spec in iceberg_spectra:
+                        row = canon_to_row.get(spec.smiles)
+                        if row is None:
+                            continue
+                        new_idx = len(original_spectra)
+                        original_spectra.append(spec)
+                        df_smiles.at[row, "synthetic_indexes"] = [
+                            *df_smiles.loc[row, "synthetic_indexes"],
+                            new_idx,
+                        ]
+                        n_matched_spectra += 1
+                        matched_molecules.add(row)
+                    logger.info(
+                        f"[{split}] iceberg_mgf_path={iceberg_mgf_path}: "
+                        f"{n_matched_spectra} synthetic spectra matched to "
+                        f"{len(matched_molecules)} / {len(df_smiles)} train molecules "
+                        f"(iceberg_spectra_prob={cfg.sampling.get('iceberg_spectra_prob', 0.0)})"
+                    )
+
                 # Build unique_spectra from df_smiles indexes (index is now 0..n-1)
                 unique_spectra = [
                     original_spectra[df_smiles.loc[i, "indexes"][0]]
@@ -640,6 +683,7 @@ def prepare_data(
         use_ion_mode=cfg.model.features.use_ion_mode,
         precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
         precursor_noise_mode=cfg.sampling.get("precursor_noise_mode", "legacy"),
+        iceberg_spectra_prob=cfg.sampling.get("iceberg_spectra_prob", 0.0),
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(

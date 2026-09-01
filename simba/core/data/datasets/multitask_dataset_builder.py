@@ -45,6 +45,7 @@ class MultitaskDataBuilder:
         use_ion_mode: bool = False,
         precursor_mass_mode: str = "measured",
         precursor_noise_mode: str = "legacy",
+        iceberg_spectra_prob: float = 0.0,
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -74,6 +75,12 @@ class MultitaskDataBuilder:
             Passed through to the built dataset, which applies it as the
             training-time precursor-mass augmentation mode -- see
             `Augmentation.augment`'s `precursor_noise_mode` for the options.
+        iceberg_spectra_prob: float
+            Passed through to the built dataset, which uses it as the
+            per-sample probability of drawing a synthetic ICEBERG-predicted
+            spectrum instead of a real one for a molecule that has both
+            (only meaningful for the train split -- val/test use
+            deterministic first/last selection regardless).
 
         Returns
         -------
@@ -244,6 +251,7 @@ class MultitaskDataBuilder:
         return CustomDatasetMultitasking(
             dictionary_data,
             training=training,
+            iceberg_spectra_prob=iceberg_spectra_prob,
             mz=mz,
             intensity=intensity,
             precursor_mass=precursor_mass,

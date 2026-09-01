@@ -394,6 +394,8 @@ def run(
     mces_bucket_use_mlp: bool = False,
     mces_bucket_use_product: bool = False,
     min_peaks: int | None = None,
+    d_model: int = 256,
+    n_layers: int = 5,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -439,6 +441,8 @@ def run(
         use_mces_bucket_head=corn_corrected,
         mces_bucket_use_mlp=mces_bucket_use_mlp,
         mces_bucket_use_product=mces_bucket_use_product,
+        d_model=d_model,
+        n_layers=n_layers,
     )
 
     print("\nEmbedding real test spectra ...")
@@ -652,6 +656,20 @@ def main():
             "simba/configs/data/default.yaml and all data-prep scripts) "
             "alongside the unrestricted full-test-set numbers."
         ),
+    )
+    p.add_argument(
+        "--d_model",
+        type=int,
+        default=256,
+        help="Must match the checkpoint's model.transformer.d_model -- the checkpoint "
+        "itself doesn't record this, so a mismatch silently drops weights (strict=False) "
+        "instead of erroring",
+    )
+    p.add_argument(
+        "--n_layers",
+        type=int,
+        default=5,
+        help="Must match the checkpoint's model.transformer.n_layers (see --d_model)",
     )
     args = p.parse_args()
     run(**vars(args))

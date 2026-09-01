@@ -58,12 +58,23 @@ def load_model(
     mces_bucket_bin_edges=(2.0, 4.0, 6.0, 8.0),
     mces_bucket_use_mlp: bool = False,
     mces_bucket_use_product: bool = False,
+    d_model: int = 256,
+    n_layers: int = 5,
 ) -> SimilarityModelMultitask:
+    """d_model/n_layers default to 013-014_x's own architecture size (the
+    only sizes ever trained so far) -- MUST be overridden to match whatever
+    a given checkpoint was actually trained with (e.g. the bigger-model
+    experiment, d_model=384/n_layers=8). The checkpoint itself doesn't
+    record these (SimilarityModelMultitask never calls
+    save_hyperparameters()), so load_from_checkpoint can't infer them --
+    get this wrong and strict=False below silently drops every
+    shape-mismatched weight instead of erroring, loading a mostly-random
+    model with no warning."""
     model = SimilarityModelMultitask.load_from_checkpoint(
         checkpoint_path,
         map_location=device,
-        d_model=256,
-        n_layers=5,
+        d_model=d_model,
+        n_layers=n_layers,
         n_classes=11,
         use_gumbel=False,
         lr=1e-4,
@@ -512,6 +523,8 @@ def run(
     corn_corrected: bool = False,
     mces_bucket_use_mlp: bool = False,
     mces_bucket_use_product: bool = False,
+    d_model: int = 256,
+    n_layers: int = 5,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -571,6 +584,8 @@ def run(
         use_mces_bucket_head=corn_corrected,
         mces_bucket_use_mlp=mces_bucket_use_mlp,
         mces_bucket_use_product=mces_bucket_use_product,
+        d_model=d_model,
+        n_layers=n_layers,
     )
 
     if force_ce_zero:
@@ -709,6 +724,20 @@ def main():
         "--mces_bucket_use_product",
         action="store_true",
         help="Must match the checkpoint's model.tasks.mces_bucket.use_product",
+    )
+    p.add_argument(
+        "--d_model",
+        type=int,
+        default=256,
+        help="Must match the checkpoint's model.transformer.d_model -- the checkpoint "
+        "itself doesn't record this, so a mismatch silently drops weights (strict=False) "
+        "instead of erroring",
+    )
+    p.add_argument(
+        "--n_layers",
+        type=int,
+        default=5,
+        help="Must match the checkpoint's model.transformer.n_layers (see --d_model)",
     )
     args = p.parse_args()
     run(**vars(args))
