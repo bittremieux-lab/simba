@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from simba.core.data.weighted_sampling import SimilarityWeightSampler
 from simba.core.models.spectrum_encoder import (
     SpectrumTransformerEncoderCustom,
 )
@@ -294,18 +293,6 @@ class SimilarityModel(pl.LightningModule):
         return self.state_dict().keys()
 
 
-# How the second-similarity ("emb_sim_2") score is computed from emb0/emb1 in
-# compute_from_embeddings, when use_cosine_distance=True:
-#   cosine_relu     - 2-layer projection head, final ReLU, cosine similarity
-#                     (original SIMBA head).
-#   cosine_no_head  - no projection layers; cosine similarity directly on
-#                     emb0/emb1 (Sentence-BERT / MS2DeepScore style).
-HEAD_MODES = (
-    "cosine_relu",
-    "cosine_no_head",
-)
-
-
 class SimilarityModelMultitask(SimilarityModel):
     """It receives a set of pairs of molecules and it must train the similarity model based on it. Embeds spectra."""
 
@@ -318,19 +305,12 @@ class SimilarityModelMultitask(SimilarityModel):
         lr=None,
         use_element_wise=True,
         use_cosine_distance=True,  # element wise instead of concat for mixing info between embeddings
-        head_mode="cosine_relu",  # one of HEAD_MODES; only applies when use_cosine_distance=True
         mces_max_value=40.0,  # must match model.tasks.mces.max_value; used by the mces_bucket head
         use_mces_bucket_head=False,  # optional second target: CORN-style ordinal classification on MCES buckets
         mces_bucket_bin_edges=None,  # required (from config) when use_mces_bucket_head=True
         mces_bucket_use_mlp=False,
-        mces_bucket_use_product=False,
-        mces_bucket_loss_weight=1.0,  # only used when USE_LEARNABLE_MULTITASK=False and mces_bucket_learnable_weight=False
-        mces_bucket_learnable_weight=False,  # learnable log_sigma3 for JUST the bucket task, independent of USE_LEARNABLE_MULTITASK
-        weights_sim2=None,  # weights of second similarity
-        use_mces20_log_loss=True,
-        use_fingerprints=False,
+        mces_bucket_loss_weight=1.0,
         use_precursor_mz_for_model=True,
-        USE_LEARNABLE_MULTITASK=True,
         use_adduct=False,
         use_ce=False,
         use_ion_activation=False,
@@ -353,20 +333,9 @@ class SimilarityModelMultitask(SimilarityModel):
             use_ion_mode=use_ion_mode,
         )
         self.weights = weights
-        if head_mode not in HEAD_MODES:
-            raise ValueError(
-                f"head_mode must be one of {HEAD_MODES}, got {head_mode!r}"
-            )
-        self.head_mode = head_mode
         self.mces_max_value = mces_max_value
 
         self.dropout = nn.Dropout(p=dropout)
-        self.weights_sim2 = weights_sim2
-
-        self.linear2 = nn.Linear(d_model, d_model)
-        self.linear2_cossim = nn.Linear(
-            d_model, d_model
-        )  # Extra linear layer if cosine similarity is used
 
         self.use_mces_bucket_head = use_mces_bucket_head
         if self.use_mces_bucket_head:
@@ -377,10 +346,8 @@ class SimilarityModelMultitask(SimilarityModel):
             # +1 for the open-ended top bin, +1 for the singleton "exactly 0" bin
             self.mces_bucket_n_classes = len(mces_bucket_bin_edges) + 2
             self.mces_bucket_use_mlp = mces_bucket_use_mlp
-            self.mces_bucket_use_product = mces_bucket_use_product
             self.mces_bucket_loss_weight = mces_bucket_loss_weight
-            self.mces_bucket_learnable_weight = mces_bucket_learnable_weight
-            bucket_input_dim = d_model * 2 if mces_bucket_use_product else d_model
+            bucket_input_dim = d_model
             if mces_bucket_use_mlp:
                 self.mces_bucket_mlp = nn.Sequential(
                     nn.Linear(bucket_input_dim, d_model),
@@ -394,30 +361,10 @@ class SimilarityModelMultitask(SimilarityModel):
                 bucket_head_input_dim, self.mces_bucket_n_classes - 1
             )
 
-        self.use_mces20_log_loss = use_mces20_log_loss
-        self.use_fingerprints = use_fingerprints
-        if self.use_fingerprints:
-            print("Fingerprints enabled!")
-            self.linear_fingerprint_0 = nn.Linear(2048, d_model)
-            self.linear_fingerprint_1 = nn.Linear(d_model, d_model)
-            proj_dim = d_model // 2  # 2048 → d_model//2
-            self.linear_fp0 = nn.Linear(2048, proj_dim)
-            self.linear_mix = nn.Linear(d_model + proj_dim, d_model)
-            self.norm_mix = nn.LayerNorm(d_model)
         self.use_precursor_mz_for_model = use_precursor_mz_for_model
 
-        # Initialize learnable log variance parameters for each loss
-        self.USE_LEARNABLE_MULTITASK = USE_LEARNABLE_MULTITASK
-        if USE_LEARNABLE_MULTITASK:
-            initial_log_sigma2 = -5.3
-            self.log_sigma2 = nn.Parameter(torch.tensor(initial_log_sigma2))
-        if self.use_mces_bucket_head and (
-            USE_LEARNABLE_MULTITASK or mces_bucket_learnable_weight
-        ):
-            self.log_sigma3 = nn.Parameter(torch.tensor(0.0))
-
     def forward(self, batch, return_spectrum_output=False):
-        # … compute raw emb0, emb1, apply relu, fingerprints, etc. …
+        # … compute raw emb0, emb1, apply relu, etc. …
 
         # nans to zeros
         batch["precursor_mass_0"] = torch.nan_to_num(
@@ -524,12 +471,6 @@ class SimilarityModelMultitask(SimilarityModel):
         emb0 = self.relu(emb0)
         emb1 = self.relu(emb1)
 
-        if self.use_fingerprints:
-            fp0 = batch["fingerprint_0"].float()  # (B, 2048)
-            fp_proj = self.dropout(self.relu(self.linear_fp0(fp0)))  # (B, d_model//2)
-            joint = torch.cat([emb0, fp_proj], dim=-1)  # (B, d_model + d_model//2)
-            emb0 = self.dropout(self.norm_mix(self.relu(self.linear_mix(joint))))
-
         if return_spectrum_output:
             return (*self.compute_from_embeddings(emb0, emb1), emb0, emb1)
         else:
@@ -537,18 +478,11 @@ class SimilarityModelMultitask(SimilarityModel):
 
     def training_step(self, batch, batch_idx):
         logits_list = self(batch)
-        logits2 = logits_list[0]  # [B] similarity — see HEAD_MODES
+        logits2 = logits_list[0]  # [B] similarity
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
 
         loss = self.step(batch, batch_idx, logits_list=logits_list)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-
-        if self.USE_LEARNABLE_MULTITASK:
-            self.log("log_sigma2", self.log_sigma2, on_step=True, on_epoch=False)
-        if self.use_mces_bucket_head and (
-            self.USE_LEARNABLE_MULTITASK or self.mces_bucket_learnable_weight
-        ):
-            self.log("log_sigma3", self.log_sigma3, on_step=True, on_epoch=False)
 
         return {
             "loss": loss,
@@ -559,7 +493,7 @@ class SimilarityModelMultitask(SimilarityModel):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """Validation step — returns loss + predictions for the MCES scatter plot."""
         logits_list = self(batch)
-        logits2 = logits_list[0]  # [B] similarity — see HEAD_MODES
+        logits2 = logits_list[0]  # [B] similarity
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
 
         loss = self.step(batch, batch_idx, logits_list=logits_list)
@@ -585,38 +519,8 @@ class SimilarityModelMultitask(SimilarityModel):
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device)
         target2 = target2.view(-1)
 
-        def log_conversion(x, a=5):
-            scaling_factor = np.log(a + 1)
-            logits2_for_loss = torch.log((a + 1) - (a * x)) / scaling_factor
-            return 1 - logits2_for_loss
-
-        if self.use_mces20_log_loss:
-            logits2_for_loss = log_conversion(logits2)
-            target2_for_loss = log_conversion(target2)
-        else:
-            logits2_for_loss = logits2
-            target2_for_loss = target2
-
-        if self.weights_sim2 is not None:
-            squared_diff = (
-                logits2_for_loss.view(-1, 1).float()
-                - target2_for_loss.view(-1, 1).float()
-            ) ** 2
-            weight_mask = SimilarityWeightSampler.compute_sample_weights(
-                molecule_pairs=None,
-                weights=self.weights_sim2,
-                use_molecule_pair_object=False,
-                bining_sim1=False,
-                targets=target2.cpu().numpy(),
-                normalize=False,
-            )
-            weight_mask = torch.tensor(weight_mask).to(self.device)
-            loss2 = (squared_diff.view(-1, 1) * weight_mask.view(-1, 1).float()).mean()
-        else:
-            squared_diff = (
-                logits2.view(-1, 1).float() - target2.view(-1, 1).float()
-            ) ** 2
-            loss2 = squared_diff.view(-1, 1).mean()
+        squared_diff = (logits2.view(-1, 1).float() - target2.view(-1, 1).float()) ** 2
+        loss2 = squared_diff.view(-1, 1).mean()
 
         if self.use_mces_bucket_head:
             raw_mces_target = (1.0 - target2) * self.mces_max_value
@@ -632,18 +536,9 @@ class SimilarityModelMultitask(SimilarityModel):
                 "loss_mces_bucket", loss3, on_step=True, on_epoch=True, prog_bar=False
             )
 
-        # Combine the losses using learned weights:
-        if self.USE_LEARNABLE_MULTITASK:
-            loss = torch.exp(-self.log_sigma2) * loss2 + self.log_sigma2
-            if use_mces_bucket:
-                loss = loss + torch.exp(-self.log_sigma3) * loss3 + self.log_sigma3
-        else:
-            loss = loss2
-            if use_mces_bucket:
-                if self.mces_bucket_learnable_weight:
-                    loss = loss + torch.exp(-self.log_sigma3) * loss3 + self.log_sigma3
-                else:
-                    loss = loss + (self.mces_bucket_loss_weight * loss3)
+        loss = loss2
+        if use_mces_bucket:
+            loss = loss + (self.mces_bucket_loss_weight * loss3)
         return loss
 
     def configure_optimizers(self):
@@ -656,32 +551,10 @@ class SimilarityModelMultitask(SimilarityModel):
         and run all the FC layers + similarity heads to produce the
         emb_sim_2 similarity score (and optional emb_sim_3 bucket logits).
         """
-        # note: assume emb0/emb1 already had model.relu and fingerprint logic applied
-        # now do exactly what you had in compute_emb_from_existing_embeddings:
-        if self.use_cosine_distance:
-            # transform for cos-sim
-            def transform_relu(x):
-                x = self.linear2(x)
-                x = self.dropout(x)
-                x = self.relu(x)
-                return self.relu(self.linear2_cossim(x))
-
-            if self.head_mode == "cosine_relu":
-                e0, e1 = transform_relu(emb0), transform_relu(emb1)
-                emb_sim_2 = self.cosine_similarity(e0, e1)
-            elif self.head_mode == "cosine_no_head":
-                emb_sim_2 = self.cosine_similarity(emb0, emb1)
-            else:
-                raise ValueError(f"Unknown head_mode: {self.head_mode!r}")
-        else:
-            x = self.relu(self.linear2(emb0 + emb1))
-            # clamp to ≤1
-            emb_sim_2 = x - self.relu(x - 1)
+        emb_sim_2 = self.cosine_similarity(emb0, emb1)
 
         if self.use_mces_bucket_head:
             bucket_repr = torch.abs(emb0 - emb1)
-            if self.mces_bucket_use_product:
-                bucket_repr = torch.cat([bucket_repr, emb0 * emb1], dim=-1)
             if self.mces_bucket_use_mlp:
                 bucket_repr = self.mces_bucket_mlp(bucket_repr)
             emb_sim_3 = self.mces_bucket_head(

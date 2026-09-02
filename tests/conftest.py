@@ -104,8 +104,6 @@ def mock_model(mocker, hydra_config):
         n_layers=int(cfg.model.transformer.n_layers),
         use_element_wise=True,
         use_cosine_distance=cfg.model.tasks.cosine_similarity.use_cosine_distance,
-        use_fingerprints=cfg.model.tasks.fingerprints.enabled,
-        USE_LEARNABLE_MULTITASK=cfg.model.multitasking.learnable,
     )
     model.eval()
 

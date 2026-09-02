@@ -9,7 +9,6 @@ from simba.core.chemistry.chem_utils import (
     normalize_instrument_type,
     theoretical_precursor_mz,
 )
-from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.datasets.multitask_dataset import (
     CustomDatasetMultitasking,
 )
@@ -35,7 +34,6 @@ class MultitaskDataBuilder:
         molecule_pairs_input: MoleculePairsOpt,
         max_num_peaks: int,
         training: bool = False,  # shuffle the spectrum 0 and 1 for data augmentation
-        use_fingerprints: bool = False,
         use_adduct: bool = False,
         use_ce: bool = False,
         use_ion_activation: bool = False,
@@ -56,8 +54,6 @@ class MultitaskDataBuilder:
             The maximum number of peaks in a spectrum. Other peaks will be removed.
         training: bool
             Dataset for training or not.
-        use_fingerprints: bool
-            Use fingerprints or not.
         use_adduct: bool
             Use adduct information or not.
         use_ce: bool
@@ -212,22 +208,10 @@ class MultitaskDataBuilder:
             raise ValueError("extra_distances must be provided for multitask training.")
         mces = molecule_pairs.extra_distances.reshape(-1, 1)
 
-        if use_fingerprints:
-            logger.info("Computing molecular fingerprints...")
-            fingerprint_0 = np.array(
-                [
-                    np.array(Tanimoto.compute_fingerprint(s.params["smiles"]))
-                    for s in molecule_pairs_input.spectra
-                ]
-            )
-        else:
-            fingerprint_0 = np.array([0 for m in molecule_pairs_input.spectra])
-
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.pair_distances[:, 0].reshape(-1, 1),
             "index_unique_1": molecule_pairs_input.pair_distances[:, 1].reshape(-1, 1),
             "mces": mces,
-            # "fingerprint_0": fingerprint_0,
         }
 
         return CustomDatasetMultitasking(
@@ -240,8 +224,6 @@ class MultitaskDataBuilder:
             instrument=instrument,
             precursor_noise_mode=precursor_noise_mode,
             df_smiles=molecule_pairs_input.df_smiles,
-            use_fingerprints=use_fingerprints,
-            fingerprint_0=fingerprint_0,
             max_num_peaks=max_num_peaks,
             use_adduct=use_adduct,
             use_ion_mode=use_ion_mode,

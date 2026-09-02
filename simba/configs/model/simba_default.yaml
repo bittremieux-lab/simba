@@ -15,7 +15,6 @@ d_model: 256  # Alias for transformer.d_model
 n_layers: 5  # Alias for transformer.n_layers
 use_adduct: false  # Alias for features.use_adduct
 use_cosine_distance: true  # Alias for tasks.cosine_similarity.use_cosine_distance
-categorical_adducts: false  # Alias for features.categorical_adducts
 adduct_mass_map_csv: null  # For adduct configuration
 use_ce: false  # Alias for features.use_ce
 use_ion_activation: false  # Alias for features.use_ion_activation
@@ -30,7 +29,6 @@ features:
   use_adduct: false
   use_precursor_mz: true
   use_element_wise: true
-  categorical_adducts: false
   use_only_protonized_adducts: false
   use_ion_mode: false
 
@@ -44,7 +42,6 @@ tasks:
   # MCES (Maximum Common Edge Substructure) task
   mces:
     enabled: true
-    use_log_loss: false
     threshold: 20
     max_value: 40
 
@@ -52,11 +49,6 @@ tasks:
   cosine_similarity:
     enabled: true
     use_cosine_distance: true
-    # How the similarity score is computed: "cosine_relu" (projection head,
-    # then cosine similarity) or "cosine_no_head" (cosine similarity
-    # directly on the raw embeddings). See HEAD_MODES in
-    # simba/core/models/similarity_models.py.
-    head_mode: "cosine_relu"
 
   # Optional second target: an auxiliary CORN-style ordinal classification
   # head on MCES, trained in parallel with the primary task. Buckets: 0 is
@@ -67,23 +59,11 @@ tasks:
     enabled: false
     bin_edges: [2, 4, 6, 8]
     use_mlp: false
-    use_product: false
-    loss_weight: 1.0  # fixed weight; only used when learnable_weight=false
-    learnable_weight: false  # if true, learn this task's loss weight instead
-
-  # Tanimoto similarity
-  tanimoto:
-    enabled: false
-
-  # Molecular fingerprints
-  fingerprints:
-    enabled: false
+    loss_weight: 1.0
 
 # Multitasking
 multitasking:
   enabled: true
-  learnable: true
-  use_loss_weights_second_similarity: false
 
 # Data columns (for multitasking)
 data_columns:
@@ -95,6 +75,3 @@ pretrained:
   load_pretrained: false
   load_maldi_embedder: false
   maldi_embedder_path: null
-
-# Classification threshold
-threshold_class: 0.7

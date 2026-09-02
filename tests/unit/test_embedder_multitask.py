@@ -17,11 +17,7 @@ class TestEmbedderMultitask:
             "lr": 0.001,
             "use_element_wise": True,
             "use_cosine_distance": True,
-            "weights_sim2": None,
-            "use_mces20_log_loss": True,
-            "use_fingerprints": False,
             "use_precursor_mz_for_model": True,
-            "USE_LEARNABLE_MULTITASK": True,
             "use_adduct": True,
             "use_ce": False,
             "use_ion_activation": False,
@@ -65,16 +61,8 @@ class TestEmbedderMultitask:
     def test_init_basic(self, embedder_config):
         embedder = SimilarityModelMultitask(**embedder_config)
 
-        assert embedder.head_mode == "cosine_relu"
-        assert embedder.linear2 is not None
-
-    def test_init_with_fingerprints(self, embedder_config):
-        embedder_config["use_fingerprints"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        assert embedder.use_fingerprints is True
-        assert embedder.linear_fingerprint_0 is not None
-        assert embedder.linear_fingerprint_1 is not None
+        assert embedder.use_cosine_distance is True
+        assert embedder.use_mces_bucket_head is False
 
     def test_configure_optimizers(self, embedder):
         optimizer = embedder.configure_optimizers()
@@ -82,9 +70,9 @@ class TestEmbedderMultitask:
         assert optimizer is not None
         assert hasattr(optimizer, "step")
 
-    def test_compute_from_embeddings(self, embedder):
+    def test_compute_from_embeddings(self, embedder, embedder_config):
         batch_size = 4
-        d_model = embedder.linear2.in_features
+        d_model = embedder_config["d_model"]
 
         emb0 = torch.randn(batch_size, d_model)
         emb1 = torch.randn(batch_size, d_model)
@@ -117,25 +105,7 @@ class TestEmbedderMultitask:
         assert emb0.shape[0] == batch_size
         assert emb1.shape[0] == batch_size
 
-    def test_forward_with_fingerprints(self, embedder_config, sample_batch):
-        embedder_config["use_fingerprints"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        # Add fingerprints to batch
-        batch_size = sample_batch["mz_0"].shape[0]
-        sample_batch["fingerprint_0"] = torch.randn(batch_size, 2048)
-        sample_batch["fingerprint_1"] = torch.randn(batch_size, 2048)
-
-        embedder.eval()
-        with torch.no_grad():
-            result = embedder.forward(sample_batch)
-
-        assert len(result) == 1
-        (emb_sim_2,) = result
-        assert emb_sim_2.shape[0] == batch_size
-
     def test_forward_without_adduct(self, embedder_config, sample_batch):
-        # Test with use_adduct=False but keep USE_LEARNABLE_MULTITASK=True
         embedder_config["use_adduct"] = False
         embedder = SimilarityModelMultitask(**embedder_config)
 
@@ -161,7 +131,6 @@ class TestEmbedderMultitask:
         assert isinstance(loss, dict)
         assert "loss" in loss
         assert "mces_pred" in loss and "mces_target" in loss
-        # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
         assert not torch.isnan(loss["loss"])
 
     def test_test_step(self, embedder, sample_batch):
@@ -173,5 +142,4 @@ class TestEmbedderMultitask:
         # If it is defined, it should return a tensor
         if result is not None:
             assert isinstance(result, torch.Tensor)
-            # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
             assert not torch.isnan(result)

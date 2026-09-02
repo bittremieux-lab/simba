@@ -74,8 +74,6 @@ class TestInferencePipeline:
             n_layers=int(hydra_config.model.transformer.n_layers),
             use_element_wise=True,
             use_cosine_distance=hydra_config.model.tasks.cosine_similarity.use_cosine_distance,
-            use_fingerprints=hydra_config.model.tasks.fingerprints.enabled,
-            USE_LEARNABLE_MULTITASK=hydra_config.model.multitasking.learnable,
         )
         model.eval()
 
@@ -104,8 +102,6 @@ class TestInferencePipeline:
             n_layers=int(hydra_config.model.transformer.n_layers),
             use_element_wise=True,
             use_cosine_distance=hydra_config.model.tasks.cosine_similarity.use_cosine_distance,
-            use_fingerprints=hydra_config.model.tasks.fingerprints.enabled,
-            USE_LEARNABLE_MULTITASK=hydra_config.model.multitasking.learnable,
         )
         model.eval()
 

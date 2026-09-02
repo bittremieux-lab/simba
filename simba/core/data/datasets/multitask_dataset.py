@@ -25,8 +25,6 @@ class CustomDatasetMultitasking(Dataset):
         instrument=None,
         precursor_noise_mode="legacy",
         df_smiles=None,
-        use_fingerprints=False,
-        fingerprint_0=None,
         max_num_peaks=None,
         use_adduct=False,
         ionmode=None,
@@ -51,15 +49,12 @@ class CustomDatasetMultitasking(Dataset):
         self.instrument = instrument
         self.precursor_noise_mode = precursor_noise_mode
         self.df_smiles = df_smiles  ### df with rows smiles, indexes
-        self.use_fingerprints = use_fingerprints
         self.use_adduct = use_adduct
         self.use_ce = use_ce
         self.use_ion_activation = use_ion_activation
         self.use_ion_method = use_ion_method
         self.use_ion_mode = use_ion_mode
 
-        if self.use_fingerprints:
-            self.fingerprint_0 = fingerprint_0
         self.max_num_peaks = max_num_peaks
 
         self.adduct_mass = adduct
@@ -137,12 +132,6 @@ class CustomDatasetMultitasking(Dataset):
             )
             dictionary["ion_method_1"] = np.zeros(
                 (len_data, len(IONIZATION_METHODS)), dtype=np.float32
-            )
-
-        if self.use_fingerprints:
-            print("Defining fingerprints ...")
-            dictionary["fingerprint_0"] = np.zeros(
-                (len_data, 2048), dtype=np.int32
             )
 
         for idx in tqdm(range(0, len_data)):
@@ -225,11 +214,6 @@ class CustomDatasetMultitasking(Dataset):
                     indexes_original_1
                 ].astype(np.float32)
 
-            if self.use_fingerprints:
-                dictionary["fingerprint_0"][idx] = self.fingerprint_0[
-                    indexes_original_0
-                ].astype(np.float32)
-
         return dictionary
 
     def __getitem__(self, idx):
@@ -279,23 +263,6 @@ class CustomDatasetMultitasking(Dataset):
         if self.instrument is not None:
             spectrum_sample["instrument_0"] = self.instrument[idx_0_original]
             spectrum_sample["instrument_1"] = self.instrument[idx_1_original]
-
-        if self.use_fingerprints:
-            ind = int(idx_0[0])
-            if self.training:
-                if (ind % 2) == 0:
-                    spectrum_sample["fingerprint_0"] = self.fingerprint_0[
-                        ind
-                    ].astype(np.float32)
-                else:
-                    # return 0s
-                    spectrum_sample["fingerprint_0"] = 0 * self.fingerprint_0[
-                        ind
-                    ].astype(np.float32)
-            else:
-                spectrum_sample["fingerprint_0"] = self.fingerprint_0[
-                    ind
-                ].astype(np.float32)
 
         if self.use_ion_mode:
             spectrum_sample["ionmode_0"] = self.ionmode[idx_0_original].astype(

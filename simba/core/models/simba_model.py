@@ -50,17 +50,12 @@ class Simba:
         use_cosine_distance = (
             self.config.model.tasks.cosine_similarity.use_cosine_distance
         )
-        use_fingerprint = self.config.model.tasks.fingerprints.enabled
-        use_learnable_multitask = self.config.model.multitasking.learnable
-
         model = SimilarityModelMultitask.load_from_checkpoint(
             file_path,
             d_model=d_model,
             n_layers=n_layers,
             use_element_wise=True,
             use_cosine_distance=use_cosine_distance,
-            use_fingerprints=use_fingerprint,
-            USE_LEARNABLE_MULTITASK=use_learnable_multitask,
             strict=False,
             use_adduct=self.config.model.features.use_adduct,
             use_ce=self.config.model.features.use_ce,
