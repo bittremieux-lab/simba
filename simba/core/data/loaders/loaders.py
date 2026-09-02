@@ -458,6 +458,8 @@ class LoadData:
         else:
             adduct = None
 
+        instrument = params.get("instrument_type")
+
         ce = params["ce"] if "ce" in params else None
         ia = params["ion_activation"] if "ion_activation" in params else None
         im = params["ionization_method"] if "ionization_method" in params else None
@@ -507,6 +509,7 @@ class LoadData:
             inchi_key=inchi_key,
             spectrum_hash=spectrum_hash_result,
             fold=params.get("fold", None),
+            instrument=instrument,
         )
 
         # postprocessing

@@ -1,8 +1,14 @@
 import copy
 
 import numpy as np
+from rdkit import Chem
+from rdkit.Chem.Descriptors import ExactMolWt
 
-from simba.core.chemistry.chem_utils import ADDUCT_TO_MASS
+from simba.core.chemistry.chem_utils import (
+    ADDUCT_TO_MASS,
+    normalize_instrument_type,
+    theoretical_precursor_mz,
+)
 from simba.core.chemistry.tanimoto import Tanimoto
 from simba.core.data.datasets.multitask_dataset import (
     CustomDatasetMultitasking,
@@ -37,6 +43,8 @@ class MultitaskDataBuilder:
         use_ion_activation: bool = False,
         use_ion_method: bool = False,
         use_ion_mode: bool = False,
+        precursor_mass_mode: str = "measured",
+        precursor_noise_mode: str = "legacy",
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -58,12 +66,22 @@ class MultitaskDataBuilder:
             Use adduct information or not.
         use_ce: bool
             Use collision energy or not.
+        precursor_mass_mode: str
+            "measured" (default): use each spectrum's own precursor m/z, as read
+            from the MGF. "theoretical": compute it instead from the molecule's
+            SMILES (RDKit ExactMolWt) and adduct, discarding the measured value.
+        precursor_noise_mode: str
+            Passed through to the built dataset, which applies it as the
+            training-time precursor-mass augmentation mode -- see
+            `Augmentation.augment`'s `precursor_noise_mode` for the options.
 
         Returns
         -------
         CustomDatasetMultitasking
             The Pytorch dataset.
         """
+        if precursor_mass_mode not in ("measured", "theoretical"):
+            raise ValueError(f"Unknown precursor_mass_mode: {precursor_mass_mode!r}")
         # copy spectrums to avoid overwriting
         print(
             f"DEBUG: Size of incoming spectra: {len(molecule_pairs_input.original_spectra)}"
@@ -128,6 +146,9 @@ class MultitaskDataBuilder:
             ),
             dtype=np.int32,
         )
+        instrument = np.full(
+            len(molecule_pairs.original_spectra), "unknown", dtype=object
+        )
 
         logger.info("Loading mz, intensity and precursor data ...")
         print(
@@ -141,8 +162,18 @@ class MultitaskDataBuilder:
             mz[i, 0:length] = np.array(spec.mz[0:length])
             intensity[i, 0:length] = np.array(spec.intensity[0:length])
 
-            precursor_mass[i] = spec.precursor_mz
+            if precursor_mass_mode == "theoretical":
+                mol = Chem.MolFromSmiles(spec.smiles)
+                neutral_mass = ExactMolWt(mol)
+                precursor_mass[i] = theoretical_precursor_mz(
+                    neutral_mass, spec.params["adduct"]
+                )
+            else:
+                precursor_mass[i] = spec.precursor_mz
             precursor_charge[i] = spec.precursor_charge
+            instrument[i] = normalize_instrument_type(
+                getattr(spec, "instrument", None)
+            )
 
             if use_ion_mode:
                 if (spec.ionmode is None) or (
@@ -217,6 +248,8 @@ class MultitaskDataBuilder:
             intensity=intensity,
             precursor_mass=precursor_mass,
             precursor_charge=precursor_charge,
+            instrument=instrument,
+            precursor_noise_mode=precursor_noise_mode,
             df_smiles=molecule_pairs_input.df_smiles,
             use_fingerprints=use_fingerprints,
             fingerprint_0=fingerprint_0,

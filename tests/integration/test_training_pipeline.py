@@ -356,8 +356,8 @@ class TestLoadMCES:
     def test_find_file_with_prefix(self, tmp_path):
         """Test finding files with specific prefix."""
         # Create test files
-        (tmp_path / "test_file_1.npy").write_bytes(b"")
-        (tmp_path / "test_file_2.npy").write_bytes(b"")
+        (tmp_path / "test_file_node0_chunk0.npy").write_bytes(b"")
+        (tmp_path / "test_file_node1_chunk0.npy").write_bytes(b"")
         (tmp_path / "other_file.npy").write_bytes(b"")
 
         found = LoadMCES.find_file(str(tmp_path), "test_file")
@@ -370,8 +370,8 @@ class TestLoadMCES:
         data1 = np.array([[0, 1, 0.5], [1, 2, 0.7]])
         data2 = np.array([[2, 3, 0.8], [3, 4, 0.6]])
 
-        np.save(tmp_path / "indexes_0.npy", data1)
-        np.save(tmp_path / "indexes_1.npy", data2)
+        np.save(tmp_path / "indexes_node0_chunk0.npy", data1)
+        np.save(tmp_path / "indexes_node1_chunk0.npy", data2)
 
         result = LoadMCES.load_raw_data(str(tmp_path), "indexes", partitions=2)
 

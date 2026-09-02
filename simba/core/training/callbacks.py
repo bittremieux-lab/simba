@@ -268,27 +268,29 @@ class ValMetricsCallback(Callback):
             return
         if not isinstance(outputs, dict):
             return
-        self._ed_preds.append(outputs["ed_pred"].numpy())
-        self._ed_targets.append(outputs["ed_target"].numpy())
+        # absent when the ED head is disabled
+        if "ed_pred" in outputs:
+            self._ed_preds.append(outputs["ed_pred"].numpy())
+            self._ed_targets.append(outputs["ed_target"].numpy())
         self._mces_preds.append(outputs["mces_pred"].float().numpy())
         self._mces_targets.append(outputs["mces_target"].float().numpy())
 
     def on_validation_epoch_end(self, trainer, pl_module):
-        if trainer.sanity_checking or not self._ed_preds:
+        if trainer.sanity_checking or not self._mces_preds:
             return
 
-        ed_pred = np.concatenate(self._ed_preds)
-        ed_target = np.concatenate(self._ed_targets)
         mces_pred = np.concatenate(self._mces_preds)
         mces_target = np.concatenate(self._mces_targets)
-
-        self._ed_preds.clear()
-        self._ed_targets.clear()
         self._mces_preds.clear()
         self._mces_targets.clear()
 
         step = trainer.global_step
-        self._plot_confusion(ed_pred, ed_target, step)
+        if self._ed_preds:
+            ed_pred = np.concatenate(self._ed_preds)
+            ed_target = np.concatenate(self._ed_targets)
+            self._ed_preds.clear()
+            self._ed_targets.clear()
+            self._plot_confusion(ed_pred, ed_target, step)
         self._plot_mces_scatter(mces_pred, mces_target, step)
 
     def _plot_confusion(self, pred, target, step):

@@ -65,6 +65,24 @@ tasks:
   cosine_similarity:
     enabled: true
     use_cosine_distance: true
+    # How the similarity score is computed: "cosine_relu" (projection head,
+    # then cosine similarity) or "cosine_no_head" (cosine similarity
+    # directly on the raw embeddings). See HEAD_MODES in
+    # simba/core/models/similarity_models.py.
+    head_mode: "cosine_relu"
+
+  # Optional second target: an auxiliary CORN-style ordinal classification
+  # head on MCES, trained in parallel with the primary task. Buckets: 0 is
+  # its own class (self-pairs); bin_edges are the upper edges of the
+  # remaining left-open/right-closed bins, e.g. [2,4,6,8] -> 0, (0,2],
+  # (2,4], (4,6], (6,8], (8,inf).
+  mces_bucket:
+    enabled: false
+    bin_edges: [2, 4, 6, 8]
+    use_mlp: false
+    use_product: false
+    loss_weight: 1.0  # fixed weight; only used when learnable_weight=false
+    learnable_weight: false  # if true, learn this task's loss weight instead
 
   # Tanimoto similarity
   tanimoto:

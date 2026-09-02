@@ -39,6 +39,33 @@ sampling:
   # Add high similarity pairs
   add_high_similarity_pairs: false
 
+  # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
+  add_identity_pairs: false
+
+  # Precursor mass base value: "measured" (read PEPMASS from the MGF, historical
+  # default) or "theoretical" (computed from SMILES via RDKit ExactMolWt + adduct
+  # arithmetic, ignoring the MGF's own value).
+  precursor_mass_mode: measured
+
+  # Training-time precursor-mass noise, applied on top of precursor_mass_mode:
+  # "legacy" (+/-1% uniform noise, historical default), "mist_cf" (MIST-CF/BUDDY-
+  # style Gaussian noise scaled by instrument ppm tolerance / 5), or "none".
+  precursor_noise_mode: legacy
+
+  # Only used when use_resampling=true and ED is disabled (no real ED
+  # values available): bucket edges (raw MCES) and per-bucket multiplier
+  # for the inverse-frequency training-weight scheme in prepare_data. The
+  # leading 0.0 splits out a dedicated "exactly 0" (self-pair) bucket from
+  # "(0,2.5]" -- without it they'd share one bucket's weight.
+  # len(mces_sampling_bucket_multipliers) must be len(mces_sampling_bin_edges) + 1.
+  mces_sampling_bin_edges: [0.0, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0]
+  mces_sampling_bucket_multipliers: [4.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+  # Within each non-self MCES bucket, pairs at/below this mass-difference
+  # quantile collectively get mass_tier_low_share of that bucket's weight.
+  mass_tier_quantile: 0.1
+  mass_tier_low_share: 0.5
+
 # Augmentation
 augmentation:
   enabled: false
@@ -50,3 +77,5 @@ hardware:
   accelerator: gpu
   devices: 1
   num_workers: 10
+  precision: "32-true"
+  strategy: "auto"

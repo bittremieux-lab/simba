@@ -3,6 +3,8 @@ import random
 
 import numpy as np
 
+from simba.core.chemistry.chem_utils import resample_precursor_mz
+
 
 class Augmentation:
     @staticmethod
@@ -22,7 +24,9 @@ class Augmentation:
         )
 
     @staticmethod
-    def augment(data_sample, training=False, max_num_peaks=None):
+    def augment(
+        data_sample, training=False, max_num_peaks=None, precursor_noise_mode="legacy"
+    ):
         new_sample = copy.deepcopy(data_sample)
         # new_sample = Augmentation.inversion(new_sample)
         # new_sample = Augmentation.add_noise_to_precursor_mass(new_sample)
@@ -34,9 +38,15 @@ class Augmentation:
             new_sample, max_peaks=max_num_peaks
         )
 
-        # precursor mass
+        # precursor mass noise: "legacy" = uniform +/-1%; "mist_cf" = Gaussian
+        # noise scaled by instrument ppm tolerance; "none" = no perturbation.
         # new_sample = Augmentation.add_false_precursor_masses_negatives(new_sample)
-        new_sample = Augmentation.add_false_precursor_masses_positives(new_sample)
+        if precursor_noise_mode == "legacy":
+            new_sample = Augmentation.add_false_precursor_masses_positives(new_sample)
+        elif precursor_noise_mode == "mist_cf":
+            new_sample = Augmentation.resample_precursor_masses_mist_cf(new_sample)
+        elif precursor_noise_mode != "none":
+            raise ValueError(f"Unknown precursor_noise_mode: {precursor_noise_mode!r}")
 
         new_sample = Augmentation.random_peak_dropout(new_sample)
         # normalize
@@ -154,16 +164,38 @@ class Augmentation:
         sample, max_noise=0.01, p_augmentation=0.2
     ):
         """
-        create a pair where the precursor masses are very different
+        Perturb each side's precursor mass independently by up to +/-max_noise
+        (fraction of that side's own precursor m/z), simulating instrument
+        measurement variability (legacy/Sebastian's noise step).
         """
 
         if random.random() < p_augmentation:
             added_noise_factor_0 = random.uniform(-max_noise, max_noise)
             added_noise_factor_1 = random.uniform(-max_noise, max_noise)
 
-            pmz = sample["precursor_mass_0"].copy()
-            sample["precursor_mass_0"] = pmz + added_noise_factor_0 * (pmz)
-            sample["precursor_mass_1"] = pmz + added_noise_factor_1 * (pmz)
+            pmz_0 = sample["precursor_mass_0"]
+            pmz_1 = sample["precursor_mass_1"]
+            sample["precursor_mass_0"] = pmz_0 + added_noise_factor_0 * pmz_0
+            sample["precursor_mass_1"] = pmz_1 + added_noise_factor_1 * pmz_1
+            return sample
+        else:
+            return sample
+
+    @staticmethod
+    def resample_precursor_masses_mist_cf(sample, p_augmentation=0.2):
+        """
+        MIST-CF/BUDDY-style precursor m/z resampling: replace each side's
+        precursor mass with a Gaussian-perturbed value, std = instrument-
+        specific ppm tolerance / 5. Falls back to the "unknown" instrument
+        tier when a side's instrument type isn't present in `sample`.
+        """
+        if random.random() < p_augmentation:
+            for suffix in ("_0", "_1"):
+                pmz = sample["precursor_mass" + suffix]
+                instrument = sample.get("instrument" + suffix, "unknown")
+                sample["precursor_mass" + suffix] = resample_precursor_mz(
+                    pmz, instrument, np.random
+                )
             return sample
         else:
             return sample

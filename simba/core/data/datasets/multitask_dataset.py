@@ -22,6 +22,8 @@ class CustomDatasetMultitasking(Dataset):
         intensity=None,
         precursor_mass=None,
         precursor_charge=None,
+        instrument=None,
+        precursor_noise_mode="legacy",
         df_smiles=None,
         use_fingerprints=False,
         fingerprint_0=None,
@@ -46,6 +48,8 @@ class CustomDatasetMultitasking(Dataset):
         self.intensity = intensity
         self.precursor_mass = precursor_mass
         self.precursor_charge = precursor_charge
+        self.instrument = instrument
+        self.precursor_noise_mode = precursor_noise_mode
         self.df_smiles = df_smiles  ### df with rows smiles, indexes
         self.use_fingerprints = use_fingerprints
         self.use_adduct = use_adduct
@@ -275,6 +279,10 @@ class CustomDatasetMultitasking(Dataset):
         spectrum_sample["ed"] = sample["ed"].astype(np.float32)
         spectrum_sample["mces"] = sample["mces"].astype(np.float32)
 
+        if self.instrument is not None:
+            spectrum_sample["instrument_0"] = self.instrument[idx_0_original]
+            spectrum_sample["instrument_1"] = self.instrument[idx_1_original]
+
         if self.use_fingerprints:
             ind = int(idx_0[0])
             if self.training:
@@ -367,7 +375,9 @@ class CustomDatasetMultitasking(Dataset):
         if self.training and (random.random() < self.prob_aug):
             # augmentation
             spectrum_sample = Augmentation.augment(
-                spectrum_sample, max_num_peaks=self.max_num_peaks
+                spectrum_sample,
+                max_num_peaks=self.max_num_peaks,
+                precursor_noise_mode=self.precursor_noise_mode,
             )
 
         # normalize

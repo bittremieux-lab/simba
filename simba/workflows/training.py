@@ -4,6 +4,7 @@ This module contains the main training logic adapted to work with Hydra configur
 Refactored from legacy/training_scripts/final_training.py to use DictConfig.
 """
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from torch.utils.data import DataLoader
 
 import simba.core.data.molecule_pairs
 import simba.core.data.spectrum
+from simba.core.chemistry.chem_utils import mass_lookup_from_df_smiles
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
@@ -88,7 +90,7 @@ def load_dataset(cfg: DictConfig):
             "Detected lightweight format - loading spectra dynamically from MGF"
         )
 
-        mgf_path = mapping["mgf_path"]
+        mgf_path = getattr(cfg.paths, "mgf_path", None) or mapping["mgf_path"]
 
         # Use preprocessing config values (if available) to ensure consistent filtering
         use_only_protonized = getattr(
@@ -126,23 +128,42 @@ def load_dataset(cfg: DictConfig):
                     else:
                         missing.append(mgf_idx)
 
+                mol_idx_remap = None
                 if missing:
+                    # Some spectra failed the training loader's validity check
+                    # (filter mismatch between preprocessing and training).
+                    # Drop molecules whose spectra are all missing; keep molecules
+                    # that have at least one valid spectrum.
                     logger.warning(
-                        f"[{split}] Missing {len(missing)} spectra (e.g., MGF index {missing[0]})"
+                        f"[{split}] {len(missing)} spectra missing from loaded set "
+                        f"(e.g., MGF index {missing[0]}). Dropping affected molecules."
                     )
-                    # Filter df_smiles to keep only rows with valid spectra
-                    valid_rows = []
+                    # Graceful remap: skip missing entries
                     for i in df_smiles.index:
-                        old_idxs = df_smiles.loc[i, "indexes"]
-                        if all(idx in idx_map for idx in old_idxs):
-                            # Remap to new positions
-                            df_smiles.at[i, "indexes"] = [
-                                idx_map[idx] for idx in old_idxs
-                            ]
-                            valid_rows.append(i)
-                    df_smiles = df_smiles.loc[valid_rows]
+                        df_smiles.at[i, "indexes"] = [
+                            idx_map[idx]
+                            for idx in df_smiles.loc[i, "indexes"]
+                            if idx in idx_map
+                        ]
+                    # Drop molecules with no valid spectra remaining
+                    valid_rows = [
+                        i for i in df_smiles.index if df_smiles.loc[i, "indexes"]
+                    ]
+                    if len(valid_rows) < len(df_smiles):
+                        dropped = len(df_smiles) - len(valid_rows)
+                        logger.warning(
+                            f"[{split}] Dropping {dropped} molecules with no valid spectra"
+                        )
+                        # mol_idx_remap: old 0-based pos → new 0-based pos (for pair_distances)
+                        mol_idx_remap = {old: new for new, old in enumerate(valid_rows)}
+                        df_smiles = df_smiles.loc[valid_rows].reset_index(drop=True)
+                else:
+                    for i in df_smiles.index:
+                        df_smiles.at[i, "indexes"] = [
+                            idx_map[idx] for idx in df_smiles.loc[i, "indexes"]
+                        ]
 
-                # Build unique_spectra from df_smiles indexes
+                # Build unique_spectra from df_smiles indexes (index is now 0..n-1)
                 unique_spectra = [
                     original_spectra[df_smiles.loc[i, "indexes"][0]]
                     for i in df_smiles.index
@@ -155,6 +176,8 @@ def load_dataset(cfg: DictConfig):
                     df_smiles=df_smiles,
                     pair_distances=None,  # Will be loaded separately
                 )
+                if mol_idx_remap is not None:
+                    molecule_pairs._mol_idx_remap = mol_idx_remap
 
                 # Store in mapping dict
                 mapping[f"molecule_pairs_{split}"] = molecule_pairs
@@ -193,6 +216,89 @@ def load_dataset(cfg: DictConfig):
         mapping["molecule_pairs_test"],
         mapping["uniformed_molecule_pairs_test"],
     )
+
+
+def _compute_train_weights(molecule_pairs_train, cfg: DictConfig):
+    """Per-pair training sample weights.
+
+    Uses MCES-based sampling only when ED is disabled and no real ED values
+    were computed by preprocessing; pair_distances[:, 2] is NORMALIZED ED
+    (raw=0 -> 1.0), so check != 1.0 to detect real non-zero ED. Falls back
+    to the ED-bin-based weighting otherwise.
+
+    Returns:
+        Tuple of (weights_tr, weights_ed, bins_ed).
+    """
+    n_bins = cfg.model.tasks.edit_distance.n_classes - 1
+    has_real_ed = bool((molecule_pairs_train.pair_distances[:, 2] != 1.0).any())
+    use_mces_sampling = (
+        not cfg.model.tasks.edit_distance.enabled
+        and not has_real_ed
+        and molecule_pairs_train.extra_distances is not None
+    )
+    if not use_mces_sampling:
+        train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
+            molecule_pairs_train,
+            n_bins,
+            bin_sim_1=True,
+        )
+        weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
+        weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
+            molecule_pairs_train, weights_ed
+        )
+        return weights_tr, weights_ed, bins_ed
+
+    sampling_edges = np.array(cfg.sampling.mces_sampling_bin_edges)
+    bucket_multipliers = np.array(cfg.sampling.mces_sampling_bucket_multipliers)
+    n_sampling_bins = len(sampling_edges) + 1
+
+    mces_sim_tr = molecule_pairs_train.extra_distances  # similarity = 1 - MCES/40
+    mces_raw_tr = (1.0 - mces_sim_tr) * 40.0
+    bin_idx_tr = np.clip(
+        np.searchsorted(sampling_edges, mces_raw_tr).astype(int),
+        0,
+        n_sampling_bins - 1,
+    )
+    bin_counts = np.bincount(bin_idx_tr, minlength=n_sampling_bins)
+    total = bin_counts.sum()
+    weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
+    weights_ed = weights_ed * bucket_multipliers
+    weights_ed = weights_ed / weights_ed.sum()
+    bins_ed = np.arange(n_sampling_bins) / n_sampling_bins
+    weights_tr = weights_ed[bin_idx_tr]
+
+    # Within each non-self bucket, upweight low mass-difference pairs:
+    # those at/below the bucket's own mass_tier_quantile get
+    # mass_tier_low_share of that bucket's sampling weight, the rest
+    # get the remainder. Skipped for the self bucket (mass_diff is
+    # always 0 there).
+    mass_tier_quantile = cfg.sampling.mass_tier_quantile
+    mass_tier_low_share = cfg.sampling.mass_tier_low_share
+    mol_mass = mass_lookup_from_df_smiles(molecule_pairs_train.df_smiles)
+    mass_diff_tr = np.abs(
+        mol_mass[molecule_pairs_train.pair_distances[:, 0].astype(int)]
+        - mol_mass[molecule_pairs_train.pair_distances[:, 1].astype(int)]
+    )
+    mass_tier_weight = np.ones(len(bin_idx_tr))
+    for b in range(1, n_sampling_bins):
+        in_bucket = bin_idx_tr == b
+        diffs = mass_diff_tr[in_bucket]
+        n_in_bucket = diffs.size
+        if n_in_bucket == 0:
+            continue
+        q_low = np.nanquantile(diffs, mass_tier_quantile)
+        low_mask = diffs <= q_low
+        n_low = int(low_mask.sum())
+        n_high = int(n_in_bucket - n_low)
+        low_weight = (mass_tier_low_share * n_in_bucket) / n_low if n_low else 0.0
+        high_weight = (
+            ((1.0 - mass_tier_low_share) * n_in_bucket) / n_high if n_high else 0.0
+        )
+        mass_tier_weight[in_bucket] = np.where(low_mask, low_weight, high_weight)
+
+    weights_tr = weights_tr * mass_tier_weight
+    weights_tr = weights_tr / weights_tr.sum()
+    return weights_tr, weights_ed, bins_ed
 
 
 def prepare_data(
@@ -241,21 +347,106 @@ def prepare_data(
         indexes_tani_multitasking_val
     )
 
+    ed_col = cfg.model.data_columns.edit_distance
+    mces_col = cfg.model.data_columns.mces20
+
+    def _remap_cache_path(prefix, remap):
+        """Cache path for a split's remapped array, next to its source npy files.
+
+        Keyed on the source files' identity (mtime+size) and the remap dict's
+        content, so a changed preprocessing dir or a different dropped-molecule
+        set can't silently hit a stale cache.
+        """
+        prepro_dir = Path(cfg.paths.preprocessing_dir_train)
+        src_files = sorted(prepro_dir.glob(f"{prefix}_node*_chunk*.npy"))
+        if not src_files:
+            return None
+        stats = [(f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in src_files]
+        key = (
+            f"{stats}|{sorted(remap.items())}|"
+            f"{cfg.model.tasks.edit_distance.enabled}|{cfg.model.multitasking.enabled}|"
+            f"{cfg.sampling.add_high_similarity_pairs}"
+        )
+        digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+        return prepro_dir / f"{prefix}.remap_cache.{digest}.npy"
+
+    def _apply_remap(arr, mol_pairs, prefix):
+        """Filter and remap molecule indices in pair array using mol_pairs._mol_idx_remap."""
+        remap = getattr(mol_pairs, "_mol_idx_remap", None)
+        if remap is None:
+            return arr
+
+        cache_path = _remap_cache_path(prefix, remap)
+        if cache_path is not None and cache_path.exists():
+            logger.info(f"Loading cached remap result from {cache_path}")
+            try:
+                return np.load(cache_path)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load remap cache ({type(e).__name__}: {e}); "
+                    "recomputing."
+                )
+
+        col0 = arr[:, 0].astype(int)
+        col1 = arr[:, 1].astype(int)
+        mask = np.array([c in remap and d in remap for c, d in zip(col0, col1)])
+        arr = arr[mask].copy()
+        arr[:, 0] = np.array([remap[int(x)] for x in arr[:, 0]])
+        arr[:, 1] = np.array([remap[int(x)] for x in arr[:, 1]])
+        logger.info(
+            f"mol_idx_remap: kept {mask.sum()} / {len(mask)} pairs after filtering"
+        )
+
+        if cache_path is not None:
+            try:
+                np.save(cache_path, arr)
+                logger.info(f"Cached remap result to {cache_path}")
+            except Exception as e:
+                logger.warning(f"Failed to write remap cache ({type(e).__name__}: {e})")
+
+        return arr
+
+    def _add_identity_pairs(arr, mol_pairs, name):
+        """Append one molecule-paired-with-itself row per molecule in this split.
+        ED/MCES columns store normalized similarity (1 - dist/max_value), so a
+        raw distance of 0 encodes as 1.0."""
+        if not cfg.sampling.add_identity_pairs:
+            return arr
+        idx = np.asarray(mol_pairs.df_smiles.index, dtype=arr.dtype)
+        identity_rows = np.zeros((len(idx), arr.shape[1]), dtype=arr.dtype)
+        identity_rows[:, 0] = idx
+        identity_rows[:, 1] = idx
+        identity_rows[:, ed_col] = 1.0
+        identity_rows[:, mces_col] = 1.0
+        logger.info(f"[{name}] added {len(idx)} identity pairs (MCES=0, ED=0)")
+        return np.concatenate([arr, identity_rows], axis=0)
+
+    indexes_tani_multitasking_train = _apply_remap(
+        indexes_tani_multitasking_train,
+        molecule_pairs_train,
+        "ed_mces_indexes_tani_incremental_train",
+    )
+    indexes_tani_multitasking_train = _add_identity_pairs(
+        indexes_tani_multitasking_train, molecule_pairs_train, "train"
+    )
+    indexes_tani_multitasking_val = _apply_remap(
+        indexes_tani_multitasking_val,
+        molecule_pairs_val,
+        "ed_mces_indexes_tani_incremental_val",
+    )
+    indexes_tani_multitasking_val = _add_identity_pairs(
+        indexes_tani_multitasking_val, molecule_pairs_val, "val"
+    )
+
     # Assign edit distance to molecule pairs
     molecule_pairs_train.pair_distances = indexes_tani_multitasking_train[
-        :, [0, 1, cfg.model.data_columns.edit_distance]
+        :, [0, 1, ed_col]
     ]
-    molecule_pairs_val.pair_distances = indexes_tani_multitasking_val[
-        :, [0, 1, cfg.model.data_columns.edit_distance]
-    ]
+    molecule_pairs_val.pair_distances = indexes_tani_multitasking_val[:, [0, 1, ed_col]]
 
     # Add MCES to molecule pairs
-    molecule_pairs_train.extra_distances = indexes_tani_multitasking_train[
-        :, cfg.model.data_columns.mces20
-    ]
-    molecule_pairs_val.extra_distances = indexes_tani_multitasking_val[
-        :, cfg.model.data_columns.mces20
-    ]
+    molecule_pairs_train.extra_distances = indexes_tani_multitasking_train[:, mces_col]
+    molecule_pairs_val.extra_distances = indexes_tani_multitasking_val[:, mces_col]
 
     logger.info(f"Number of pairs for train: {len(molecule_pairs_train)}")
     logger.info(f"Number of pairs for val: {len(molecule_pairs_val)}")
@@ -276,19 +467,7 @@ def prepare_data(
     logger.info(f"Sanity check ids. Passed? {sanity_check_ids}")
     logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
 
-    # Calculate weights for the training set
-    train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
-        molecule_pairs_train,
-        cfg.model.tasks.edit_distance.n_classes - 1,
-        bin_sim_1=True,
-    )
-    weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
-    weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
-        molecule_pairs_train, weights_ed
-    )
-    weights_val = SimilarityWeightSampler.compute_sample_weights_categories(
-        molecule_pairs_val, weights_ed
-    )
+    weights_tr, weights_ed, bins_ed = _compute_train_weights(molecule_pairs_train, cfg)
 
     # Create datasets from molecule pairs
     dataset_train = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -300,6 +479,8 @@ def prepare_data(
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
         use_ion_mode=cfg.model.features.use_ion_mode,
+        precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
+        precursor_noise_mode=cfg.sampling.get("precursor_noise_mode", "legacy"),
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -310,15 +491,18 @@ def prepare_data(
         use_ion_activation=cfg.model.features.use_ion_activation,
         use_ion_method=cfg.model.features.use_ion_method,
         use_ion_mode=cfg.model.features.use_ion_mode,
+        precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
     )
 
-    # Create samplers
-    train_sampler = CustomWeightedRandomSampler(
-        weights=weights_tr, num_samples=len(dataset_train), replacement=True
-    )
-    val_sampler = CustomWeightedRandomSampler(
-        weights=weights_val, num_samples=len(dataset_val), replacement=True
-    )
+    # Validation always uses a full, unweighted, sequential pass regardless
+    # of use_resampling -- val_sampler stays None either way.
+    if cfg.sampling.use_resampling:
+        train_sampler = CustomWeightedRandomSampler(
+            weights=weights_tr, num_samples=len(dataset_train), replacement=True
+        )
+    else:
+        train_sampler = None
+    val_sampler = None
 
     return (
         dataset_train,
@@ -450,6 +634,14 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_gumbel": cfg.model.tasks.edit_distance.use_gumbel,
         "use_element_wise": cfg.model.features.use_element_wise,
         "use_cosine_distance": cfg.model.tasks.cosine_similarity.use_cosine_distance,
+        "head_mode": cfg.model.tasks.cosine_similarity.head_mode,
+        "mces_max_value": cfg.model.tasks.mces.max_value,
+        "use_mces_bucket_head": cfg.model.tasks.mces_bucket.enabled,
+        "mces_bucket_bin_edges": cfg.model.tasks.mces_bucket.bin_edges,
+        "mces_bucket_use_mlp": cfg.model.tasks.mces_bucket.use_mlp,
+        "mces_bucket_use_product": cfg.model.tasks.mces_bucket.use_product,
+        "mces_bucket_loss_weight": cfg.model.tasks.mces_bucket.loss_weight,
+        "mces_bucket_learnable_weight": cfg.model.tasks.mces_bucket.learnable_weight,
         "use_edit_distance_regresion": cfg.model.tasks.edit_distance.use_regression,
         "use_fingerprints": cfg.model.tasks.fingerprints.enabled,
         "USE_LEARNABLE_MULTITASK": cfg.model.multitasking.learnable,
@@ -464,6 +656,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
         "use_ion_mode": cfg.model.features.use_ion_mode,
+        "use_edit_distance": cfg.model.tasks.edit_distance.enabled,
     }
 
     # Load pretrained weights if specified
@@ -483,6 +676,47 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         model = SimilarityModelMultitask(**model_kwargs)
 
     return model
+
+
+_CSV_LOGGER_RESILIENCE_PATCHED = False
+
+
+def _patch_csv_logger_header_rewrite_resilience() -> None:
+    """Workaround for a Lightning CSVLogger bug: when metrics.csv gets
+    rewritten with a wider header partway through a run, a stray row key
+    can crash csv.DictWriter and kill the whole training run. Patches the
+    rewrite step to drop unknown keys instead of crashing. Idempotent;
+    if Lightning's internals change, the patch just fails to apply and
+    becomes a no-op.
+    """
+    global _CSV_LOGGER_RESILIENCE_PATCHED
+    if _CSV_LOGGER_RESILIENCE_PATCHED:
+        return
+    try:
+        import csv
+
+        from lightning.fabric.loggers.csv_logs import _ExperimentWriter
+
+        def _resilient_rewrite_with_new_header(self, fieldnames):
+            with self._fs.open(self.metrics_file_path, "r", newline="") as file:
+                metrics = list(csv.DictReader(file))
+            fieldname_set = set(fieldnames)
+            for m in metrics:
+                for bad_key in [k for k in m if k not in fieldname_set]:
+                    del m[bad_key]
+            with self._fs.open(self.metrics_file_path, "w", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(metrics)
+
+        _ExperimentWriter._rewrite_with_new_header = _resilient_rewrite_with_new_header
+        _CSV_LOGGER_RESILIENCE_PATCHED = True
+    except Exception:
+        logger.warning(
+            "Could not apply the CSVLogger header-rewrite resilience patch "
+            "(lightning internals may have changed) -- continuing without it.",
+            exc_info=True,
+        )
 
 
 def train(
@@ -530,6 +764,8 @@ def train(
 
     from simba.utils.config_utils import get_model_paths
 
+    _patch_csv_logger_header_rewrite_resilience()
+
     checkpoint_dir = get_model_paths(cfg)["checkpoint_dir"]
     csv_logger = CSVLogger(save_dir=str(checkpoint_dir), name="", version="")
 
@@ -537,6 +773,8 @@ def train(
         max_epochs=cfg.training.epochs,
         accelerator=cfg.hardware.accelerator,
         devices=cfg.hardware.devices,
+        strategy=cfg.hardware.strategy,
+        precision=cfg.hardware.precision,
         val_check_interval=cfg.training.val_check_interval,
         limit_train_batches=cfg.training.limit_train_batches,
         limit_val_batches=cfg.training.limit_val_batches,

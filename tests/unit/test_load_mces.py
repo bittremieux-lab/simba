@@ -60,8 +60,8 @@ class TestLoadMCES:
         test_dir = tmp_path / "test_data"
         test_dir.mkdir()
 
-        file1 = test_dir / "prefix_file1.npy"
-        file2 = test_dir / "prefix_file2.npy"
+        file1 = test_dir / "prefix_node0_chunk0.npy"
+        file2 = test_dir / "prefix_node1_chunk0.npy"
         file3 = test_dir / "other_file.npy"
 
         file1.touch()
@@ -71,8 +71,8 @@ class TestLoadMCES:
         result = LoadMCES.find_file(str(test_dir), "prefix")
 
         assert len(result) == 2
-        assert any("prefix_file1.npy" in path for path in result)
-        assert any("prefix_file2.npy" in path for path in result)
+        assert any("prefix_node0_chunk0.npy" in path for path in result)
+        assert any("prefix_node1_chunk0.npy" in path for path in result)
         assert not any("other_file.npy" in path for path in result)
 
     def test_find_file_no_matches(self, tmp_path):
@@ -93,8 +93,8 @@ class TestLoadMCES:
         subdir = test_dir / "subdir"
         subdir.mkdir()
 
-        file1 = test_dir / "prefix_file1.npy"
-        file2 = subdir / "prefix_file2.npy"
+        file1 = test_dir / "prefix_node0_chunk0.npy"
+        file2 = subdir / "prefix_node1_chunk0.npy"
 
         file1.touch()
         file2.touch()
@@ -154,8 +154,8 @@ class TestLoadMCES:
         data1 = np.array([[0, 1, 0.5], [1, 2, 0.6]])
         data2 = np.array([[2, 3, 0.7], [3, 4, 0.8]])
 
-        file1 = test_dir / "prefix_batch1.npy"
-        file2 = test_dir / "prefix_batch2.npy"
+        file1 = test_dir / "prefix_node0_chunk0.npy"
+        file2 = test_dir / "prefix_node1_chunk0.npy"
 
         np.save(file1, data1)
         np.save(file2, data2)
@@ -181,9 +181,9 @@ class TestLoadMCES:
         data2 = np.array([[1, 2, 0.6]])
         data3 = np.array([[2, 3, 0.7]])
 
-        np.save(test_dir / "prefix_1.npy", data1)
-        np.save(test_dir / "prefix_2.npy", data2)
-        np.save(test_dir / "prefix_3.npy", data3)
+        np.save(test_dir / "prefix_node0_chunk0.npy", data1)
+        np.save(test_dir / "prefix_node1_chunk0.npy", data2)
+        np.save(test_dir / "prefix_node2_chunk0.npy", data3)
 
         result = LoadMCES.load_raw_data(str(test_dir), "prefix", partitions=2)
 
@@ -250,9 +250,9 @@ class TestLoadMCES:
         data1 = np.array([[2, 3, 0.7]])
         data2 = np.array([])
 
-        np.save(folder0 / "mces_file.npy", data0)
-        np.save(folder1 / "mces_file.npy", data1)
-        np.save(folder2 / "mces_file.npy", data2)
+        np.save(folder0 / "mces_node0_chunk0.npy", data0)
+        np.save(folder1 / "mces_node0_chunk0.npy", data1)
+        np.save(folder2 / "mces_node0_chunk0.npy", data2)
 
         result = LoadMCES.load_mces_20_data(
             str(base_dir) + "/", "mces", number_folders=3
