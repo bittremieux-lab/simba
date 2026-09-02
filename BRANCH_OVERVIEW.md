@@ -1,10 +1,11 @@
 # Branch overview: `exp/mces-pipeline`
 
 What this branch adds on top of `dev`, and how to use it. Written as a single
-entry point — the day-to-day working notes it's distilled from stay where
-they are (see "Further reading" at the bottom) rather than being merged in,
-since they're detailed logs of *how* each result was reached, not just the
-result itself.
+entry point, self-contained in this repo: the day-to-day working notes it's
+distilled from live under [`notes/`](notes/) (see "Further reading" at the
+bottom) rather than being merged into this file, since they're detailed logs
+of *how* each result was reached, with dead-ends and intermediate numbers a
+summary would just discard.
 
 `dev` at the point this branch forked (`ed28c05`) already has SIMBA's core:
 a transformer encoder over MS/MS spectra, trained to predict edit distance
@@ -42,7 +43,7 @@ branching off the current best checkpoint.
   — drop specific molecules from training by SMILES list, used for the
   CASMI-distance sweep below.
 - **ICEBERG-generated synthetic training spectra** (`sampling.iceberg_mgf_path`,
-  `sampling.iceberg_spectra_prob`) — see §5.
+  `sampling.iceberg_spectra_prob`) — see §4.
 
 ### Model
 - **Configurable similarity head** (`model.tasks.cosine_similarity.head_mode`):
@@ -62,14 +63,14 @@ branching off the current best checkpoint.
 - **Log-transformed MCES loss** (`model.tasks.mces.use_log_loss` +
   `log_loss_a`, the latter new) — train toward `log(raw_mces + c)` instead
   of plain MSE, where `log_loss_a` sets the implied pseudocount
-  (`c = 40 / log_loss_a`; default `5`→`c=8`, `40`→`c=1`). See §5.
+  (`c = 40 / log_loss_a`; default `5`→`c=8`, `40`→`c=1`). See §4.
 - **Bigger-architecture support fix**: `model.transformer.d_model`/`n_layers`
   were already config-driven for *training*, but every retrieval/inference
   tool had them hardcoded to `256`/`5` — since the model never calls
   `save_hyperparameters()`, a bigger checkpoint loaded through the old code
   path would have silently dropped every shape-mismatched weight
   (`strict=False`) instead of erroring, producing a near-random model with
-  no warning. Fixed across all three retrieval tools; see §5.
+  no warning. Fixed across all three retrieval tools; see §4.
 
 ### Retrieval evaluation (didn't exist on `dev` at all)
 Three independent ways to score a checkpoint on retrieval, all under
@@ -128,7 +129,99 @@ with an optional cosine-baseline reference row and CORN-corrected variant
 rows). Introduced early (`e4680e3`) and extended throughout the branch
 alongside whatever it needed to visualize.
 
-## 2. Experiment lineage (chronological, key findings only)
+## 2. Data
+
+None of this is git-tracked (large binary domain data) — it lives under
+`../data/` (one level above this repo) unless noted otherwise. Paths below
+are relative to `/sofia/projects/2026_053/simba_project/`.
+
+### Raw spectral libraries
+- **MassSpecGym** (`data/massspecgym/data/auxiliary/MassSpecGym.mgf`, ~309MB)
+  — the main training corpus for every experiment on this branch. Public
+  benchmark dataset of real MS/MS spectra with known structures.
+- **NIST20** (`data/nist20/nist20.mgf`, ~572MB, user-provided — not
+  downloadable, licensed) — 681,708 spectra / ~17,800-17,990 unique
+  molecules (SMILES-dedup / InChIKey-dedup respectively). Used only as a
+  reference library for the analog-discovery pipeline's Search A (see "Analog-discovery (CASMI) pipeline" in §1),
+  never for training.
+- **GNPS, no propagated annotations**
+  (`data/gnps/ALL_GNPS_NO_PROPOGATED.mgf`, ~2.2GB, downloaded from
+  `external.gnps2.org`'s bulk-library page — the `AGGREGATION`-type export
+  that excludes auto-propagated/molecular-networking-inferred annotations,
+  keeping only curated + imported libraries) — 956,358 spectra. Reference
+  library for analog discovery's independent Search B.
+- **CASMI 2022** (`simba/data/casmi2022.mgf`, in-repo, ~349KB) — 169 unique
+  query molecules, the actual analog-discovery evaluation set (not used in
+  training at all).
+
+### Splits
+- **Official MassSpecGym split** — the benchmark's own train/val/test
+  division, scaffold-resplit 90/10 for an extra validation fold
+  (`tools/prepare_msg_official_split_max_lb_hdf5.py`). Used by `dev` and by
+  this branch's early experiments (`004`, `006`, `008_x`).
+- **Gaetan's own split** — an alternative split from
+  [`spectrawl/splits/split_massspecgym.tsv`](https://github.com/bittremieux-lab/spectrawl/blob/main/spectrawl/splits/split_massspecgym.tsv),
+  used from experiment `005` onward. **v1** (`preprocessing_gaetan_split_max_lb_hdf5`)
+  had the triangular-index bug described in §1; **v2**
+  (`preprocessing_gaetan_split_max_lb_hdf5_v2`) is the fixed version every
+  experiment from `009` onward actually trains on: 24,010 train / 2,800 val
+  / 2,734 test **molecules** (each with 1 or more real spectra — training
+  samples one at random per molecule per epoch, see
+  `CustomDatasetMultitasking.__getitem__`). The corresponding real test-fold
+  spectra, extracted once as a standalone MGF for retrieval evaluation, live
+  at `experiments/retrieval_split_comparison/gaetan_test.mgf` (14,118
+  spectra) — every ICEBERG/NN-transfer retrieval run from `010` onward
+  scores against this same file.
+
+### Ground-truth MCES
+Three tiers, cheapest/loosest to most expensive/exact, combined as
+`max(lower_bound, exact_where_available)`:
+1. **Lower-bound matrix** (`lb_matrix.npy` + its own SMILES index) — fast,
+   approximate, always available.
+2. **Exact MCES for close pairs** (an HDF5 keyed by a *condensed
+   distance-matrix* index convention — the source of the v1 split bug,
+   which reused a different indexing convention by mistake) — exact
+   wherever the lower bound was already < 10.
+3. **Exact-refined MCES for the [10,20] band** — recomputed with the same
+   `myopic_mces` ILP solver used everywhere else in this project
+   (threshold=20, values above that are lower bounds, not exact).
+
+Each `preprocessing_*` directory's `mapping.pkl` bakes the final combined
+value into `pair_distances` (the `(molecule_i, molecule_j, distance)` array
+consumed by `simba/core/data/molecule_pairs.py::MoleculePairsOpt`) —
+training never recomputes MCES itself, it's all precomputed at preprocessing
+time.
+
+### Retrieval candidates
+- **Candidate pool** (`spectrawl_project/data/massspecgym/MassSpecGym_retrieval_candidates_formula.json`,
+  shared across `spectrawl` and this project) — for each test/query
+  molecule, a formula-matched pool of decoy candidates (~250-450 per query,
+  510,581 unique candidate molecules for the Gaetan test fold alone). Every
+  retrieval benchmark in §1 ranks within this same pool.
+- **ICEBERG-predicted candidate spectra** (`ICEBERG/results/candidates_*/preds.hdf5`,
+  one directory per candidate batch — `candidates_test_official`,
+  `candidates_gaetan_test_new`, `candidates_gaetan_test_existing_overlap`)
+  — since real reference spectra don't exist for most of the ~500K+
+  candidate molecules, ICEBERG (a separate in-silico fragmentation
+  predictor, its own sub-project/venv at `ICEBERG/`) generates one
+  synthetic spectrum per candidate so the ICEBERG-based retrieval methods
+  in §1 have something to rank against.
+- **Ground-truth MCES for candidates** (`data/gt_mces_retrieval_candidates/`
+  — `smiles.txt` + `mces_exact.npy`, 584,340 (test-molecule, candidate)
+  pairs, mean MCES 18.71) — real MCES between each query and its own
+  candidate pool, computed the same ILP way as above. Powers the
+  checkpoint-independent ground-truth-MCES oracle row in every retrieval
+  table (an upper bound on the NN-transfer paradigm).
+
+### Synthetic training data
+**ICEBERG train-spectra augmentation** (§4's `iceberg-aug` side experiment)
+generates its own synthetic spectra for *training* molecules, not
+candidates: `data/analog_discovery/iceberg_train_augmentation/synthetic_train.mgf`,
+120,050 spectra (24,010 train molecules × 5 collision energies:
+15/25/35/45/55 eV), consumed only when `sampling.iceberg_mgf_path` is set —
+every other experiment on this branch trains on real spectra exclusively.
+
+## 3. Experiment lineage (chronological, key findings only)
 
 | # | What changed | Headline result |
 |---|---|---|
@@ -145,7 +238,7 @@ alongside whatever it needed to visualize.
 
 `014_2` is the checkpoint every side experiment below branches off of.
 
-## 3. Side experiments off `014_2`
+## 4. Side experiments off `014_2`
 
 All three follow the same shape: fork `014_2`'s exact training config,
 change one thing, compare via the same ICEBERG-retrieval + dashboard-table
@@ -173,7 +266,7 @@ procedure.
 None of the three has been run through the CASMI analog-discovery pipeline
 yet — only through ICEBERG retrieval and the dashboard comparison table.
 
-## 4. How to use this branch
+## 5. How to use this branch
 
 ### Train a checkpoint
 Every training run goes through `simba train` (Hydra config + CLI
@@ -219,7 +312,7 @@ Browse per-experiment training curves and diagnostics, or use the "Compare
 runs" tab for a cross-experiment table (loss/MAE/overlap/Hit@k, optional
 cosine baseline row, optional CORN-corrected row per bucket-head run).
 
-## 5. Known caveats / open threads
+## 6. Known caveats / open threads
 
 - **Checkpoint-selection isn't consistent across the whole lineage.** `005`'s
   retrieval numbers use an early checkpoint (step 7,000) deliberately picked
@@ -242,23 +335,23 @@ cosine baseline row, optional CORN-corrected row per bucket-head run).
 
 ## Further reading
 
-Detailed working notes this overview is distilled from — kept in place
-(`/sofia/projects/2026_053/simba_project/`, one level above this repo, not
-git-tracked) since they're logs of *how* each result was reached, with
-dead-ends and intermediate numbers a summary would just discard:
+Detailed working notes this overview is distilled from, all under
+[`notes/`](notes/) in this repo:
 
-- `PROGRESS_REPORT_PREPROCESSING_AND_GAETAN_SPLIT.md` — the MCES-lookup bug, Gaetan split v1
-- `PROGRESS_REPORT_ROADMAP.md` — items 1-5 (head-mode ablation, ICEBERG retrieval intro)
-- `NEXT_STEPS.md` — the running task list this work has been checking off
-- `NOTES_GT_MCES_RETRIEVAL.md` — ground-truth-MCES oracle scoring (3c/3d)
-- `NOTES_RETRIEVAL_SPLIT_COMPARISON.md` — 005-era cross-split retrieval sanity check
-- `NOTES_RETRIEVAL_014_2_CORN.md` — `014_2`'s CORN-corrected retrieval results
-- `NOTES_014_2_ANALOG_DISCOVERY.md` — CASMI pipeline + Wout's confound investigation
-- `NOTES_014_2_LOGLOSS.md`, `NOTES_014_2_BIGMODEL.md`,
-  `NOTES_014_2_ICEBERG_AUGMENTATION.md` — the three `014_2` side experiments
+- [`notes/PROGRESS_REPORT_PREPROCESSING_AND_GAETAN_SPLIT.md`](notes/PROGRESS_REPORT_PREPROCESSING_AND_GAETAN_SPLIT.md) — the MCES-lookup bug, Gaetan split v1
+- [`notes/PROGRESS_REPORT_ROADMAP.md`](notes/PROGRESS_REPORT_ROADMAP.md) — items 1-5 (head-mode ablation, ICEBERG retrieval intro)
+- [`notes/NEXT_STEPS.md`](notes/NEXT_STEPS.md) — the running task list this work has been checking off
+- [`notes/NOTES_GT_MCES_RETRIEVAL.md`](notes/NOTES_GT_MCES_RETRIEVAL.md) — ground-truth-MCES oracle scoring (3c/3d)
+- [`notes/NOTES_RETRIEVAL_SPLIT_COMPARISON.md`](notes/NOTES_RETRIEVAL_SPLIT_COMPARISON.md) — 005-era cross-split retrieval sanity check
+- [`notes/NOTES_RETRIEVAL_014_2_CORN.md`](notes/NOTES_RETRIEVAL_014_2_CORN.md) — `014_2`'s CORN-corrected retrieval results
+- [`notes/NOTES_014_2_ANALOG_DISCOVERY.md`](notes/NOTES_014_2_ANALOG_DISCOVERY.md) — CASMI pipeline + Wout's confound investigation
+- [`notes/NOTES_014_2_LOGLOSS.md`](notes/NOTES_014_2_LOGLOSS.md),
+  [`notes/NOTES_014_2_BIGMODEL.md`](notes/NOTES_014_2_BIGMODEL.md),
+  [`notes/NOTES_014_2_ICEBERG_AUGMENTATION.md`](notes/NOTES_014_2_ICEBERG_AUGMENTATION.md) — the three `014_2` side experiments
 
-Two older in-repo docs cover earlier snapshots of specific pieces in more
-implementation detail and are still accurate for what they describe, just
-not updated past their own dates: `PIPELINE.md` (preprocessing → training →
-validation → retrieval, step by step) and `BASELINE_AND_DASHBOARD.md`
-(the `009` baseline and the dashboard, as of 2026-08-22).
+Two older in-repo docs (at repo root, not under `notes/`) cover earlier
+snapshots of specific pieces in more implementation detail and are still
+accurate for what they describe, just not updated past their own dates:
+`PIPELINE.md` (preprocessing → training → validation → retrieval, step by
+step) and `BASELINE_AND_DASHBOARD.md` (the `009` baseline and the dashboard,
+as of 2026-08-22).
