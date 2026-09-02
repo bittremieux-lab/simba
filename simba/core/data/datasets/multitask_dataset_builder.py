@@ -22,7 +22,6 @@ from simba.core.data.encoding import (
 )
 from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.preprocessor import Preprocessor
-from simba.utils.binning import float_to_ordinal_class
 from simba.utils.logger_setup import logger
 
 
@@ -36,7 +35,6 @@ class MultitaskDataBuilder:
         molecule_pairs_input: MoleculePairsOpt,
         max_num_peaks: int,
         training: bool = False,  # shuffle the spectrum 0 and 1 for data augmentation
-        n_classes: int = 6,
         use_fingerprints: bool = False,
         use_adduct: bool = False,
         use_ce: bool = False,
@@ -58,8 +56,6 @@ class MultitaskDataBuilder:
             The maximum number of peaks in a spectrum. Other peaks will be removed.
         training: bool
             Dataset for training or not.
-        n_classes: int
-            Number of classes for edit distance.
         use_fingerprints: bool
             Use fingerprints or not.
         use_adduct: bool
@@ -212,12 +208,6 @@ class MultitaskDataBuilder:
         # Normalize the intensity array
         # intensity = intensity / np.sqrt(np.sum(intensity**2, axis=1, keepdims=True))
 
-        # Adjust ED towards a N classification problem
-        ed = float_to_ordinal_class(
-            molecule_pairs_input.pair_distances[:, 2].reshape(-1, 1),
-            n_classes=n_classes,
-        )
-
         if molecule_pairs.extra_distances is None:
             raise ValueError("extra_distances must be provided for multitask training.")
         mces = molecule_pairs.extra_distances.reshape(-1, 1)
@@ -236,7 +226,6 @@ class MultitaskDataBuilder:
         dictionary_data = {
             "index_unique_0": molecule_pairs_input.pair_distances[:, 0].reshape(-1, 1),
             "index_unique_1": molecule_pairs_input.pair_distances[:, 1].reshape(-1, 1),
-            "ed": ed,
             "mces": mces,
             # "fingerprint_0": fingerprint_0,
         }

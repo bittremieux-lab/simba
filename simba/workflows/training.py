@@ -22,17 +22,13 @@ from simba.core.chemistry.chem_utils import mass_lookup_from_df_smiles
 from simba.core.chemistry.mces_loader.load_mces import LoadMCES
 from simba.core.data.datasets.multitask_dataset_builder import MultitaskDataBuilder
 from simba.core.data.molecule_pairs import MoleculePairsOpt
-from simba.core.data.weighted_sampling import (
-    CustomWeightedRandomSampler,
-    SimilarityWeightSampler,
-)
+from simba.core.data.weighted_sampling import CustomWeightedRandomSampler
 from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.callbacks import (
     LossCallback,
     ProgressLogCallback,
     ValMetricsCallback,
 )
-from simba.core.training.train_utils import TrainUtils
 from simba.utils.logger_setup import logger
 from simba.utils.sanity_checks import SanityChecks
 from simba.workflows.utils import load_spectra
@@ -219,35 +215,12 @@ def load_dataset(cfg: DictConfig):
 
 
 def _compute_train_weights(molecule_pairs_train, cfg: DictConfig):
-    """Per-pair training sample weights.
-
-    Uses MCES-based sampling only when ED is disabled and no real ED values
-    were computed by preprocessing; pair_distances[:, 2] is NORMALIZED ED
-    (raw=0 -> 1.0), so check != 1.0 to detect real non-zero ED. Falls back
-    to the ED-bin-based weighting otherwise.
+    """Per-pair training sample weights: an MCES-tiered, mass-tier-reweighted
+    inverse-frequency scheme.
 
     Returns:
         Tuple of (weights_tr, weights_ed, bins_ed).
     """
-    n_bins = cfg.model.tasks.edit_distance.n_classes - 1
-    has_real_ed = bool((molecule_pairs_train.pair_distances[:, 2] != 1.0).any())
-    use_mces_sampling = (
-        not cfg.model.tasks.edit_distance.enabled
-        and not has_real_ed
-        and molecule_pairs_train.extra_distances is not None
-    )
-    if not use_mces_sampling:
-        train_binned_list, ranges = TrainUtils.divide_data_into_bins_categories(
-            molecule_pairs_train,
-            n_bins,
-            bin_sim_1=True,
-        )
-        weights_ed, bins_ed = SimilarityWeightSampler.compute_weights(train_binned_list)
-        weights_tr = SimilarityWeightSampler.compute_sample_weights_categories(
-            molecule_pairs_train, weights_ed
-        )
-        return weights_tr, weights_ed, bins_ed
-
     sampling_edges = np.array(cfg.sampling.mces_sampling_bin_edges)
     bucket_multipliers = np.array(cfg.sampling.mces_sampling_bucket_multipliers)
     n_sampling_bins = len(sampling_edges) + 1
@@ -326,7 +299,7 @@ def prepare_data(
     indexes_tani_multitasking_train = LoadMCES.merge_numpy_arrays(
         cfg.paths.preprocessing_dir_train,
         prefix="ed_mces_indexes_tani_incremental_train",
-        use_edit_distance=cfg.model.tasks.edit_distance.enabled,
+        use_edit_distance=False,  # inert for use_multitask=True, kept for signature compatibility
         use_multitask=cfg.model.multitasking.enabled,
         add_high_similarity_pairs=cfg.sampling.add_high_similarity_pairs,
         remove_percentage=0.0,
@@ -339,7 +312,7 @@ def prepare_data(
     indexes_tani_multitasking_val = LoadMCES.merge_numpy_arrays(
         cfg.paths.preprocessing_dir_train,  # Note: uses TRAIN dir (same as original)
         prefix="ed_mces_indexes_tani_incremental_val",
-        use_edit_distance=cfg.model.tasks.edit_distance.enabled,
+        use_edit_distance=False,  # inert for use_multitask=True, kept for signature compatibility
         use_multitask=cfg.model.multitasking.enabled,
         add_high_similarity_pairs=cfg.sampling.add_high_similarity_pairs,
     )
@@ -364,8 +337,7 @@ def prepare_data(
         stats = [(f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in src_files]
         key = (
             f"{stats}|{sorted(remap.items())}|"
-            f"{cfg.model.tasks.edit_distance.enabled}|{cfg.model.multitasking.enabled}|"
-            f"{cfg.sampling.add_high_similarity_pairs}"
+            f"{cfg.model.multitasking.enabled}|{cfg.sampling.add_high_similarity_pairs}"
         )
         digest = hashlib.sha256(key.encode()).hexdigest()[:16]
         return prepro_dir / f"{prefix}.remap_cache.{digest}.npy"
@@ -587,10 +559,9 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    # Validation metrics callback (saves confusion matrix + MCES scatter)
+    # Validation metrics callback (saves MCES scatter)
     val_metrics_callback = ValMetricsCallback(
         output_dir=str(paths["checkpoint_dir"]),
-        n_classes=cfg.model.tasks.edit_distance.n_classes,
     )
 
     # Progress logging callback (writes INFO lines to .err log file)
@@ -630,8 +601,6 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
     model_kwargs = {
         "d_model": cfg.model.transformer.d_model,
         "n_layers": cfg.model.transformer.n_layers,
-        "n_classes": cfg.model.tasks.edit_distance.n_classes,
-        "use_gumbel": cfg.model.tasks.edit_distance.use_gumbel,
         "use_element_wise": cfg.model.features.use_element_wise,
         "use_cosine_distance": cfg.model.tasks.cosine_similarity.use_cosine_distance,
         "head_mode": cfg.model.tasks.cosine_similarity.head_mode,
@@ -642,12 +611,9 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "mces_bucket_use_product": cfg.model.tasks.mces_bucket.use_product,
         "mces_bucket_loss_weight": cfg.model.tasks.mces_bucket.loss_weight,
         "mces_bucket_learnable_weight": cfg.model.tasks.mces_bucket.learnable_weight,
-        "use_edit_distance_regresion": cfg.model.tasks.edit_distance.use_regression,
         "use_fingerprints": cfg.model.tasks.fingerprints.enabled,
         "USE_LEARNABLE_MULTITASK": cfg.model.multitasking.learnable,
         "use_mces20_log_loss": cfg.model.tasks.mces.use_log_loss,
-        "tau_gumbel_softmax": cfg.model.tasks.edit_distance.tau_gumbel_softmax,
-        "gumbel_reg_weight": cfg.model.tasks.edit_distance.gumbel_reg_weight,
         "weights": weights_mces,
         "lr": cfg.optimizer.lr,
         "use_adduct": cfg.model.features.use_adduct,
@@ -656,7 +622,6 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_ion_activation": cfg.model.features.use_ion_activation,
         "use_ion_method": cfg.model.features.use_ion_method,
         "use_ion_mode": cfg.model.features.use_ion_mode,
-        "use_edit_distance": cfg.model.tasks.edit_distance.enabled,
     }
 
     # Load pretrained weights if specified

@@ -14,7 +14,6 @@ transformer_context: 100  # Alias for transformer.context_length
 d_model: 256  # Alias for transformer.d_model
 n_layers: 5  # Alias for transformer.n_layers
 use_adduct: false  # Alias for features.use_adduct
-edit_distance_use_gumbel: false  # Alias for tasks.edit_distance.use_gumbel
 use_cosine_distance: true  # Alias for tasks.cosine_similarity.use_cosine_distance
 categorical_adducts: false  # Alias for features.categorical_adducts
 adduct_mass_map_csv: null  # For adduct configuration
@@ -42,18 +41,6 @@ features:
 
 # Task configuration
 tasks:
-  # Edit Distance task
-  edit_distance:
-    enabled: true
-    n_classes: 6
-    use_gumbel: false
-    use_regression: false
-    max_value: 666
-
-    # Gumbel softmax settings
-    tau_gumbel_softmax: 10
-    gumbel_reg_weight: 0.1
-
   # MCES (Maximum Common Edge Substructure) task
   mces:
     enabled: true

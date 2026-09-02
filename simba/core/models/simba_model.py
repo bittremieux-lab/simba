@@ -47,13 +47,8 @@ class Simba:
     ):
         d_model = int(self.config.model.transformer.d_model)
         n_layers = int(self.config.model.transformer.n_layers)
-        n_classes = self.config.model.tasks.edit_distance.n_classes
-        use_gumbel = self.config.model.tasks.edit_distance.use_gumbel
         use_cosine_distance = (
             self.config.model.tasks.cosine_similarity.use_cosine_distance
-        )
-        use_edit_distance_regression = (
-            self.config.model.tasks.edit_distance.use_regression
         )
         use_fingerprint = self.config.model.tasks.fingerprints.enabled
         use_learnable_multitask = self.config.model.multitasking.learnable
@@ -62,11 +57,8 @@ class Simba:
             file_path,
             d_model=d_model,
             n_layers=n_layers,
-            n_classes=n_classes,
-            use_gumbel=use_gumbel,
             use_element_wise=True,
             use_cosine_distance=use_cosine_distance,
-            use_edit_distance_regresion=use_edit_distance_regression,
             use_fingerprints=use_fingerprint,
             USE_LEARNABLE_MULTITASK=use_learnable_multitask,
             strict=False,

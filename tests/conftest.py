@@ -102,11 +102,8 @@ def mock_model(mocker, hydra_config):
     model = SimilarityModelMultitask(
         d_model=int(cfg.model.transformer.d_model),
         n_layers=int(cfg.model.transformer.n_layers),
-        n_classes=cfg.model.tasks.edit_distance.n_classes,
-        use_gumbel=cfg.model.tasks.edit_distance.use_gumbel,
         use_element_wise=True,
         use_cosine_distance=cfg.model.tasks.cosine_similarity.use_cosine_distance,
-        use_edit_distance_regresion=cfg.model.tasks.edit_distance.use_regression,
         use_fingerprints=cfg.model.tasks.fingerprints.enabled,
         USE_LEARNABLE_MULTITASK=cfg.model.multitasking.learnable,
     )

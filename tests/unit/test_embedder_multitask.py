@@ -1,69 +1,9 @@
-"""Tests for simba/ordinal_classification/embedder_multitask.py"""
+"""Tests for simba/core/models/similarity_models.py::SimilarityModelMultitask"""
 
 import pytest
 import torch
-import torch.nn as nn
 
-from simba.core.models.similarity_models import (
-    CustomizedCrossEntropyLoss,
-    SimilarityModelMultitask,
-)
-
-
-class TestCustomizedCrossEntropyLoss:
-    def test_init(self):
-        loss_fn = CustomizedCrossEntropyLoss(n_classes=6)
-
-        assert loss_fn.n_classes == 6
-        assert loss_fn.penalty_matrix.shape == (6, 6)
-        assert torch.all(loss_fn.penalty_matrix >= 0)
-        assert torch.all(loss_fn.penalty_matrix <= 1)
-
-    def test_forward_correct_prediction(self):
-        loss_fn = CustomizedCrossEntropyLoss(n_classes=6)
-
-        # Logits strongly favor class 2
-        logits = torch.tensor([[0.0, 0.0, 10.0, 0.0, 0.0, 0.0]])
-        target = torch.tensor([2])
-
-        loss = loss_fn.forward(logits, target)
-
-        # Loss should be non-negative (penalty matrix is normalized)
-        assert loss.item() >= 0.0
-        assert not torch.isnan(loss)
-        assert not torch.isinf(loss)
-
-    def test_forward_wrong_prediction(self):
-        loss_fn = CustomizedCrossEntropyLoss(n_classes=6)
-
-        # Logits favor class 0, but target is class 5 (far away)
-        logits = torch.tensor([[10.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-        target = torch.tensor([5])
-
-        loss = loss_fn.forward(logits, target)
-
-        # Loss should be larger for distant wrong prediction
-        assert loss.item() > 0.5
-
-    def test_forward_batch(self):
-        loss_fn = CustomizedCrossEntropyLoss(n_classes=6)
-
-        batch_size = 4
-        logits = torch.randn(batch_size, 6)
-        target = torch.tensor([0, 1, 2, 3])
-
-        loss = loss_fn.forward(logits, target)
-
-        assert loss.item() >= 0.0
-        assert not torch.isnan(loss)
-        assert not torch.isinf(loss)
-
-    def test_penalty_matrix_symmetry(self):
-        loss_fn = CustomizedCrossEntropyLoss(n_classes=6)
-
-        # Diagonal should have maximum values (correct predictions)
-        diagonal = torch.diag(loss_fn.penalty_matrix)
-        assert torch.all(diagonal >= loss_fn.penalty_matrix)
+from simba.core.models.similarity_models import SimilarityModelMultitask
 
 
 class TestEmbedderMultitask:
@@ -72,20 +12,15 @@ class TestEmbedderMultitask:
         return {
             "d_model": 128,
             "n_layers": 2,
-            "n_classes": 6,
-            "use_gumbel": False,
             "dropout": 0.1,
             "weights": None,
             "lr": 0.001,
             "use_element_wise": True,
             "use_cosine_distance": True,
             "weights_sim2": None,
-            "use_edit_distance_regresion": False,
             "use_mces20_log_loss": True,
             "use_fingerprints": False,
             "use_precursor_mz_for_model": True,
-            "tau_gumbel_softmax": 10,
-            "gumbel_reg_weight": 0.1,
             "USE_LEARNABLE_MULTITASK": True,
             "use_adduct": True,
             "use_ce": False,
@@ -124,23 +59,14 @@ class TestEmbedderMultitask:
             "ion_method_1": torch.zeros(batch_size, 1),
             "similarity": torch.tensor([0.8, 0.6]),
             "similarity_2": torch.tensor([0.7, 0.5]),
+            "mces": torch.tensor([0.7, 0.5]),
         }
 
     def test_init_basic(self, embedder_config):
         embedder = SimilarityModelMultitask(**embedder_config)
 
-        assert embedder.classifier is not None
-        assert isinstance(embedder.classifier, nn.Linear)
-        assert embedder.loss_fn is not None
-        assert embedder.regression_loss is not None
-
-    def test_init_with_gumbel(self, embedder_config):
-        embedder_config["use_gumbel"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        assert embedder.use_gumbel is True
-        assert embedder.tau_gumbel_softmax == 10
-        assert embedder.gumbel_reg_weight == 0.1
+        assert embedder.head_mode == "cosine_relu"
+        assert embedder.linear2 is not None
 
     def test_init_with_fingerprints(self, embedder_config):
         embedder_config["use_fingerprints"] = True
@@ -150,67 +76,6 @@ class TestEmbedderMultitask:
         assert embedder.linear_fingerprint_0 is not None
         assert embedder.linear_fingerprint_1 is not None
 
-    def test_init_with_edit_distance(self, embedder_config):
-        embedder_config["use_edit_distance_regresion"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        assert embedder.use_edit_distance_regresion is True
-        assert embedder.linear1_cossim is not None
-
-    def test_calculate_weight_loss2_with_edit_distance(self, embedder_config):
-        embedder_config["use_edit_distance_regresion"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        weight = embedder.calculate_weight_loss2()
-        assert weight == 1
-
-    def test_calculate_weight_loss2_without_edit_distance(self, embedder_config):
-        embedder_config["use_edit_distance_regresion"] = False
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        weight = embedder.calculate_weight_loss2()
-        assert weight == 200
-
-    def test_compute_adjacent_diffs(self, embedder):
-        batch_size = 4
-        n_classes = 6
-        gumbel_probs = torch.rand(batch_size, n_classes)
-        gumbel_probs = gumbel_probs / gumbel_probs.sum(dim=1, keepdim=True)
-
-        result = embedder.compute_adjacent_diffs(gumbel_probs, batch_size)
-
-        # Result is a scalar (averaged over batch)
-        assert result.dim() == 0
-        assert result.item() >= 0
-
-    def test_ordinal_loss(self, embedder):
-        logits = torch.randn(4, 6)
-        target = torch.tensor([0.0, 1.0, 2.0, 3.0])
-
-        loss = embedder.ordinal_loss(logits, target)
-
-        assert loss.item() >= 0.0
-        assert not torch.isnan(loss)
-
-    def test_gumbel_softmax(self, embedder):
-        logits = torch.randn(4, 6)
-
-        result = embedder.gumbel_softmax(logits, temperature=1.0, hard=True)
-
-        assert result.shape == logits.shape
-        # Hard gumbel should be one-hot
-        assert torch.allclose(result.sum(dim=1), torch.ones(4))
-
-    def test_ordinal_cross_entropy(self, embedder):
-        pred = torch.randn(4, 6)
-        # Target must be integer indices (0 to 5 for 6 classes)
-        target = torch.tensor([0, 2, 4, 5])
-
-        loss = embedder.ordinal_cross_entropy(pred, target)
-
-        assert loss.item() >= 0.0
-        assert not torch.isnan(loss)
-
     def test_configure_optimizers(self, embedder):
         optimizer = embedder.configure_optimizers()
 
@@ -219,16 +84,15 @@ class TestEmbedderMultitask:
 
     def test_compute_from_embeddings(self, embedder):
         batch_size = 4
-        d_model = embedder.linear1.in_features
+        d_model = embedder.linear2.in_features
 
         emb0 = torch.randn(batch_size, d_model)
         emb1 = torch.randn(batch_size, d_model)
 
         result = embedder.compute_from_embeddings(emb0, emb1)
 
-        assert len(result) == 2
-        emb, emb_sim_2 = result
-        assert emb.shape[0] == batch_size
+        assert len(result) == 1
+        (emb_sim_2,) = result
         assert emb_sim_2.shape[0] == batch_size
 
     def test_forward_basic(self, embedder, sample_batch):
@@ -236,11 +100,9 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             result = embedder.forward(sample_batch)
 
-        assert len(result) == 2
-        emb, emb_sim_2 = result
-        assert emb.shape[0] == sample_batch["mz_0"].shape[0]
+        assert len(result) == 1
+        (emb_sim_2,) = result
         assert emb_sim_2.shape[0] == sample_batch["mz_0"].shape[0]
-        assert not torch.isnan(emb).any()
         assert not torch.isnan(emb_sim_2).any()
 
     def test_forward_with_return_spectrum_output(self, embedder, sample_batch):
@@ -248,10 +110,9 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             result = embedder.forward(sample_batch, return_spectrum_output=True)
 
-        assert len(result) == 4
-        emb, emb_sim_2, emb0, emb1 = result
+        assert len(result) == 3
+        emb_sim_2, emb0, emb1 = result
         batch_size = sample_batch["mz_0"].shape[0]
-        assert emb.shape[0] == batch_size
         assert emb_sim_2.shape[0] == batch_size
         assert emb0.shape[0] == batch_size
         assert emb1.shape[0] == batch_size
@@ -269,9 +130,9 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             result = embedder.forward(sample_batch)
 
-        assert len(result) == 2
-        emb, emb_sim_2 = result
-        assert emb.shape[0] == batch_size
+        assert len(result) == 1
+        (emb_sim_2,) = result
+        assert emb_sim_2.shape[0] == batch_size
 
     def test_forward_without_adduct(self, embedder_config, sample_batch):
         # Test with use_adduct=False but keep USE_LEARNABLE_MULTITASK=True
@@ -282,70 +143,28 @@ class TestEmbedderMultitask:
         with torch.no_grad():
             result = embedder.forward(sample_batch)
 
-        assert len(result) == 2
-        emb, emb_sim_2 = result
-        assert emb.shape[0] == sample_batch["mz_0"].shape[0]
+        assert len(result) == 1
+        (emb_sim_2,) = result
+        assert emb_sim_2.shape[0] == sample_batch["mz_0"].shape[0]
 
     def test_training_step_basic(self, embedder, sample_batch):
-        # Add required fields for training_step
-        sample_batch["ed"] = torch.tensor([2, 3])  # Edit distance targets
-        sample_batch["mces"] = torch.tensor([0.7, 0.5])  # MCES targets
-
         result = embedder.training_step(sample_batch, batch_idx=0)
 
         assert isinstance(result, dict)
-        assert not torch.isnan(result["loss"])
-
-    def test_training_step_with_gumbel(self, embedder_config, sample_batch):
-        embedder_config["use_gumbel"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        # Add required fields
-        sample_batch["ed"] = torch.tensor([2, 3])
-        sample_batch["mces"] = torch.tensor([0.7, 0.5])
-
-        result = embedder.training_step(sample_batch, batch_idx=0)
-
-        assert isinstance(result, dict)
-        # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
-        assert not torch.isnan(result["loss"])
-
-    def test_training_step_with_edit_distance_regression(
-        self, embedder_config, sample_batch
-    ):
-        embedder_config["use_edit_distance_regresion"] = True
-        embedder = SimilarityModelMultitask(**embedder_config)
-
-        # Add required fields
-        sample_batch["ed"] = torch.tensor([2, 3])
-        sample_batch["mces"] = torch.tensor([0.7, 0.5])
-
-        result = embedder.training_step(sample_batch, batch_idx=0)
-
-        assert isinstance(result, dict)
-        # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
         assert not torch.isnan(result["loss"])
 
     def test_validation_step(self, embedder, sample_batch):
-        # Add required fields
-        sample_batch["ed"] = torch.tensor([2, 3])
-        sample_batch["mces"] = torch.tensor([0.7, 0.5])
-
         embedder.eval()
         with torch.no_grad():
             loss = embedder.validation_step(sample_batch, batch_idx=0)
 
         assert isinstance(loss, dict)
-        assert "loss" in loss and "ed_pred" in loss and "ed_target" in loss
+        assert "loss" in loss
         assert "mces_pred" in loss and "mces_target" in loss
         # Note: loss can be negative when USE_LEARNABLE_MULTITASK=True due to learnable weights
         assert not torch.isnan(loss["loss"])
 
     def test_test_step(self, embedder, sample_batch):
-        # Add required fields
-        sample_batch["ed"] = torch.tensor([2, 3])
-        sample_batch["mces"] = torch.tensor([0.7, 0.5])
-
         embedder.eval()
         with torch.no_grad():
             result = embedder.test_step(sample_batch, batch_idx=0)

@@ -94,7 +94,6 @@ class CustomDatasetMultitasking(Dataset):
         dictionary["intensity_1"] = np.zeros(
             (len_data, max_num_peaks), dtype=np.float32
         )
-        dictionary["ed"] = np.zeros((len_data, 1), dtype=np.float32)
         dictionary["mces"] = np.zeros((len_data, 1), dtype=np.float32)
         dictionary["precursor_mass_0"] = np.zeros(
             (len_data, 1), dtype=np.float32
@@ -186,7 +185,6 @@ class CustomDatasetMultitasking(Dataset):
             dictionary["precursor_charge_1"][idx] = self.precursor_charge[
                 indexes_original_1
             ].astype(np.float32)
-            dictionary["ed"][idx] = sample_unique["ed"].astype(np.float32)
             dictionary["mces"][idx] = sample_unique["mces"].astype(np.float32)
             if self.use_ion_mode:
                 dictionary["ionmode_0"][idx] = self.ionmode[
@@ -276,7 +274,6 @@ class CustomDatasetMultitasking(Dataset):
         spectrum_sample["precursor_charge_1"] = self.precursor_charge[
             idx_1_original
         ].astype(np.float32)
-        spectrum_sample["ed"] = sample["ed"].astype(np.float32)
         spectrum_sample["mces"] = sample["mces"].astype(np.float32)
 
         if self.instrument is not None:
