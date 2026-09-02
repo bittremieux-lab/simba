@@ -247,142 +247,275 @@ class ProgressLogCallback(Callback):
 
 class ValMetricsCallback(Callback):
     """
-    After each validation epoch, saves:
-      - confusion_matrix.png  (ED predicted vs true class)
-      - mces_scatter.png      (MCES predicted vs true similarity)
-    to the checkpoint directory.
+    After each validation epoch: binned MAE and predicted-distribution
+    overlap for the MCES regression head (GT bin 0 = self-pairs, then
+    bin_edges), a boxplot of predicted MCES per GT bin, and -- when the
+    mces_bucket CORN head is enabled -- its balanced accuracy and confusion
+    matrix. All plots are saved to output_dir and, when a TensorBoardLogger
+    is attached, also logged as figures.
     """
 
-    def __init__(self, output_dir: str, n_classes: int = 6):
+    _SELF_LABEL = "self (MCES=0)"
+
+    def __init__(
+        self,
+        output_dir: str,
+        mae_bin_edges,
+        mces_max_value: float = 40.0,
+        max_skip: int = 2,
+    ):
         self.output_dir = output_dir
-        self.n_classes = n_classes
-        self._ed_preds = []
-        self._ed_targets = []
+        self.bin_edges = np.array(mae_bin_edges, dtype=float)
+        self.mces_max_value = mces_max_value
+        self.max_skip = max_skip
         self._mces_preds = []
         self._mces_targets = []
+        self._bucket_preds = []
+        self._bucket_targets = []
+
+    def _bin_labels(self) -> list[str]:
+        labels = [self._SELF_LABEL]
+        prev = 0.0
+        for edge in self.bin_edges:
+            labels.append(f"({prev:g},{edge:g}]")
+            prev = edge
+        return labels
+
+    def _bin_index(self, gt_mces: np.ndarray, is_self: np.ndarray) -> np.ndarray:
+        idx = np.zeros(len(gt_mces), dtype=int)
+        non_self = ~is_self
+        idx[non_self] = (
+            np.clip(
+                np.digitize(gt_mces[non_self], self.bin_edges[:-1]),
+                0,
+                len(self.bin_edges) - 1,
+            )
+            + 1
+        )
+        return idx
 
     def on_validation_batch_end(
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
     ):
-        if trainer.sanity_checking or outputs is None:
+        if trainer.sanity_checking or not isinstance(outputs, dict):
             return
-        if not isinstance(outputs, dict):
-            return
-        # absent when the ED head is disabled
-        if "ed_pred" in outputs:
-            self._ed_preds.append(outputs["ed_pred"].numpy())
-            self._ed_targets.append(outputs["ed_target"].numpy())
         self._mces_preds.append(outputs["mces_pred"].float().numpy())
         self._mces_targets.append(outputs["mces_target"].float().numpy())
+        if "mces_bucket_pred" in outputs:
+            self._bucket_preds.append(outputs["mces_bucket_pred"].numpy())
+            self._bucket_targets.append(outputs["mces_bucket_target"].numpy())
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking or not self._mces_preds:
             return
 
-        mces_pred = np.concatenate(self._mces_preds)
-        mces_target = np.concatenate(self._mces_targets)
+        mces_pred_sim = np.concatenate(self._mces_preds)
+        mces_target_sim = np.concatenate(self._mces_targets)
         self._mces_preds.clear()
         self._mces_targets.clear()
 
+        pred_mces = (1.0 - mces_pred_sim) * self.mces_max_value
+        gt_mces = (1.0 - mces_target_sim) * self.mces_max_value
+        abs_err = np.abs(pred_mces - gt_mces)
+        is_self = gt_mces <= 1e-6
+        bin_idx = self._bin_index(gt_mces, is_self)
         step = trainer.global_step
-        if self._ed_preds:
-            ed_pred = np.concatenate(self._ed_preds)
-            ed_target = np.concatenate(self._ed_targets)
-            self._ed_preds.clear()
-            self._ed_targets.clear()
-            self._plot_confusion(ed_pred, ed_target, step)
-        self._plot_mces_scatter(mces_pred, mces_target, step)
+        tb_logger = self._tb_logger(trainer)
 
-    def _plot_confusion(self, pred, target, step):
-        n = self.n_classes
-        cm = np.zeros((n, n), dtype=int)
-        for t, p in zip(target, pred):
-            t = int(np.clip(t, 0, n - 1))
-            p = int(np.clip(p, 0, n - 1))
-            cm[t, p] += 1
+        self._log_binned_mae(pl_module, abs_err, bin_idx)
+        self._log_overlap_coefficients(pl_module, pred_mces, bin_idx)
+        self._plot_binned_box(pred_mces, bin_idx, step, tb_logger)
 
-        cm_pct = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8) * 100
-        accuracy = (pred == target).mean()
+        if self._bucket_preds:
+            bucket_pred = np.concatenate(self._bucket_preds)
+            bucket_target = np.concatenate(self._bucket_targets)
+            self._bucket_preds.clear()
+            self._bucket_targets.clear()
+            self._log_and_plot_bucket_confusion(
+                pl_module, bucket_pred, bucket_target, step, tb_logger
+            )
 
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    @staticmethod
+    def _tb_logger(trainer):
+        from lightning.pytorch.loggers import TensorBoardLogger
 
-        # Left: raw counts
-        ax = axes[0]
-        im = ax.imshow(cm, cmap="Blues")
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        ax.set_xticks(range(n))
-        ax.set_yticks(range(n))
-        ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
-        ax.set_ylabel("True class")
-        ax.set_title(f"ED confusion matrix — counts (step {step})")
-        vmax = cm.max() if cm.max() > 0 else 1
-        for i in range(n):
-            for j in range(n):
-                ax.text(
-                    j,
-                    i,
-                    f"{cm[i, j]:,}",
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color="white" if cm[i, j] > 0.5 * vmax else "black",
+        for lg in trainer.loggers:
+            if isinstance(lg, TensorBoardLogger):
+                return lg
+        return None
+
+    def _log_binned_mae(self, pl_module, abs_err, bin_idx):
+        bucket_maes = []
+        for li, label in enumerate(self._bin_labels()):
+            mask = bin_idx == li
+            if not mask.any():
+                continue
+            mae = float(abs_err[mask].mean())
+            pl_module.log(
+                f"val_mae_mces/{label}",
+                mae,
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+            bucket_maes.append(mae)
+        if bucket_maes:
+            pl_module.log(
+                "val_mae_mces_bucket_avg",
+                float(np.mean(bucket_maes)),
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+
+    @staticmethod
+    def _overlap_coefficient(a: np.ndarray, b: np.ndarray, n_bins: int = 50) -> float:
+        """Histogram overlapping coefficient: 0 = fully separated, 1 = identical."""
+        if len(a) == 0 or len(b) == 0:
+            return float("nan")
+        lo, hi = min(a.min(), b.min()), max(a.max(), b.max())
+        if hi <= lo:
+            return 1.0
+        edges = np.linspace(lo, hi, n_bins + 1)
+        pa, _ = np.histogram(a, bins=edges)
+        pb, _ = np.histogram(b, bins=edges)
+        pa = pa / pa.sum()
+        pb = pb / pb.sum()
+        return float(np.minimum(pa, pb).sum())
+
+    def _log_overlap_coefficients(self, pl_module, pred_mces, bin_idx):
+        labels = self._bin_labels()
+        n_bins = len(labels)
+        pred_by_bin = {
+            i: pred_mces[bin_idx == i] for i in range(n_bins) if (bin_idx == i).any()
+        }
+        for skip in range(self.max_skip + 1):
+            skip_values = []
+            for i in range(n_bins - skip - 1):
+                j = i + skip + 1
+                if i not in pred_by_bin or j not in pred_by_bin:
+                    continue
+                ovl = self._overlap_coefficient(pred_by_bin[i], pred_by_bin[j])
+                pl_module.log(
+                    f"val_overlap/{labels[i]}_vs_{labels[j]}_skip{skip}",
+                    ovl,
+                    on_step=False,
+                    on_epoch=True,
+                    add_dataloader_idx=False,
+                )
+                skip_values.append(ovl)
+            if skip_values:
+                pl_module.log(
+                    f"val_overlap_avg/skip{skip}",
+                    float(np.mean(skip_values)),
+                    on_step=False,
+                    on_epoch=True,
+                    add_dataloader_idx=False,
                 )
 
-        # Right: row percentages
-        ax = axes[1]
-        im = ax.imshow(cm_pct, vmin=0, vmax=100, cmap="Blues")
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="%")
-        ax.set_xticks(range(n))
-        ax.set_yticks(range(n))
-        ax.set_xlabel(f"Predicted class  [acc={accuracy:.3f}]")
-        ax.set_ylabel("True class")
-        ax.set_title(f"ED confusion matrix — row % (step {step})")
-        for i in range(n):
-            for j in range(n):
-                ax.text(
-                    j,
-                    i,
-                    f"{cm_pct[i, j]:.1f}%",
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color="white" if cm_pct[i, j] > 50 else "black",
-                )
+    def _plot_binned_box(self, pred_mces, bin_idx, step, tb_logger):
+        labels = self._bin_labels()
+        edges = self.bin_edges
+        data, positions, widths, ns = [], [], [], []
+        for li in range(len(labels)):
+            mask = bin_idx == li
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            data.append(pred_mces[mask])
+            ns.append(n)
+            if li == 0:
+                positions.append(0.0)
+                widths.append(2.0)
+            else:
+                lo = 0.0 if li == 1 else edges[li - 2]
+                hi = edges[li - 1]
+                positions.append((lo + hi) / 2)
+                widths.append((hi - lo) * 0.8)
 
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.boxplot(
+            data, positions=positions, widths=widths, whis=(5, 95), showfliers=False
+        )
+        ax.plot(
+            [0, float(edges[-1])], [0, float(edges[-1])], "r--", lw=1, label="pred = GT"
+        )
+        ylim = ax.get_ylim()
+        for pos, n in zip(positions, ns):
+            ax.text(pos, ylim[1] * 0.98, f"n={n}", ha="center", va="top", fontsize=7)
+        ax.set_xlabel("GT MCES bin")
+        ax.set_ylabel("Predicted MCES")
+        ax.set_title(f"Predicted MCES per GT bin — step {step}")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
         plt.tight_layout()
-        path = os.path.join(self.output_dir, "confusion_matrix.png")
-        plt.savefig(path, dpi=130)
+        path = os.path.join(self.output_dir, f"mces_binned_box_step{step:06d}.png")
+        fig.savefig(path, dpi=130)
+        if tb_logger is not None:
+            tb_logger.experiment.add_figure(
+                "val_plots/mces_binned_box", fig, global_step=step
+            )
         plt.close(fig)
 
-    def _plot_mces_scatter(self, pred, target, step):
-        # subsample to at most 10k points for speed
-        if len(pred) > 10_000:
-            idx = np.random.choice(len(pred), 10_000, replace=False)
-            pred, target = pred[idx], target[idx]
+    def _log_and_plot_bucket_confusion(self, pl_module, pred, target, step, tb_logger):
+        from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+        edges = pl_module.mces_bucket_bin_edges.cpu().numpy()
+        labels = ["0"]
+        prev = 0.0
+        for edge in edges:
+            labels.append(f"({prev:g},{edge:g}]")
+            prev = edge
+        labels.append(f"({prev:g},inf)")
+        n = len(labels)
 
-        ax = axes[0]
-        ax.scatter(target, pred, alpha=0.15, s=4, rasterized=True)
-        lo, hi = min(target.min(), pred.min()), max(target.max(), pred.max())
-        ax.plot([lo, hi], [lo, hi], "r--", lw=1)
-        ax.set_xlabel("True MCES similarity")
-        ax.set_ylabel("Predicted MCES similarity")
-        corr = np.corrcoef(target, pred)[0, 1] if len(target) > 1 else float("nan")
-        ax.set_title(f"MCES scatter — step {step}\nr={corr:.3f}")
-        ax.grid(True, alpha=0.3)
-
-        ax2 = axes[1]
-        residuals = pred - target
-        ax2.hist(residuals, bins=50, color="steelblue", edgecolor="none")
-        ax2.axvline(0, color="red", lw=1, ls="--")
-        ax2.set_xlabel("Residual (pred − true)")
-        ax2.set_title(
-            f"MCES residuals  mean={residuals.mean():.3f}  std={residuals.std():.3f}"
+        bal_acc = balanced_accuracy_score(target, pred)
+        pl_module.log(
+            "val_mces_bucket_balanced_acc",
+            float(bal_acc),
+            on_step=False,
+            on_epoch=True,
+            add_dataloader_idx=False,
         )
-        ax2.grid(True, alpha=0.3)
 
+        cm = confusion_matrix(target, pred, labels=list(range(n)))
+        cm_row_pct = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8) * 100
+
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+        for ax, mat, title, fmt in [
+            (axes[0], cm, "counts", "{:,}"),
+            (axes[1], cm_row_pct, "row %", "{:.1f}%"),
+        ]:
+            im = ax.imshow(mat, cmap="Blues")
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            ax.set_xticks(range(n))
+            ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+            ax.set_yticks(range(n))
+            ax.set_yticklabels(labels, fontsize=7)
+            ax.set_xlabel("Predicted bucket")
+            ax.set_ylabel("True bucket")
+            ax.set_title(
+                f"mces_bucket confusion — {title} (step {step}, bal_acc={bal_acc:.3f})"
+            )
+            vmax = mat.max() if mat.max() > 0 else 1
+            for i in range(n):
+                for j in range(n):
+                    ax.text(
+                        j,
+                        i,
+                        fmt.format(mat[i, j]),
+                        ha="center",
+                        va="center",
+                        fontsize=6,
+                        color="white" if mat[i, j] > 0.5 * vmax else "black",
+                    )
         plt.tight_layout()
-        path = os.path.join(self.output_dir, "mces_scatter.png")
-        plt.savefig(path, dpi=130)
+        path = os.path.join(
+            self.output_dir, f"mces_bucket_confusion_step{step:06d}.png"
+        )
+        fig.savefig(path, dpi=130)
+        if tb_logger is not None:
+            tb_logger.experiment.add_figure(
+                "val_plots/mces_bucket_confusion", fig, global_step=step
+            )
         plt.close(fig)

@@ -534,18 +534,18 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
 
     paths = get_model_paths(cfg)
 
-    # Always save best model checkpoint
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=str(paths["checkpoint_dir"]),
-        filename=cfg.checkpoints.best_model_name.replace(".ckpt", ""),
-        save_top_k=1,
-        monitor="validation_loss",
-        mode="min",
-    )
+    save_checkpoints = cfg.checkpoints.get("save_checkpoints", True)
 
-    # Optionally save periodic checkpoints
+    checkpoint_callback = None
     checkpoint_n_steps_callback = None
-    if cfg.checkpoints.get("save_checkpoints", True):
+    if save_checkpoints:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=str(paths["checkpoint_dir"]),
+            filename=cfg.checkpoints.best_model_name.replace(".ckpt", ""),
+            save_top_k=1,
+            monitor="validation_loss",
+            mode="min",
+        )
         checkpoint_n_steps_callback = ModelCheckpoint(
             dirpath=str(paths["checkpoint_dir"]),
             filename="checkpoint-{epoch:02d}-{step}",
@@ -557,9 +557,11 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
     loss_plot_path = paths["checkpoint_dir"] / "loss_plot.png"
     loss_callback = LossCallback(file_path=str(loss_plot_path))
 
-    # Validation metrics callback (saves MCES scatter)
+    # Validation metrics callback (binned MAE/overlap, box plot, mces_bucket confusion)
     val_metrics_callback = ValMetricsCallback(
         output_dir=str(paths["checkpoint_dir"]),
+        mae_bin_edges=cfg.model.tasks.mces.mae_bin_edges,
+        mces_max_value=cfg.model.tasks.mces.max_value,
     )
 
     # Progress logging callback (writes INFO lines to .err log file)
@@ -717,7 +719,7 @@ def train(
 
     torch.set_float32_matmul_precision("high")
 
-    from lightning.pytorch.loggers import CSVLogger
+    from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 
     from simba.utils.config_utils import get_model_paths
 
@@ -725,6 +727,7 @@ def train(
 
     checkpoint_dir = get_model_paths(cfg)["checkpoint_dir"]
     csv_logger = CSVLogger(save_dir=str(checkpoint_dir), name="", version="")
+    tb_logger = TensorBoardLogger(save_dir=str(checkpoint_dir), name="tb_logs")
 
     trainer = pl.Trainer(
         max_epochs=cfg.training.epochs,
@@ -738,7 +741,8 @@ def train(
         gradient_clip_val=cfg.training.gradient_clip_val,
         accumulate_grad_batches=cfg.training.accumulate_grad_batches,
         callbacks=callbacks,
-        logger=csv_logger,
+        logger=[csv_logger, tb_logger],
+        enable_checkpointing=checkpoint_callback is not None,
         enable_progress_bar=cfg.logging.enable_progress_bar,
         log_every_n_steps=cfg.logging.log_every_n_steps,
     )

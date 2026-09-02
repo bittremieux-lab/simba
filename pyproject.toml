@@ -57,6 +57,7 @@ dependencies = [
     # Visualization
     "matplotlib>=3.7.0",
     "seaborn>=0.13.0",
+    "tensorboard>=2.15.0",
     # Utilities
     "click>=8.1.0",
     "tqdm>=4.66.0",

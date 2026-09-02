@@ -503,11 +503,19 @@ class SimilarityModelMultitask(SimilarityModel):
         mces_mae = (self.mces_max_value * (logits2.view(-1) - target2).abs()).mean()
         self.log("val_mces_mae", mces_mae, on_step=False, on_epoch=True, prog_bar=False)
 
-        return {
+        result = {
             "loss": loss,
             "mces_pred": logits2.view(-1).cpu(),
             "mces_target": target2.cpu(),
         }
+        if self.use_mces_bucket_head:
+            logits3 = logits_list[1]
+            raw_mces_target = (1.0 - target2) * self.mces_max_value
+            result["mces_bucket_pred"] = self._corn_decode_bin_generic(logits3).cpu()
+            result["mces_bucket_target"] = self._mces_bucket_target_bins(
+                raw_mces_target
+            ).cpu()
+        return result
 
     def step(
         self, batch, batch_idx, threshold=0.5, weight_loss2=None, logits_list=None

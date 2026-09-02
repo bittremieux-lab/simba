@@ -38,6 +38,9 @@ tasks:
   mces:
     threshold: 20
     max_value: 40
+    # Bin edges for the validation MAE/overlap diagnostics (bin 0 is always
+    # self-pairs, these are the upper edges of the remaining bins).
+    mae_bin_edges: [5, 10, 15, 20, 25, 30, 35, 40]
 
   # Cosine similarity task
   cosine_similarity:
