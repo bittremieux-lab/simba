@@ -41,6 +41,7 @@ class MultitaskDataBuilder:
         use_ion_mode: bool = False,
         precursor_mass_mode: str = "measured",
         precursor_noise_mode: str = "legacy",
+        prob_aug: float = 0.50,
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -66,6 +67,9 @@ class MultitaskDataBuilder:
             Passed through to the built dataset, which applies it as the
             training-time precursor-mass augmentation mode -- see
             `Augmentation.augment`'s `precursor_noise_mode` for the options.
+        prob_aug: float
+            Probability that a training sample goes through
+            `Augmentation.augment` instead of being used raw.
 
         Returns
         -------
@@ -217,6 +221,7 @@ class MultitaskDataBuilder:
         return CustomDatasetMultitasking(
             dictionary_data,
             training=training,
+            prob_aug=prob_aug,
             mz=mz,
             intensity=intensity,
             precursor_mass=precursor_mass,

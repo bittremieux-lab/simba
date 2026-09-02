@@ -68,9 +68,10 @@ sampling:
 
 # Augmentation
 augmentation:
-  enabled: false
-  intensity_scale: [0.8, 1.2]
-  peak_removal_prob: 0.1
+  # Probability that a training sample goes through Augmentation.augment
+  # (peak/precursor-mass/metadata perturbation) instead of being used raw.
+  # Not applied to validation samples.
+  prob_aug: 0.5
 
 # Hardware - default for production use
 hardware:

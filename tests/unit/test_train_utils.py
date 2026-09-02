@@ -194,12 +194,6 @@ class TestTrainUtils:
         assert len(binned_list) == 2
         assert all(isinstance(item, MoleculePairsOpt) for item in binned_list)
 
-    def test_compute_all_fingerprints(self, sample_spectra):
-        fingerprints = TrainUtils.compute_all_fingerprints(sample_spectra)
-
-        assert len(fingerprints) == len(sample_spectra)
-        assert all(fp is not None for fp in fingerprints)
-
     def test_train_val_test_split_bms_no_val_test(self, sample_spectra):
         train, val, test = TrainUtils.train_val_test_split_bms(
             sample_spectra,

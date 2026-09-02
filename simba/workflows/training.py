@@ -219,7 +219,7 @@ def _compute_train_weights(molecule_pairs_train, cfg: DictConfig):
     inverse-frequency scheme.
 
     Returns:
-        Tuple of (weights_tr, weights_ed, bins_ed).
+        weights_tr
     """
     sampling_edges = np.array(cfg.sampling.mces_sampling_bin_edges)
     bucket_multipliers = np.array(cfg.sampling.mces_sampling_bucket_multipliers)
@@ -237,7 +237,6 @@ def _compute_train_weights(molecule_pairs_train, cfg: DictConfig):
     weights_ed = np.where(bin_counts > 0, total / bin_counts.astype(float), 0.0)
     weights_ed = weights_ed * bucket_multipliers
     weights_ed = weights_ed / weights_ed.sum()
-    bins_ed = np.arange(n_sampling_bins) / n_sampling_bins
     weights_tr = weights_ed[bin_idx_tr]
 
     # Within each non-self bucket, upweight low mass-difference pairs:
@@ -271,7 +270,7 @@ def _compute_train_weights(molecule_pairs_train, cfg: DictConfig):
 
     weights_tr = weights_tr * mass_tier_weight
     weights_tr = weights_tr / weights_tr.sum()
-    return weights_tr, weights_ed, bins_ed
+    return weights_tr
 
 
 def prepare_data(
@@ -291,7 +290,7 @@ def prepare_data(
         cfg: Hydra configuration
 
     Returns:
-        Tuple of (dataset_train, train_sampler, dataset_val, val_sampler, weights_ed, bins_ed)
+        Tuple of (dataset_train, train_sampler, dataset_val, val_sampler)
     """
     logger.info("Loading pairs data ...")
 
@@ -439,7 +438,7 @@ def prepare_data(
     logger.info(f"Sanity check ids. Passed? {sanity_check_ids}")
     logger.info(f"Sanity check bms. Passed? {sanity_check_bms}")
 
-    weights_tr, weights_ed, bins_ed = _compute_train_weights(molecule_pairs_train, cfg)
+    weights_tr = _compute_train_weights(molecule_pairs_train, cfg)
 
     # Create datasets from molecule pairs
     dataset_train = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -453,6 +452,7 @@ def prepare_data(
         use_ion_mode=cfg.model.features.use_ion_mode,
         precursor_mass_mode=cfg.sampling.get("precursor_mass_mode", "measured"),
         precursor_noise_mode=cfg.sampling.get("precursor_noise_mode", "legacy"),
+        prob_aug=cfg.augmentation.prob_aug,
     )
 
     dataset_val = MultitaskDataBuilder.from_molecule_pairs_to_dataset(
@@ -481,8 +481,6 @@ def prepare_data(
         train_sampler,
         dataset_val,
         val_sampler,
-        weights_ed,
-        bins_ed,
     )
 
 

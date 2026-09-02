@@ -15,14 +15,9 @@ d_model: 256  # Alias for transformer.d_model
 n_layers: 5  # Alias for transformer.n_layers
 use_adduct: false  # Alias for features.use_adduct
 use_cosine_distance: true  # Alias for tasks.cosine_similarity.use_cosine_distance
-adduct_mass_map_csv: null  # For adduct configuration
 use_ce: false  # Alias for features.use_ce
 use_ion_activation: false  # Alias for features.use_ion_activation
 use_ion_method: false  # Alias for features.use_ion_method
-
-# Embeddings
-embeddings:
-  dim: 512
 
 # Model features
 features:
@@ -41,13 +36,11 @@ features:
 tasks:
   # MCES (Maximum Common Edge Substructure) task
   mces:
-    enabled: true
     threshold: 20
     max_value: 40
 
   # Cosine similarity task
   cosine_similarity:
-    enabled: true
     use_cosine_distance: true
 
   # Optional second target: an auxiliary CORN-style ordinal classification

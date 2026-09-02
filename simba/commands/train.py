@@ -138,8 +138,6 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             train_sampler,
             dataset_val,
             val_sampler,
-            weights_ed,
-            bins_ed,
         ) = prepare_data(
             molecule_pairs_train,
             molecule_pairs_val,
