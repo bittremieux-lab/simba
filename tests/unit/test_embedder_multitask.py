@@ -56,6 +56,8 @@ class TestEmbedderMultitask:
             "similarity": torch.tensor([0.8, 0.6]),
             "similarity_2": torch.tensor([0.7, 0.5]),
             "mces": torch.tensor([0.7, 0.5]),
+            "mol_idx_0": torch.tensor([10, 20]),
+            "mol_idx_1": torch.tensor([10, 20]),
         }
 
     def test_init_basic(self, embedder_config):
@@ -132,6 +134,59 @@ class TestEmbedderMultitask:
         assert "loss" in loss
         assert "mces_pred" in loss and "mces_target" in loss
         assert not torch.isnan(loss["loss"])
+
+    def test_training_step_with_contrastive_loss(self, embedder_config, sample_batch):
+        embedder_config["use_contrastive_loss"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+
+        result = embedder.training_step(sample_batch, batch_idx=0)
+
+        assert not torch.isnan(result["loss"])
+
+    def test_validation_step_with_contrastive_loss(self, embedder_config, sample_batch):
+        embedder_config["use_contrastive_loss"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+        embedder.eval()
+
+        with torch.no_grad():
+            loss = embedder.validation_step(sample_batch, batch_idx=0)
+
+        assert not torch.isnan(loss["loss"])
+
+    def test_contrastive_loss_info_nce_basic(self, embedder_config):
+        embedder_config["use_contrastive_loss"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+        d_model = embedder_config["d_model"]
+
+        emb0 = torch.randn(4, d_model)
+        emb1 = torch.randn(4, d_model)
+        mol_idx_0 = torch.tensor([1, 2, 3, 4])
+        mol_idx_1 = torch.tensor([1, 2, 3, 4])
+
+        loss, n_pairs = embedder._contrastive_loss_info_nce(
+            emb0, emb1, mol_idx_0, mol_idx_1
+        )
+
+        assert n_pairs == 4
+        assert loss is not None
+        assert not torch.isnan(loss)
+
+    def test_contrastive_loss_info_nce_too_few_pairs(self, embedder_config):
+        embedder_config["use_contrastive_loss"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+        d_model = embedder_config["d_model"]
+
+        emb0 = torch.randn(4, d_model)
+        emb1 = torch.randn(4, d_model)
+        mol_idx_0 = torch.tensor([1, 2, 3, 4])
+        mol_idx_1 = torch.tensor([1, 20, 30, 40])
+
+        loss, n_pairs = embedder._contrastive_loss_info_nce(
+            emb0, emb1, mol_idx_0, mol_idx_1
+        )
+
+        assert n_pairs == 1
+        assert loss is None
 
     def test_test_step(self, embedder, sample_batch):
         embedder.eval()

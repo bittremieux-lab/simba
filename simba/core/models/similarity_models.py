@@ -310,6 +310,9 @@ class SimilarityModelMultitask(SimilarityModel):
         mces_bucket_bin_edges=None,  # required (from config) when use_mces_bucket_head=True
         mces_bucket_use_mlp=False,
         mces_bucket_loss_weight=1.0,
+        use_contrastive_loss=False,
+        contrastive_temperature=0.07,
+        contrastive_loss_weight=1.0,
         use_precursor_mz_for_model=True,
         use_adduct=False,
         use_ce=False,
@@ -360,6 +363,10 @@ class SimilarityModelMultitask(SimilarityModel):
             self.mces_bucket_head = nn.Linear(
                 bucket_head_input_dim, self.mces_bucket_n_classes - 1
             )
+
+        self.use_contrastive_loss = use_contrastive_loss
+        self.contrastive_temperature = contrastive_temperature
+        self.contrastive_loss_weight = contrastive_loss_weight
 
         self.use_precursor_mz_for_model = use_precursor_mz_for_model
 
@@ -476,12 +483,21 @@ class SimilarityModelMultitask(SimilarityModel):
         else:
             return self.compute_from_embeddings(emb0, emb1)
 
+    def _forward_with_embeddings(self, batch):
+        """(logits_list, emb0, emb1) if use_contrastive_loss else (logits_list, None, None)."""
+        if self.use_contrastive_loss:
+            *logits_list, emb0, emb1 = self(batch, return_spectrum_output=True)
+            return logits_list, emb0, emb1
+        return self(batch), None, None
+
     def training_step(self, batch, batch_idx):
-        logits_list = self(batch)
+        logits_list, emb0, emb1 = self._forward_with_embeddings(batch)
         logits2 = logits_list[0]  # [B] similarity
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
 
-        loss = self.step(batch, batch_idx, logits_list=logits_list)
+        loss = self.step(
+            batch, batch_idx, logits_list=logits_list, emb0=emb0, emb1=emb1
+        )
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
         return {
@@ -492,11 +508,13 @@ class SimilarityModelMultitask(SimilarityModel):
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """Validation step — returns loss + predictions for the MCES scatter plot."""
-        logits_list = self(batch)
+        logits_list, emb0, emb1 = self._forward_with_embeddings(batch)
         logits2 = logits_list[0]  # [B] similarity
         target2 = batch["mces"].to(dtype=torch.float32, device=self.device).view(-1)
 
-        loss = self.step(batch, batch_idx, logits_list=logits_list)
+        loss = self.step(
+            batch, batch_idx, logits_list=logits_list, emb0=emb0, emb1=emb1
+        )
         self.log("validation_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
 
         # MCES MAE in raw MCES units: target2 = 1 - MCES/40, logits2 = predicted similarity
@@ -518,7 +536,14 @@ class SimilarityModelMultitask(SimilarityModel):
         return result
 
     def step(
-        self, batch, batch_idx, threshold=0.5, weight_loss2=None, logits_list=None
+        self,
+        batch,
+        batch_idx,
+        threshold=0.5,
+        weight_loss2=None,
+        logits_list=None,
+        emb0=None,
+        emb1=None,
     ):
         if logits_list is None:
             logits_list = self(batch)
@@ -547,7 +572,48 @@ class SimilarityModelMultitask(SimilarityModel):
         loss = loss2
         if use_mces_bucket:
             loss = loss + (self.mces_bucket_loss_weight * loss3)
+
+        if self.use_contrastive_loss:
+            loss_contrastive, n_pairs = self._contrastive_loss_info_nce(
+                emb0, emb1, batch["mol_idx_0"], batch["mol_idx_1"]
+            )
+            self.log(
+                "contrastive_n_pairs",
+                float(n_pairs),
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+            )
+            if loss_contrastive is not None:
+                self.log(
+                    "loss_contrastive",
+                    loss_contrastive,
+                    on_step=True,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+                loss = loss + (self.contrastive_loss_weight * loss_contrastive)
         return loss
+
+    def _contrastive_loss_info_nce(self, emb0, emb1, mol_idx_0, mol_idx_1):
+        """In-batch InfoNCE over the batch's self-pairs (same molecule, two
+        spectra): symmetric cross-entropy over the N x N cosine-similarity
+        matrix of their embeddings, true match on the diagonal. Returns
+        (loss_or_None, n_pairs) - loss is None when fewer than 2 self-pairs
+        landed in this batch (can't form negatives)."""
+        is_self = mol_idx_0.view(-1) == mol_idx_1.view(-1)
+        n_pairs = int(is_self.sum().item())
+        if n_pairs < 2:
+            return None, n_pairs
+
+        anchor = F.normalize(emb0[is_self], p=2, dim=-1)
+        positive = F.normalize(emb1[is_self], p=2, dim=-1)
+        logits = (anchor @ positive.T) / self.contrastive_temperature
+        labels = torch.arange(n_pairs, device=logits.device)
+        loss = 0.5 * (
+            F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)
+        )
+        return loss, n_pairs
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)

@@ -63,6 +63,11 @@ tasks:
     use_mlp: false
     loss_weight: 1.0
 
+  contrastive:
+    enabled: false
+    temperature: 0.07
+    loss_weight: 1.0
+
 # Multitasking
 multitasking:
   enabled: true
