@@ -13,7 +13,7 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
 import simba.core.data.molecule_pairs
@@ -562,6 +562,8 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
         output_dir=str(paths["checkpoint_dir"]),
         mae_bin_edges=cfg.model.tasks.mces.mae_bin_edges,
         mces_max_value=cfg.model.tasks.mces.max_value,
+        hit_at_k_n_decoys=cfg.model.tasks.mces.hit_at_k_n_decoys,
+        hit_at_k_ks=cfg.model.tasks.mces.hit_at_k_ks,
     )
 
     # Progress logging callback (writes INFO lines to .err log file)
@@ -678,6 +680,23 @@ def _patch_csv_logger_header_rewrite_resilience() -> None:
         )
 
 
+def _flatten_for_hparams(d: dict, prefix: str = "") -> dict:
+    """Flatten a nested config dict into dot-joined scalar keys, the shape
+    TensorBoard's HParams plugin expects."""
+    flat = {}
+    for k, v in d.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            flat.update(_flatten_for_hparams(v, prefix=f"{key}."))
+        elif isinstance(v, (list, tuple)):
+            flat[key] = str(v)
+        elif v is None:
+            flat[key] = "null"
+        else:
+            flat[key] = v
+    return flat
+
+
 def train(
     model: SimilarityModelMultitask,
     dataloader_train: DataLoader,
@@ -728,6 +747,9 @@ def train(
     checkpoint_dir = get_model_paths(cfg)["checkpoint_dir"]
     csv_logger = CSVLogger(save_dir=str(checkpoint_dir), name="", version="")
     tb_logger = TensorBoardLogger(save_dir=str(checkpoint_dir), name="tb_logs")
+    tb_logger.log_hyperparams(
+        _flatten_for_hparams(OmegaConf.to_container(cfg, resolve=True))
+    )
 
     trainer = pl.Trainer(
         max_epochs=cfg.training.epochs,

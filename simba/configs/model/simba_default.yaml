@@ -41,6 +41,12 @@ tasks:
     # Bin edges for the validation MAE/overlap diagnostics (bin 0 is always
     # self-pairs, these are the upper edges of the remaining bins).
     mae_bin_edges: [5, 10, 15, 20, 25, 30, 35, 40]
+    # Retrieval benchmark: for each validation molecule with >=2 spectra,
+    # rank it against its hit_at_k_n_decoys nearest (by GT MCES) other
+    # validation molecules and check whether its true match lands in the
+    # top hit_at_k_ks.
+    hit_at_k_n_decoys: 255
+    hit_at_k_ks: [1, 5, 20]
 
   # Cosine similarity task
   cosine_similarity:

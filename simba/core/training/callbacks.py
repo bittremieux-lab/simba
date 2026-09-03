@@ -249,10 +249,12 @@ class ValMetricsCallback(Callback):
     """
     After each validation epoch: binned MAE and predicted-distribution
     overlap for the MCES regression head (GT bin 0 = self-pairs, then
-    bin_edges), a boxplot of predicted MCES per GT bin, and -- when the
-    mces_bucket CORN head is enabled -- its balanced accuracy and confusion
-    matrix. All plots are saved to output_dir and, when a TensorBoardLogger
-    is attached, also logged as figures.
+    bin_edges), a boxplot of predicted MCES per GT bin, a Hit@k retrieval
+    benchmark (see _hit_at_k), and -- when the mces_bucket CORN head is
+    enabled -- its balanced accuracy and confusion matrix, plus a
+    CORN-corrected variant of the MAE/overlap/Hit@k metrics (see
+    _corn_corrected_mces). All plots are saved to output_dir and, when a
+    TensorBoardLogger is attached, also logged as figures.
     """
 
     _SELF_LABEL = "self (MCES=0)"
@@ -263,15 +265,23 @@ class ValMetricsCallback(Callback):
         mae_bin_edges,
         mces_max_value: float = 40.0,
         max_skip: int = 2,
+        hit_at_k_n_decoys: int = 255,
+        hit_at_k_ks=(1, 5, 20),
     ):
         self.output_dir = output_dir
         self.bin_edges = np.array(mae_bin_edges, dtype=float)
         self.mces_max_value = mces_max_value
         self.max_skip = max_skip
+        self.hit_at_k_n_decoys = hit_at_k_n_decoys
+        self.hit_at_k_ks = tuple(hit_at_k_ks)
         self._mces_preds = []
         self._mces_targets = []
         self._bucket_preds = []
         self._bucket_targets = []
+        self._mol_idx_0 = []
+        self._mol_idx_1 = []
+        self._spec_idx_0 = []
+        self._spec_idx_1 = []
 
     def _bin_labels(self) -> list[str]:
         labels = [self._SELF_LABEL]
@@ -304,6 +314,11 @@ class ValMetricsCallback(Callback):
         if "mces_bucket_pred" in outputs:
             self._bucket_preds.append(outputs["mces_bucket_pred"].numpy())
             self._bucket_targets.append(outputs["mces_bucket_target"].numpy())
+        if "mol_idx_0" in batch:
+            self._mol_idx_0.append(batch["mol_idx_0"].cpu().numpy())
+            self._mol_idx_1.append(batch["mol_idx_1"].cpu().numpy())
+            self._spec_idx_0.append(batch["spec_idx_0"].cpu().numpy())
+            self._spec_idx_1.append(batch["spec_idx_1"].cpu().numpy())
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking or not self._mces_preds:
@@ -322,10 +337,13 @@ class ValMetricsCallback(Callback):
         step = trainer.global_step
         tb_logger = self._tb_logger(trainer)
 
-        self._log_binned_mae(pl_module, abs_err, bin_idx)
-        self._log_overlap_coefficients(pl_module, pred_mces, bin_idx)
+        self._log_binned_mae(pl_module, abs_err, bin_idx, prefix="val_mae_mces")
+        self._log_overlap_coefficients(
+            pl_module, pred_mces, bin_idx, prefix="val_overlap"
+        )
         self._plot_binned_box(pred_mces, bin_idx, step, tb_logger)
 
+        corrected_mces = None
         if self._bucket_preds:
             bucket_pred = np.concatenate(self._bucket_preds)
             bucket_target = np.concatenate(self._bucket_targets)
@@ -333,6 +351,36 @@ class ValMetricsCallback(Callback):
             self._bucket_targets.clear()
             self._log_and_plot_bucket_confusion(
                 pl_module, bucket_pred, bucket_target, step, tb_logger
+            )
+
+            edges = pl_module.mces_bucket_bin_edges.cpu().numpy()
+            corrected_mces = _corn_corrected_mces(pred_mces, bucket_pred, edges)
+            corrected_abs_err = np.abs(corrected_mces - gt_mces)
+            self._log_binned_mae(
+                pl_module, corrected_abs_err, bin_idx, prefix="val_mae_mces_corrected"
+            )
+            self._log_overlap_coefficients(
+                pl_module, corrected_mces, bin_idx, prefix="val_overlap_corrected"
+            )
+
+        if self._mol_idx_0:
+            mol_idx_0 = np.concatenate(self._mol_idx_0)
+            mol_idx_1 = np.concatenate(self._mol_idx_1)
+            spec_idx_0 = np.concatenate(self._spec_idx_0)
+            spec_idx_1 = np.concatenate(self._spec_idx_1)
+            self._mol_idx_0.clear()
+            self._mol_idx_1.clear()
+            self._spec_idx_0.clear()
+            self._spec_idx_1.clear()
+            self._log_hit_at_k(
+                pl_module,
+                mol_idx_0,
+                mol_idx_1,
+                spec_idx_0,
+                spec_idx_1,
+                gt_mces,
+                pred_mces,
+                corrected_mces,
             )
 
     @staticmethod
@@ -344,7 +392,7 @@ class ValMetricsCallback(Callback):
                 return lg
         return None
 
-    def _log_binned_mae(self, pl_module, abs_err, bin_idx):
+    def _log_binned_mae(self, pl_module, abs_err, bin_idx, prefix):
         bucket_maes = []
         for li, label in enumerate(self._bin_labels()):
             mask = bin_idx == li
@@ -352,7 +400,7 @@ class ValMetricsCallback(Callback):
                 continue
             mae = float(abs_err[mask].mean())
             pl_module.log(
-                f"val_mae_mces/{label}",
+                f"{prefix}/{label}",
                 mae,
                 on_step=False,
                 on_epoch=True,
@@ -361,7 +409,7 @@ class ValMetricsCallback(Callback):
             bucket_maes.append(mae)
         if bucket_maes:
             pl_module.log(
-                "val_mae_mces_bucket_avg",
+                f"{prefix}_bucket_avg",
                 float(np.mean(bucket_maes)),
                 on_step=False,
                 on_epoch=True,
@@ -383,7 +431,7 @@ class ValMetricsCallback(Callback):
         pb = pb / pb.sum()
         return float(np.minimum(pa, pb).sum())
 
-    def _log_overlap_coefficients(self, pl_module, pred_mces, bin_idx):
+    def _log_overlap_coefficients(self, pl_module, pred_mces, bin_idx, prefix):
         labels = self._bin_labels()
         n_bins = len(labels)
         pred_by_bin = {
@@ -397,7 +445,7 @@ class ValMetricsCallback(Callback):
                     continue
                 ovl = self._overlap_coefficient(pred_by_bin[i], pred_by_bin[j])
                 pl_module.log(
-                    f"val_overlap/{labels[i]}_vs_{labels[j]}_skip{skip}",
+                    f"{prefix}/{labels[i]}_vs_{labels[j]}_skip{skip}",
                     ovl,
                     on_step=False,
                     on_epoch=True,
@@ -406,7 +454,7 @@ class ValMetricsCallback(Callback):
                 skip_values.append(ovl)
             if skip_values:
                 pl_module.log(
-                    f"val_overlap_avg/skip{skip}",
+                    f"{prefix}_avg/skip{skip}",
                     float(np.mean(skip_values)),
                     on_step=False,
                     on_epoch=True,
@@ -519,3 +567,189 @@ class ValMetricsCallback(Callback):
                 "val_plots/mces_bucket_confusion", fig, global_step=step
             )
         plt.close(fig)
+
+    def _log_hit_at_k(
+        self,
+        pl_module,
+        mol_idx_0,
+        mol_idx_1,
+        spec_idx_0,
+        spec_idx_1,
+        gt_mces,
+        pred_mces,
+        corrected_mces,
+    ):
+        is_self = mol_idx_0 == mol_idx_1
+        pool_mols, query_mols = _build_pool_and_queries(
+            mol_idx_0, spec_idx_0, spec_idx_1, is_self
+        )
+        if len(pool_mols) == 0 or len(query_mols) == 0:
+            return
+        local_of = _local_index_lookup(pool_mols)
+        gt_matrix = _build_score_matrix(
+            mol_idx_0, mol_idx_1, gt_mces, pool_mols, local_of
+        )
+
+        self._log_hit_at_k_for_score(
+            pl_module,
+            gt_matrix,
+            local_of,
+            query_mols,
+            mol_idx_0,
+            mol_idx_1,
+            spec_idx_0,
+            spec_idx_1,
+            is_self,
+            pred_mces,
+            pool_mols,
+            prefix="val_hit_at",
+        )
+        if corrected_mces is not None:
+            ranking_score = corrected_mces * 1000.0 + pred_mces
+            self._log_hit_at_k_for_score(
+                pl_module,
+                gt_matrix,
+                local_of,
+                query_mols,
+                mol_idx_0,
+                mol_idx_1,
+                spec_idx_0,
+                spec_idx_1,
+                is_self,
+                ranking_score,
+                pool_mols,
+                prefix="val_hit_at_corrected",
+            )
+
+    def _log_hit_at_k_for_score(
+        self,
+        pl_module,
+        gt_matrix,
+        local_of,
+        query_mols,
+        mol_idx_0,
+        mol_idx_1,
+        spec_idx_0,
+        spec_idx_1,
+        is_self,
+        score,
+        pool_mols,
+        prefix,
+    ):
+        score_matrix = _build_score_matrix(
+            mol_idx_0, mol_idx_1, score, pool_mols, local_of
+        )
+        true_scores = _true_match_scores(
+            mol_idx_0, spec_idx_0, spec_idx_1, is_self, score
+        )
+        hits = _hit_at_k(
+            gt_matrix,
+            score_matrix,
+            true_scores,
+            local_of,
+            query_mols,
+            self.hit_at_k_n_decoys,
+            self.hit_at_k_ks,
+            higher_is_better=False,
+        )
+        for k, v in hits.items():
+            pl_module.log(
+                f"{prefix}_{k}",
+                v,
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+
+
+def _corn_corrected_mces(
+    pred_mces: np.ndarray, bucket_pred: np.ndarray, bin_edges
+) -> np.ndarray:
+    """Combine the CORN bucket prediction with the continuous MCES
+    prediction: the bucket's own [left, right] range clips the continuous
+    value into it (bucket 0 clips to exactly 0)."""
+    extended = np.concatenate([[0.0], bin_edges, [np.inf]])
+    b = np.clip(bucket_pred.astype(np.int64), 0, len(extended) - 1)
+    is_zero = b == 0
+    left = np.where(is_zero, 0.0, extended[np.clip(b - 1, 0, None)])
+    right = np.where(is_zero, 0.0, extended[b])
+    return np.clip(pred_mces, left, right)
+
+
+def _build_pool_and_queries(mol_idx_0, spec_idx_0, spec_idx_1, is_self):
+    """(pool_mols, query_mols): every molecule with a self-pair row, and the
+    subset whose self-pair used two different spectra -- usable as
+    retrieval queries."""
+    pool_mols = np.unique(mol_idx_0[is_self])
+    diff_spec = is_self & (spec_idx_0 != spec_idx_1)
+    query_mols = np.unique(mol_idx_0[diff_spec])
+    return pool_mols, query_mols
+
+
+def _local_index_lookup(pool_mols: np.ndarray) -> np.ndarray:
+    """Array mapping a molecule id -> its dense index in pool_mols (-1 if
+    absent), for vectorized lookups over millions of pairs."""
+    local_of = np.full(int(pool_mols.max()) + 1, -1, dtype=np.int64)
+    local_of[pool_mols] = np.arange(len(pool_mols))
+    return local_of
+
+
+def _build_score_matrix(
+    mol_idx_0, mol_idx_1, values, pool_mols, local_of
+) -> np.ndarray:
+    """Dense (n_pool, n_pool) matrix of `values` for every cross-molecule
+    pair within the pool, symmetric; NaN where absent."""
+    n = len(pool_mols)
+    mat = np.full((n, n), np.nan, dtype=np.float64)
+    max_id = local_of.shape[0] - 1
+    cross = (mol_idx_0 != mol_idx_1) & (mol_idx_0 <= max_id) & (mol_idx_1 <= max_id)
+    i = local_of[mol_idx_0[cross]]
+    j = local_of[mol_idx_1[cross]]
+    in_pool = (i >= 0) & (j >= 0)
+    i, j = i[in_pool], j[in_pool]
+    v = values[cross][in_pool]
+    mat[i, j] = v
+    mat[j, i] = v
+    return mat
+
+
+def _true_match_scores(mol_idx_0, spec_idx_0, spec_idx_1, is_self, values) -> dict:
+    """query_mol -> its own "self, different spectrum" row's value (the
+    true match: the same molecule's other spectrum)."""
+    diff_spec = is_self & (spec_idx_0 != spec_idx_1)
+    return dict(zip(mol_idx_0[diff_spec], values[diff_spec]))
+
+
+def _hit_at_k(
+    gt_matrix,
+    score_matrix,
+    true_scores,
+    local_of,
+    query_mols,
+    n_decoys,
+    ks,
+    higher_is_better,
+) -> dict:
+    """Fraction of query molecules whose true match (its own other spectrum)
+    ranks in the top k among n_decoys other pool molecules -- the n_decoys
+    with the lowest ground-truth MCES to the query -- plus the true match
+    itself, ranked by `score` (ascending unless higher_is_better)."""
+    hits = dict.fromkeys(ks, 0)
+    n_scored = 0
+    for q in query_mols:
+        qi = local_of[q]
+        if q not in true_scores or np.isnan(true_scores[q]):
+            continue
+        gt_row = gt_matrix[qi].copy()
+        gt_row[qi] = np.inf  # never pick the query molecule itself as a decoy
+        decoy_local = np.argsort(gt_row)[:n_decoys]
+        decoy_scores = score_matrix[qi, decoy_local]
+        decoy_scores = decoy_scores[~np.isnan(decoy_scores)]
+        candidates = np.append(decoy_scores, true_scores[q])
+        true_idx = len(candidates) - 1
+        order = np.argsort(-candidates if higher_is_better else candidates)
+        rank = int(np.nonzero(order == true_idx)[0][0]) + 1
+        n_scored += 1
+        for k in ks:
+            hits[k] += int(rank <= k)
+    return {k: (hits[k] / n_scored if n_scored else float("nan")) for k in ks}
