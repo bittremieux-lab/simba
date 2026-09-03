@@ -181,6 +181,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             early_stopping_callback,
             progress_log_callback,
             val_metrics_callback,
+            iceberg_hit_rate_callback,
         ) = setup_callbacks(cfg)
 
         # Get weights for MCES from first 100 batches (same as original script)
@@ -225,6 +226,7 @@ def _train_with_hydra(cfg: DictConfig) -> None:
             early_stopping_callback,
             progress_log_callback,
             val_metrics_callback,
+            iceberg_hit_rate_callback,
         )
 
         click.echo("Training completed successfully!")

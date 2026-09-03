@@ -25,6 +25,7 @@ from simba.core.data.molecule_pairs import MoleculePairsOpt
 from simba.core.data.weighted_sampling import CustomWeightedRandomSampler
 from simba.core.models.similarity_models import SimilarityModelMultitask
 from simba.core.training.callbacks import (
+    IcebergHitRateCallback,
     LossCallback,
     ProgressLogCallback,
     ValMetricsCallback,
@@ -582,6 +583,25 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
             verbose=True,
         )
 
+    # Optional ICEBERG retrieval Hit@k, every check_every_n_steps steps
+    # (expressed as a multiple of val_check_interval, since it only ever
+    # runs alongside a regular validation check)
+    iceberg_hit_rate_callback = None
+    if cfg.iceberg_retrieval.enabled:
+        check_every_n_val_checks = max(
+            1,
+            cfg.iceberg_retrieval.check_every_n_steps
+            // cfg.training.val_check_interval,
+        )
+        iceberg_hit_rate_callback = IcebergHitRateCallback(
+            mgf=cfg.iceberg_retrieval.mgf,
+            candidates=cfg.iceberg_retrieval.candidates,
+            candidate_tsv=list(cfg.iceberg_retrieval.candidate_tsv),
+            iceberg_preds=list(cfg.iceberg_retrieval.iceberg_preds),
+            batch_size=cfg.iceberg_retrieval.batch_size,
+            check_every_n_val_checks=check_every_n_val_checks,
+        )
+
     return (
         checkpoint_callback,
         checkpoint_n_steps_callback,
@@ -589,6 +609,7 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
         early_stopping_callback,
         progress_log_callback,
         val_metrics_callback,
+        iceberg_hit_rate_callback,
     )
 
 
@@ -708,6 +729,7 @@ def train(
     early_stopping_callback: EarlyStopping | None = None,
     progress_log_callback: ProgressLogCallback | None = None,
     val_metrics_callback: ValMetricsCallback | None = None,
+    iceberg_hit_rate_callback: IcebergHitRateCallback | None = None,
 ) -> pl.Trainer:
     """Run the training loop.
     Args:
@@ -732,6 +754,7 @@ def train(
             early_stopping_callback,
             progress_log_callback,
             val_metrics_callback,
+            iceberg_hit_rate_callback,
         ]
         if cb is not None
     ]

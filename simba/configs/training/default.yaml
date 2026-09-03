@@ -80,3 +80,23 @@ hardware:
   num_workers: 10
   precision: "32-true"
   strategy: "auto"
+
+# ICEBERG retrieval Hit@k: every check_every_n_steps steps, ranks the model
+# against the Gaetan test fold's real spectra vs ICEBERG-predicted
+# formula-matched candidates. Off by default -- the underlying data
+# (candidate index, ICEBERG predictions) is specific to this one
+# dataset/split. check_every_n_steps must be a multiple of
+# training.val_check_interval, since this only ever runs alongside a
+# regular validation check.
+iceberg_retrieval:
+  enabled: false
+  check_every_n_steps: 5000
+  mgf: /sofia/projects/2026_053/simba_project/experiments/retrieval_split_comparison/gaetan_test.mgf
+  candidates: /sofia/projects/2026_053/spectrawl_project/data/massspecgym/MassSpecGym_retrieval_candidates_formula.json
+  candidate_tsv:
+    - /sofia/projects/2026_053/simba_project/ICEBERG/data/candidates_gaetan_test_existing_overlap.tsv
+    - /sofia/projects/2026_053/simba_project/ICEBERG/data/candidates_gaetan_test_new.tsv
+  iceberg_preds:
+    - /sofia/projects/2026_053/simba_project/ICEBERG/results/candidates_test_official/preds.hdf5
+    - /sofia/projects/2026_053/simba_project/ICEBERG/results/candidates_gaetan_test_new/preds.hdf5
+  batch_size: 512

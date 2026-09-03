@@ -565,7 +565,7 @@ class ValMetricsCallback(Callback):
             prefix="val_hit_at",
         )
         if corrected_mces is not None:
-            ranking_score = corrected_mces * 1000.0 + pred_mces
+            ranking_score = _corn_corrected_ranking_score(corrected_mces, pred_mces)
             self._log_hit_at_k_for_score(
                 pl_module,
                 gt_matrix,
@@ -695,6 +695,15 @@ def _corn_corrected_mces(
     return np.clip(pred_mces, left, right)
 
 
+def _corn_corrected_ranking_score(
+    corrected_mces: np.ndarray, pred_mces: np.ndarray
+) -> np.ndarray:
+    """corrected*1000 + raw breaks exact ties within a bucket (e.g. bucket 0,
+    where every candidate corrects to exactly 0) for Hit@k ranking, while
+    leaving the corrected value itself untouched for other uses (MAE/overlap)."""
+    return corrected_mces * 1000.0 + pred_mces
+
+
 def _build_pool_and_queries(mol_idx_0, spec_idx_0, spec_idx_1, is_self):
     """(pool_mols, query_mols): every molecule with a self-pair row, and the
     subset whose self-pair used two different spectra -- usable as
@@ -772,3 +781,66 @@ def _hit_at_k(
         for k in ks:
             hits[k] += int(rank <= k)
     return {k: (hits[k] / n_scored if n_scored else float("nan")) for k in ks}
+
+
+class IcebergHitRateCallback(Callback):
+    """Every check_every_n_val_checks-th validation check, ranks the model
+    against the Gaetan test fold's real spectra vs ICEBERG-predicted
+    formula-matched candidates and logs Hit@1/5/20 (raw embedding cosine,
+    and CORN-corrected when the model has an mces_bucket head). Test/
+    candidate data (spectra, candidate index, ICEBERG predictions) doesn't
+    depend on model weights, so it's loaded once at construction; only
+    re-embedding and re-ranking happen on the model's current weights each
+    check. See simba.core.training.iceberg_retrieval for the underlying
+    data loading, embedding, and ranking logic."""
+
+    def __init__(
+        self,
+        mgf: str,
+        candidates: str,
+        candidate_tsv,
+        iceberg_preds,
+        batch_size: int = 512,
+        ks=(1, 5, 20),
+        check_every_n_val_checks: int = 1,
+    ):
+        from simba.core.training.iceberg_retrieval import load_all_iceberg_data
+
+        self.data = load_all_iceberg_data(mgf, candidates, candidate_tsv, iceberg_preds)
+        self.batch_size = batch_size
+        self.ks = ks
+        self.check_every_n_val_checks = max(1, check_every_n_val_checks)
+        self._val_check_count = 0
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if trainer.sanity_checking:
+            return
+        self._val_check_count += 1
+        if self._val_check_count % self.check_every_n_val_checks != 0:
+            return
+        from simba.core.training.iceberg_retrieval import compute_iceberg_hit_rates
+
+        raw_hits, corrected_hits = compute_iceberg_hit_rates(
+            pl_module,
+            pl_module.device,
+            self.data,
+            batch_size=self.batch_size,
+            ks=self.ks,
+        )
+        for k, v in raw_hits.items():
+            pl_module.log(
+                f"iceberg_hit_at_{k}",
+                v,
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+        if corrected_hits is not None:
+            for k, v in corrected_hits.items():
+                pl_module.log(
+                    f"iceberg_hit_at_corrected_{k}",
+                    v,
+                    on_step=False,
+                    on_epoch=True,
+                    add_dataloader_idx=False,
+                )
