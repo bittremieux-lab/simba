@@ -284,25 +284,10 @@ class ValMetricsCallback(Callback):
         self._spec_idx_1 = []
 
     def _bin_labels(self) -> list[str]:
-        labels = [self._SELF_LABEL]
-        prev = 0.0
-        for edge in self.bin_edges:
-            labels.append(f"({prev:g},{edge:g}]")
-            prev = edge
-        return labels
+        return _bin_labels(self.bin_edges)
 
     def _bin_index(self, gt_mces: np.ndarray, is_self: np.ndarray) -> np.ndarray:
-        idx = np.zeros(len(gt_mces), dtype=int)
-        non_self = ~is_self
-        idx[non_self] = (
-            np.clip(
-                np.digitize(gt_mces[non_self], self.bin_edges[:-1]),
-                0,
-                len(self.bin_edges) - 1,
-            )
-            + 1
-        )
-        return idx
+        return _bin_index(gt_mces, is_self, self.bin_edges)
 
     def on_validation_batch_end(
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
@@ -416,50 +401,25 @@ class ValMetricsCallback(Callback):
                 add_dataloader_idx=False,
             )
 
-    @staticmethod
-    def _overlap_coefficient(a: np.ndarray, b: np.ndarray, n_bins: int = 50) -> float:
-        """Histogram overlapping coefficient: 0 = fully separated, 1 = identical."""
-        if len(a) == 0 or len(b) == 0:
-            return float("nan")
-        lo, hi = min(a.min(), b.min()), max(a.max(), b.max())
-        if hi <= lo:
-            return 1.0
-        edges = np.linspace(lo, hi, n_bins + 1)
-        pa, _ = np.histogram(a, bins=edges)
-        pb, _ = np.histogram(b, bins=edges)
-        pa = pa / pa.sum()
-        pb = pb / pb.sum()
-        return float(np.minimum(pa, pb).sum())
-
     def _log_overlap_coefficients(self, pl_module, pred_mces, bin_idx, prefix):
         labels = self._bin_labels()
-        n_bins = len(labels)
-        pred_by_bin = {
-            i: pred_mces[bin_idx == i] for i in range(n_bins) if (bin_idx == i).any()
-        }
-        for skip in range(self.max_skip + 1):
-            skip_values = []
-            for i in range(n_bins - skip - 1):
-                j = i + skip + 1
-                if i not in pred_by_bin or j not in pred_by_bin:
-                    continue
-                ovl = self._overlap_coefficient(pred_by_bin[i], pred_by_bin[j])
-                pl_module.log(
-                    f"{prefix}/{labels[i]}_vs_{labels[j]}_skip{skip}",
-                    ovl,
-                    on_step=False,
-                    on_epoch=True,
-                    add_dataloader_idx=False,
-                )
-                skip_values.append(ovl)
-            if skip_values:
-                pl_module.log(
-                    f"{prefix}_avg/skip{skip}",
-                    float(np.mean(skip_values)),
-                    on_step=False,
-                    on_epoch=True,
-                    add_dataloader_idx=False,
-                )
+        pairwise, skip_avg = _overlap_metrics(pred_mces, bin_idx, labels, self.max_skip)
+        for suffix, ovl in pairwise.items():
+            pl_module.log(
+                f"{prefix}/{suffix}",
+                ovl,
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+        for skip, avg in skip_avg.items():
+            pl_module.log(
+                f"{prefix}_avg/skip{skip}",
+                avg,
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
 
     def _plot_binned_box(self, pred_mces, bin_idx, step, tb_logger):
         labels = self._bin_labels()
@@ -660,6 +620,65 @@ class ValMetricsCallback(Callback):
                 on_epoch=True,
                 add_dataloader_idx=False,
             )
+
+
+def _bin_labels(bin_edges, self_label: str = "self (MCES=0)") -> list[str]:
+    labels = [self_label]
+    prev = 0.0
+    for edge in bin_edges:
+        labels.append(f"({prev:g},{edge:g}]")
+        prev = edge
+    return labels
+
+
+def _bin_index(gt_mces: np.ndarray, is_self: np.ndarray, bin_edges) -> np.ndarray:
+    idx = np.zeros(len(gt_mces), dtype=int)
+    non_self = ~is_self
+    idx[non_self] = (
+        np.clip(np.digitize(gt_mces[non_self], bin_edges[:-1]), 0, len(bin_edges) - 1)
+        + 1
+    )
+    return idx
+
+
+def _overlap_coefficient(a: np.ndarray, b: np.ndarray, n_bins: int = 50) -> float:
+    """Histogram overlapping coefficient: 0 = fully separated, 1 = identical."""
+    if len(a) == 0 or len(b) == 0:
+        return float("nan")
+    lo, hi = min(a.min(), b.min()), max(a.max(), b.max())
+    if hi <= lo:
+        return 1.0
+    edges = np.linspace(lo, hi, n_bins + 1)
+    pa, _ = np.histogram(a, bins=edges)
+    pb, _ = np.histogram(b, bins=edges)
+    pa = pa / pa.sum()
+    pb = pb / pb.sum()
+    return float(np.minimum(pa, pb).sum())
+
+
+def _overlap_metrics(
+    values: np.ndarray, bin_idx: np.ndarray, labels: list[str], max_skip: int
+) -> tuple[dict, dict]:
+    """(pairwise, skip_avg): pairwise[f"{label_i}_vs_{label_j}_skip{k}"] is
+    the overlap coefficient between `values` in bin i and bin j, for every
+    bin pair at skip distance k (0..max_skip); skip_avg[k] is the mean over
+    all bin pairs at that skip. Shared by the live per-epoch callback and
+    the standalone cosine-baseline script."""
+    n_bins = len(labels)
+    by_bin = {i: values[bin_idx == i] for i in range(n_bins) if (bin_idx == i).any()}
+    pairwise, skip_avg = {}, {}
+    for skip in range(max_skip + 1):
+        skip_values = []
+        for i in range(n_bins - skip - 1):
+            j = i + skip + 1
+            if i not in by_bin or j not in by_bin:
+                continue
+            ovl = _overlap_coefficient(by_bin[i], by_bin[j])
+            pairwise[f"{labels[i]}_vs_{labels[j]}_skip{skip}"] = ovl
+            skip_values.append(ovl)
+        if skip_values:
+            skip_avg[skip] = float(np.mean(skip_values))
+    return pairwise, skip_avg
 
 
 def _corn_corrected_mces(
