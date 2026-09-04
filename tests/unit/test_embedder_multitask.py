@@ -188,6 +188,34 @@ class TestEmbedderMultitask:
         assert n_pairs == 1
         assert loss is None
 
+    def test_contrastive_projection_head_off_by_default(self, embedder_config):
+        embedder_config["use_contrastive_loss"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+
+        assert embedder.contrastive_use_projection_head is False
+        assert not hasattr(embedder, "contrastive_projection")
+
+    def test_contrastive_loss_info_nce_with_projection_head(self, embedder_config):
+        embedder_config["use_contrastive_loss"] = True
+        embedder_config["contrastive_use_projection_head"] = True
+        embedder = SimilarityModelMultitask(**embedder_config)
+        d_model = embedder_config["d_model"]
+
+        assert hasattr(embedder, "contrastive_projection")
+
+        emb0 = torch.randn(4, d_model)
+        emb1 = torch.randn(4, d_model)
+        mol_idx_0 = torch.tensor([1, 2, 3, 4])
+        mol_idx_1 = torch.tensor([1, 2, 3, 4])
+
+        loss, n_pairs = embedder._contrastive_loss_info_nce(
+            emb0, emb1, mol_idx_0, mol_idx_1
+        )
+
+        assert n_pairs == 4
+        assert loss is not None
+        assert not torch.isnan(loss)
+
     def test_test_step(self, embedder, sample_batch):
         embedder.eval()
         with torch.no_grad():

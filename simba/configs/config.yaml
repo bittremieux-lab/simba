@@ -27,6 +27,10 @@ checkpoints:
   save_checkpoints: true  # Set to false to disable all checkpoint saving
   best_model_name: "best_model.ckpt"
   pretrained_model_name: "pretrained_model.ckpt"
+  # How many periodic step-checkpoints to keep (on top of best_model.ckpt,
+  # which is always kept separately): -1 keeps every one ever saved
+  # (historical default), 1 keeps only the most recent.
+  step_checkpoint_save_top_k: -1
 
 # Paths (can be overridden via CLI)
 paths:

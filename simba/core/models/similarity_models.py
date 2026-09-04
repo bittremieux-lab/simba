@@ -313,6 +313,7 @@ class SimilarityModelMultitask(SimilarityModel):
         use_contrastive_loss=False,
         contrastive_temperature=0.07,
         contrastive_loss_weight=1.0,
+        contrastive_use_projection_head=False,
         use_precursor_mz_for_model=True,
         use_adduct=False,
         use_ce=False,
@@ -367,6 +368,13 @@ class SimilarityModelMultitask(SimilarityModel):
         self.use_contrastive_loss = use_contrastive_loss
         self.contrastive_temperature = contrastive_temperature
         self.contrastive_loss_weight = contrastive_loss_weight
+        self.contrastive_use_projection_head = contrastive_use_projection_head
+        if self.use_contrastive_loss and self.contrastive_use_projection_head:
+            self.contrastive_projection = nn.Sequential(
+                nn.Linear(d_model, d_model),
+                nn.ReLU(),
+                nn.Linear(d_model, d_model),
+            )
 
         self.use_precursor_mz_for_model = use_precursor_mz_for_model
 
@@ -606,8 +614,13 @@ class SimilarityModelMultitask(SimilarityModel):
         if n_pairs < 2:
             return None, n_pairs
 
-        anchor = F.normalize(emb0[is_self], p=2, dim=-1)
-        positive = F.normalize(emb1[is_self], p=2, dim=-1)
+        emb0_self = emb0[is_self]
+        emb1_self = emb1[is_self]
+        if self.contrastive_use_projection_head:
+            emb0_self = self.contrastive_projection(emb0_self)
+            emb1_self = self.contrastive_projection(emb1_self)
+        anchor = F.normalize(emb0_self, p=2, dim=-1)
+        positive = F.normalize(emb1_self, p=2, dim=-1)
         logits = (anchor @ positive.T) / self.contrastive_temperature
         labels = torch.arange(n_pairs, device=logits.device)
         loss = 0.5 * (

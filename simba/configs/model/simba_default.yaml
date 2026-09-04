@@ -67,6 +67,7 @@ tasks:
     enabled: false
     temperature: 0.07
     loss_weight: 1.0
+    use_projection_head: false
 
 # Multitasking
 multitasking:

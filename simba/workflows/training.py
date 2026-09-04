@@ -586,7 +586,7 @@ def setup_callbacks(cfg: DictConfig) -> tuple:
             dirpath=str(paths["checkpoint_dir"]),
             filename="checkpoint-{epoch:02d}-{step}",
             every_n_train_steps=cfg.training.val_check_interval,
-            save_top_k=-1,  # Save all checkpoints
+            save_top_k=cfg.checkpoints.get("step_checkpoint_save_top_k", -1),
         )
 
     # Loss tracking callback (saves loss plot to checkpoint dir)
@@ -669,6 +669,7 @@ def setup_model(cfg: DictConfig, weights_mces: np.ndarray) -> SimilarityModelMul
         "use_contrastive_loss": cfg.model.tasks.contrastive.enabled,
         "contrastive_temperature": cfg.model.tasks.contrastive.temperature,
         "contrastive_loss_weight": cfg.model.tasks.contrastive.loss_weight,
+        "contrastive_use_projection_head": cfg.model.tasks.contrastive.use_projection_head,
         "weights": weights_mces,
         "lr": cfg.optimizer.lr,
         "use_adduct": cfg.model.features.use_adduct,
