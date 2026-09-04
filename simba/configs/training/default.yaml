@@ -42,6 +42,13 @@ sampling:
   # Add one molecule-paired-with-itself pair (MCES=0, ED=0) per molecule to every split
   add_identity_pairs: false
 
+  # MGF of synthetic, ICEBERG-predicted spectra.
+  iceberg_mgf_path: null
+
+  # Per-sample probability of drawing a synthetic ICEBERG spectrum instead
+  # of a real one for a train molecule.
+  iceberg_spectra_prob: 0.0
+
   # Precursor mass base value: "measured" (read PEPMASS from the MGF, historical
   # default) or "theoretical" (computed from SMILES via RDKit ExactMolWt + adduct
   # arithmetic, ignoring the MGF's own value).

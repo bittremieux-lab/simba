@@ -18,6 +18,7 @@ class CustomDatasetMultitasking(Dataset):
         your_dict,
         training=False,
         prob_aug=0.50,
+        iceberg_spectra_prob=0.0,
         mz=None,
         intensity=None,
         precursor_mass=None,
@@ -41,6 +42,7 @@ class CustomDatasetMultitasking(Dataset):
         self.keys = list(your_dict.keys())
         self.training = training
         self.prob_aug = prob_aug
+        self.iceberg_spectra_prob = iceberg_spectra_prob
 
         self.mz = mz
         self.intensity = intensity
@@ -192,6 +194,19 @@ class CustomDatasetMultitasking(Dataset):
 
         return dictionary
 
+    def _sample_spectrum_index(self, mol_idx: int) -> int:
+        """Pick one spectrum index for this molecule with probability
+        `self.iceberg_spectra_prob`, a synthetic ICEBERG-predicted one
+        instead of a real one, if this molecule actually has any."""
+        if (
+            self.iceberg_spectra_prob > 0
+            and "synthetic_indexes" in self.df_smiles.columns
+        ):
+            synthetic_indexes = self.df_smiles.loc[mol_idx, "synthetic_indexes"]
+            if synthetic_indexes and random.random() < self.iceberg_spectra_prob:
+                return random.choice(synthetic_indexes)
+        return random.choice(self.df_smiles.loc[mol_idx, "indexes"])
+
     def __getitem__(self, idx):
         sample = {k: self.data[k][idx] for k in self.keys}
 
@@ -200,8 +215,8 @@ class CustomDatasetMultitasking(Dataset):
 
         if self.training:
             # select random samples
-            idx_0_original = random.choice(self.df_smiles.loc[int(idx_0[0]), "indexes"])
-            idx_1_original = random.choice(self.df_smiles.loc[int(idx_1[0]), "indexes"])
+            idx_0_original = self._sample_spectrum_index(int(idx_0[0]))
+            idx_1_original = self._sample_spectrum_index(int(idx_1[0]))
         else:
             # select the first index
             idx_0_original = self.df_smiles.loc[int(idx_0[0]), "indexes"][0]

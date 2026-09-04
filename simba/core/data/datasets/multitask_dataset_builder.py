@@ -42,6 +42,7 @@ class MultitaskDataBuilder:
         precursor_mass_mode: str = "measured",
         precursor_noise_mode: str = "legacy",
         prob_aug: float = 0.50,
+        iceberg_spectra_prob: float = 0.0,
     ) -> CustomDatasetMultitasking:
         """
         Load data from molecule pairs into a Pytorch dataset for multitask learning.
@@ -167,9 +168,7 @@ class MultitaskDataBuilder:
             else:
                 precursor_mass[i] = spec.precursor_mz
             precursor_charge[i] = spec.precursor_charge
-            instrument[i] = normalize_instrument_type(
-                getattr(spec, "instrument", None)
-            )
+            instrument[i] = normalize_instrument_type(getattr(spec, "instrument", None))
 
             if use_ion_mode:
                 if (spec.ionmode is None) or (
@@ -222,6 +221,7 @@ class MultitaskDataBuilder:
             dictionary_data,
             training=training,
             prob_aug=prob_aug,
+            iceberg_spectra_prob=iceberg_spectra_prob,
             mz=mz,
             intensity=intensity,
             precursor_mass=precursor_mass,
